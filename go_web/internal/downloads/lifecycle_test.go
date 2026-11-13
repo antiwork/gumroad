@@ -226,6 +226,29 @@ func TestTheCommunityChatURLSendsTheBuyerToSignInOrUp(t *testing.T) {
 	if got := contentProp(t, e, guest, "community_chat_url"); got != "/signup?email=buyer%40example.com&next="+path {
 		t.Errorf("community chat for a guest: %v", got)
 	}
+	// The purchaser signed in goes straight to the community.
+	w := e.pageAs(token, buyerID)
+	if w.Code != http.StatusOK || e.railsHit != nil {
+		t.Fatalf("signed in: status %d, rails %v: %s", w.Code, e.railsHit != nil, w.Header().Get("X-Go-Web-Fallback"))
+	}
+	if got := pageProps(t, w.Body.String()).Value("content").(*rails.Hash).Value("community_chat_url"); got != "/communities/1780001/"+e.ids.Encrypt(community) {
+		t.Errorf("community chat signed in: %v", got)
+	}
+}
+
+func TestTheSellersOwnVideoPageGoesToRails(t *testing.T) {
+	e, _ := newJobsPageEnv(t)
+	e.video(videoID)
+	token := e.purchase(productID, map[string]any{"price_cents": 500, "purchaser_id": sellerID}, nil)
+	// video_transcoding_info reads has_been_transcoded? for the seller.
+	if e.pageAs(token, sellerID); e.railsHit == nil {
+		t.Error("the seller's own video page was rendered")
+	}
+	// Anyone else gets none.
+	other := e.purchase(productID, map[string]any{"price_cents": 500}, nil)
+	if w := e.pageAs(other, buyerID); w.Code != http.StatusOK || e.railsHit != nil {
+		t.Errorf("the buyer's video page: status %d, rails %v: %s", w.Code, e.railsHit != nil, w.Header().Get("X-Go-Web-Fallback"))
+	}
 }
 
 func TestABundleMembersReceiptIsTheBundlePurchase(t *testing.T) {

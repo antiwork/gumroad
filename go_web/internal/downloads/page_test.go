@@ -12,12 +12,14 @@ import (
 	"time"
 
 	"github.com/antiwork/gumroad/go_web/internal/delivery"
+	"github.com/antiwork/gumroad/go_web/internal/flipper"
 	"github.com/antiwork/gumroad/go_web/internal/inertia"
 	"github.com/antiwork/gumroad/go_web/internal/pages"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 	"github.com/antiwork/gumroad/go_web/internal/session/sessiontest"
 	"github.com/antiwork/gumroad/go_web/internal/session/testdb"
 	"github.com/antiwork/gumroad/go_web/internal/storage"
+	"github.com/antiwork/gumroad/go_web/internal/viewer"
 	"github.com/antiwork/gumroad/go_web/internal/vite"
 	"github.com/antiwork/gumroad/go_web/internal/web"
 )
@@ -58,6 +60,8 @@ func newPageEnvWith(t *testing.T, extra func(*PageConfig)) *testEnv {
 			EmailDigestKey: "digest-key", DropboxAPIKey: "dropbox", IOSAppID: "916819108", AndroidBundleID: "com.gumroad.app",
 			NewNonce: func() string { return "NONCE" },
 		}
+		c.Pages.Viewers = &viewer.Loader{DB: c.DB, IDs: c.IDs, Avatars: c.Pages.Avatars, RootDomain: c.Env.RootDomain, GumroadAdminID: 767082,
+			Flag: func(name string) *flipper.Flag { return flipper.New(c.Resolver.Redis, name) }}
 		if extra != nil {
 			extra(c.Pages)
 		}
@@ -89,6 +93,13 @@ func (e *testEnv) page(token string, headers map[string]string) *httptest.Respon
 	w := httptest.NewRecorder()
 	e.handler.ServeHTTP(w, r)
 	return w
+}
+
+// pageAs requests the full page signed in as user, with the confirmation cookie too.
+func (e *testEnv) pageAs(token string, user int64) *httptest.ResponseRecorder {
+	e.t.Helper()
+	confirmed := confirmedCookie + "=" + url.QueryEscape(sessiontest.Encrypt(e.t, testSecretKeyBase, confirmedCookie, []byte(`"`+token+`"`), time.Time{}))
+	return e.page(token, map[string]string{"Cookie": confirmed + "; " + e.sessionCookie(user)})
 }
 
 func pageProps(t *testing.T, body string) *rails.Hash {
@@ -222,6 +233,65 @@ func TestALicensedProductsPageShowsItsKey(t *testing.T) {
 	e.db.Exec("DELETE FROM licenses WHERE id = ?", int64(1_780_701))
 	if got := license(); got != nil {
 		t.Errorf("license without a license row: %s", rails.EncodeJSON(got))
+	}
+}
+
+func TestASignedInPurchasersPage(t *testing.T) {
+	e := newPageEnv(t)
+	e.db.Exec("UPDATE product_files SET size = 1000 WHERE id = ?", fileID)
+	e.db.Exec("UPDATE users SET email = 'buyer@example.com', kindle_email = 'buyer@kindle.com' WHERE id = ?", buyerID)
+	token := e.purchase(productID, map[string]any{"email": "buyer@example.com", "price_cents": 500, "created_at": testNow}, nil)
+	w := e.pageAs(token, buyerID)
+	if w.Code != http.StatusOK || e.railsHit != nil {
+		t.Fatalf("status %d, rails %v: %s", w.Code, e.railsHit != nil, w.Header().Get("X-Go-Web-Fallback"))
+	}
+	props := pageProps(t, w.Body.String())
+	keys := strings.Join(props.Keys(), " ")
+	// The signed-in share block's two props follow the ones every page shares.
+	if !strings.Contains(keys, "logged_in_user current_seller csp_nonce") || !strings.Contains(keys, "flash title current_user prompt_passkey_setup content ") {
+		t.Errorf("props %s", keys)
+	}
+	logged := props.Value("logged_in_user").(*rails.Hash)
+	seller := props.Value("current_seller").(*rails.Hash)
+	if logged.Value("id") != "1780002" || logged.Value("email") != "buyer@example.com" || seller.Value("id") != "1780002" ||
+		props.Value("prompt_passkey_setup") != false || props.Value("current_user").(*rails.Hash).Value("name") != "1780002" {
+		t.Errorf("share %s %s", rails.EncodeJSON(logged), rails.EncodeJSON(seller))
+	}
+	if props.Value("add_to_library_option") != "none" {
+		t.Errorf("add_to_library_option %v", props.Value("add_to_library_option"))
+	}
+	item := props.Value("content").(*rails.Hash).Value("content_items").([]any)[0].(*rails.Hash)
+	if got := rails.EncodeJSON(item.Value("kindle_data")); got != `{"email":"buyer@kindle.com","icon_url":"https://assets.gumroad.com/images/white-15.png"}` {
+		t.Errorf("kindle_data %s", got)
+	}
+}
+
+func TestAGuestPurchasesLibraryOption(t *testing.T) {
+	e := newPageEnv(t)
+	e.db.Exec("UPDATE users SET email = 'Seller@Example.com' WHERE id = ?", sellerID)
+	for name, c := range map[string]struct {
+		viewer int64
+		email  string
+		want   string
+	}{
+		"another user":                      {strangerID, "buyer@example.com", "add_to_library_button"},
+		"the seller, a buyer's purchase":    {sellerID, "buyer@example.com", "none"},
+		"the seller, under their own email": {sellerID, "seller@example.com", "add_to_library_button"},
+		"signed out":                        {0, "buyer@example.com", "signup_form"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			token := e.purchase(productID, map[string]any{"email": c.email, "price_cents": 500, "purchaser_id": nil, "created_at": testNow}, nil)
+			w := e.page(token, nil)
+			if c.viewer != 0 {
+				w = e.pageAs(token, c.viewer)
+			}
+			if w.Code != http.StatusOK || e.railsHit != nil {
+				t.Fatalf("status %d, rails %v: %s", w.Code, e.railsHit != nil, w.Header().Get("X-Go-Web-Fallback"))
+			}
+			if got := pageProps(t, w.Body.String()).Value("add_to_library_option"); got != c.want {
+				t.Errorf("got %v, want %s", got, c.want)
+			}
+		})
 	}
 }
 

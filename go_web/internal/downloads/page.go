@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/antiwork/gumroad/go_web/internal/delivery"
@@ -49,7 +50,7 @@ const pageWriteTimeout = 5 * time.Second
 func (h *handler) renderPage(w http.ResponseWriter, p *page, u *urlRedirect) error {
 	pc := h.c.Pages
 	switch {
-	case p.Auth.LoggedInUser() != nil:
+	case p.Auth.LoggedInUser() != nil && pc.Viewers == nil:
 		return fallback("signed in")
 	case p.purchase == nil:
 		return fallback("no purchase")
@@ -75,6 +76,20 @@ func (h *handler) renderPage(w http.ResponseWriter, p *page, u *urlRedirect) err
 	if err != nil {
 		return err
 	}
+	var v *viewer.Viewer
+	if p.Auth.LoggedInUser() != nil {
+		if v, err = pc.Viewers.Load(p.Ctx, p.Req, p.Session, p.Auth); err != nil {
+			return err
+		}
+		if len(v.AvatarResizes) > 0 {
+			// avatar_url would enqueue GenerateAvatarVariantJob, which this page doesn't push.
+			return fallback("avatar")
+		}
+	}
+	addToLibrary, err := addToLibraryOption(p, d, v)
+	if err != nil {
+		return err
+	}
 	content := delivery.NewPage(p.Ctx, h.c.DB, u.delivery(), h.c.IDs)
 	owner, err := content.Owner()
 	if err != nil {
@@ -94,8 +109,16 @@ func (h *handler) renderPage(w http.ResponseWriter, p *page, u *urlRedirect) err
 	if rich.JSON == nil || rich.MayHavePosts {
 		return fallback("posts")
 	}
+	var kindleEmail any
+	if v != nil {
+		kindleEmail = nullableString(v.User.KindleEmail)
+		// video_transcoding_info is the seller's own: it reads has_been_transcoded?.
+		if v.User.ID == *owner.SellerID && len(lc.videos) > 0 {
+			return fallback("seller's video")
+		}
+	}
 	items, err := content.ContentItems(delivery.ContentRedirect{
-		Token: u.token, Rental: u.flags&urlRedirectIsRental != 0, ReferencedProductID: owner.ReferencedProductID,
+		Token: u.token, Rental: u.flags&urlRedirectIsRental != 0, ReferencedProductID: owner.ReferencedProductID, KindleEmail: kindleEmail,
 	}, pc.Content)
 	if err != nil {
 		return unported(err)
@@ -108,7 +131,7 @@ func (h *handler) renderPage(w http.ResponseWriter, p *page, u *urlRedirect) err
 	if err != nil {
 		return err
 	}
-	communityChat, err := h.communityChatURL(p.Ctx, d, owner.ReferencedProductID)
+	communityChat, err := h.communityChatURL(p.Ctx, d, owner.ReferencedProductID, v != nil)
 	if err != nil {
 		return err
 	}
@@ -147,12 +170,13 @@ func (h *handler) renderPage(w http.ResponseWriter, p *page, u *urlRedirect) err
 		return err
 	}
 
-	pu := p.purchase
-	addToLibrary := "none"
-	if pu.purchaserID == nil {
-		// claim_by_seller? is false for a signed-out viewer.
-		addToLibrary = "signup_form"
+	if v != nil {
+		// The signed-in share block follows the ones every page has.
+		shared.Sym("logged_in_user", v.LoggedInUser).Sym("current_seller", v.CurrentSeller).
+			Sym("current_user", v.CurrentUser).Sym("prompt_passkey_setup", v.PromptPasskeySetup)
 	}
+
+	pu := p.purchase
 	var variantID any
 	if owner.VariantID != nil {
 		variantID = h.c.IDs.Encrypt(*owner.VariantID)
@@ -271,6 +295,58 @@ func (h *handler) recordView(p *page, u *urlRedirect, productID int64) error {
 	_, err := h.c.DB.ExecContext(ctx, "UPDATE url_redirects SET flags = COALESCE(flags, 0) | ?, updated_at = ? WHERE id = ?",
 		urlRedirectHasBeenSeen, now.UTC().Truncate(time.Microsecond), u.id)
 	return err
+}
+
+// AddToLibraryOption's values.
+const (
+	addToLibraryNone   = "none"
+	addToLibraryButton = "add_to_library_button"
+	addToLibrarySignup = "signup_form"
+)
+
+// addToLibraryOption is common_props' add_to_library_option: a purchase without a purchaser
+// offers to join the visitor's library, unless the visitor is its seller claiming it.
+func addToLibraryOption(p *page, d *pageData, v *viewer.Viewer) (string, error) {
+	pu := p.purchase
+	if pu.purchaserID != nil {
+		return addToLibraryNone, nil
+	}
+	if v == nil {
+		return addToLibrarySignup, nil
+	}
+	claimed, err := claimBySeller(pu, d, v.User)
+	if err != nil || claimed {
+		return addToLibraryNone, err
+	}
+	return addToLibraryButton, nil
+}
+
+// claimBySeller is Purchase#claim_by_seller?(user) for a purchase whose purchaser is nil.
+func claimBySeller(pu *purchase, d *pageData, u *viewer.User) (bool, error) {
+	if d.ownerID != u.ID {
+		return false, nil
+	}
+	if test, err := pu.testPurchase(); err != nil || test {
+		return false, err
+	}
+	if d.purchaserIDColumn.Valid {
+		// A purchaser_id whose user is gone.
+		return true, nil
+	}
+	// casecmp? folds Unicode fully, which strings.EqualFold doesn't; past ASCII, Rails decides.
+	if !ascii(d.email.String) || !ascii(u.Email.String) {
+		return false, fallback("email case")
+	}
+	return !strings.EqualFold(d.email.String, u.Email.String), nil
+}
+
+func ascii(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] >= 0x80 {
+			return false
+		}
+	}
+	return true
 }
 
 func unported(err error) error {
