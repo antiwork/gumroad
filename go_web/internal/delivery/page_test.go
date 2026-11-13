@@ -3,11 +3,13 @@ package delivery
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 	"github.com/antiwork/gumroad/go_web/internal/session/testdb"
+	"github.com/antiwork/gumroad/go_web/internal/storage"
 	"github.com/antiwork/gumroad/go_web/internal/web"
 )
 
@@ -98,12 +100,6 @@ func TestContentItemsLeaveToRailsWhatTheyDoNotMap(t *testing.T) {
 		"subtitles": func(e *env) {
 			e.insert("subtitle_files", base+8_701, map[string]any{"product_file_id": pageFile, "created_at": stamp, "updated_at": stamp})
 		},
-		"thumbnail": func(e *env) {
-			e.insert("active_storage_blobs", base+8_703, map[string]any{"key": "gowebthumb", "filename": "t.png", "byte_size": 1,
-				"service_name": "test", "created_at": stamp})
-			e.insert("active_storage_attachments", base+8_702, map[string]any{"name": "thumbnail", "record_type": "ProductFile",
-				"record_id": pageFile, "blob_id": base + 8_703, "created_at": stamp})
-		},
 		"stamped PDF": func(e *env) { e.exec("UPDATE product_files SET flags = ? WHERE id = ?", filePDFStampEnabled, pageFile) },
 		"non-ASCII type": func(e *env) {
 			e.exec("UPDATE product_files SET filetype = 'straße', url = NULL WHERE id = ?", pageFile)
@@ -118,6 +114,67 @@ func TestContentItemsLeaveToRailsWhatTheyDoNotMap(t *testing.T) {
 				t.Errorf("got %v", err)
 			}
 		})
+	}
+}
+
+// fakeCache is Rails.cache with fixed entries.
+type fakeCache map[string]any
+
+func (c fakeCache) Read(_ context.Context, key string) (any, bool, error) {
+	v, ok := c[key]
+	return v, ok, nil
+}
+
+func TestContentItemsThumbnails(t *testing.T) {
+	const attachment, blob, variantRecord, variantImage, variantBlob = base + 8_702, base + 8_703, base + 8_704, base + 8_705, base + 8_706
+	cacheKey := "attachment_product_file_thumbnail_" + strconv.FormatInt(attachment, 10) + "_variant_url"
+	thumbnailURL := func(t *testing.T, filetype, filegroup, contentType string, cache fakeCache, variant bool) (any, error) {
+		e, r := newPageEnv(t)
+		e.file(pageFile, map[string]any{"link_id": pageProduct, "position": 0, "filetype": filetype, "filegroup": filegroup})
+		e.insert("active_storage_blobs", blob, map[string]any{"key": "gowebthumb", "filename": "t.png", "content_type": contentType,
+			"byte_size": 1, "service_name": "amazon", "created_at": stamp})
+		e.insert("active_storage_attachments", attachment, map[string]any{"name": "thumbnail", "record_type": "ProductFile",
+			"record_id": pageFile, "blob_id": blob, "created_at": stamp})
+		if variant {
+			e.insert("active_storage_variant_records", variantRecord, map[string]any{"blob_id": blob,
+				"variation_digest": storage.VariantDigest("t.png", contentType, 1280, 720)})
+			e.insert("active_storage_blobs", variantBlob, map[string]any{"key": "gowebthumbvariant", "filename": "t.png", "byte_size": 1,
+				"service_name": "amazon", "created_at": stamp})
+			e.insert("active_storage_attachments", variantImage, map[string]any{"name": "image", "record_type": "ActiveStorage::VariantRecord",
+				"record_id": variantRecord, "blob_id": variantBlob, "created_at": stamp})
+		}
+		cfg := pageConfig
+		cfg.IDs, cfg.PublicStorage, cfg.Cache = e.ids, "https://gumroad-public-storage.s3.amazonaws.com/", cache
+		cfg.CDNMap = [][2]string{{"https://gumroad-public-storage.s3.amazonaws.com/", "https://public-files.gumroad.com/"}}
+		items, err := NewPage(context.Background(), e.db, r, e.ids).ContentItems(ContentRedirect{Token: "tok"}, cfg)
+		if err != nil {
+			return nil, err
+		}
+		return items[0].(*rails.RHash).Get("thumbnail_url"), nil
+	}
+	for name, c := range map[string]struct {
+		filetype, filegroup, contentType string
+		cache                            fakeCache
+		variant                          bool
+		want                             any
+	}{
+		// The editor uploads an image's thumbnail already downscaled.
+		"image":             {"png", "image", "image/png", nil, false, "https://public-files.gumroad.com/gowebthumb"},
+		"document":          {"pdf", "document", "image/png", nil, false, nil},
+		"video, cached":     {"mp4", "video", "image/png", fakeCache{cacheKey: "https://gumroad-public-storage.s3.amazonaws.com/cached"}, false, "https://public-files.gumroad.com/cached"},
+		"video, variant":    {"mp4", "video", "image/png", fakeCache{}, true, "https://public-files.gumroad.com/gowebthumbvariant"},
+		"video, no variant": {"mp4", "video", "image/webp", fakeCache{}, false, "https://public-files.gumroad.com/gowebthumb"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got, err := thumbnailURL(t, c.filetype, c.filegroup, c.contentType, c.cache, c.variant)
+			if err != nil || got != c.want {
+				t.Errorf("got %v, %v; want %v", got, err, c.want)
+			}
+		})
+	}
+	// A variant still to be made is resized in Rails' request.
+	if _, err := thumbnailURL(t, "mp4", "video", "image/png", fakeCache{}, false); !errors.Is(err, ErrUnported) {
+		t.Errorf("unprocessed variant: %v", err)
 	}
 }
 
