@@ -665,4 +665,17 @@ describe Link do
       end
     end
   end
+
+  describe "#html_safe_description" do
+    let(:product) { create(:product, description: "<p>Original body</p>") }
+
+    it "parses once per description value and reparses after the description changes" do
+      expect(product).to receive(:sanitize).once.and_call_original
+      2.times { product.html_safe_description }
+
+      expect(product).to receive(:sanitize).once.and_call_original
+      product.description = "<p>Changed body</p>"
+      expect(product.html_safe_description).to include("Changed body")
+    end
+  end
 end

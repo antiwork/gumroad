@@ -862,19 +862,26 @@ class Link < ApplicationRecord
       ActionController::Base.helpers.image_url("native_types/thumbnails/#{native_type}.png")
   end
 
+  # Both of these parse and sanitize the whole description, and one rendered product page asks for
+  # them several times (props, meta description, JSON-LD), so memoize them per description value.
   def plaintext_description
     return "" if description.blank?
+    return @plaintext_description if defined?(@plaintext_description) && @plaintext_description_source == description
 
-    # to_text separates block elements — sanitize(tags: []) fused "</h2><p>" into
-    # "What you getA 25-page guide" — and decodes entities, so callers get real text
-    # rather than "Fish &amp; Chips".
-    Loofah.fragment(description).to_text(encode_special_chars: false).squish
+    @plaintext_description_source = description
+    @plaintext_description =
+      # to_text separates block elements — sanitize(tags: []) fused "</h2><p>" into
+      # "What you getA 25-page guide" — and decodes entities, so callers get real text
+      # rather than "Fish &amp; Chips".
+      Loofah.fragment(description).to_text(encode_special_chars: false).squish
   end
 
   def html_safe_description
     return unless description.present?
+    return @html_safe_description if defined?(@html_safe_description) && @html_safe_description_source == description
 
-    Rinku.auto_link(sanitize(description, scrubber: description_scrubber), :all, 'target="_blank" rel="noopener noreferrer nofollow"').html_safe
+    @html_safe_description_source = description
+    @html_safe_description = Rinku.auto_link(sanitize(description, scrubber: description_scrubber), :all, 'target="_blank" rel="noopener noreferrer nofollow"').html_safe
   end
 
   def to_param
