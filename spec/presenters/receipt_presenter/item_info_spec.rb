@@ -944,55 +944,56 @@ describe ReceiptPresenter::ItemInfo do
       end
 
       context "when the purchase is an installment plan" do
-        it "returns the installment plan manage note with dates and link" do
-          travel_to(Time.zone.parse("2025-03-14"))
+        let(:product_installment_plan) { create(:product_installment_plan, number_of_installments: 3, recurrence: "monthly") }
+        let(:url) do
+          Rails.application.routes.url_helpers.manage_subscription_url(subscription.external_id, host: UrlService.domain_with_protocol)
+        end
+        let(:manage_link_sentence) { "You can manage your payment settings <a target=\"_blank\" href=\"#{url}\">here</a>." }
 
-          product_installment_plan = create(
-            :product_installment_plan,
-            number_of_installments: 5,
-            recurrence: "monthly",
-          )
-          purchase = create(:installment_plan_purchase, link: product_installment_plan.link)
-          subscription = purchase.subscription
+        before { travel_to(Time.utc(2025, 3, 14, 4, 25)) }
 
-          props = described_class.new(purchase).props
+        let!(:purchase) { create(:installment_plan_purchase, link: product_installment_plan.link) }
+        let(:subscription) { purchase.subscription }
 
-          url = Rails.application.routes.url_helpers.manage_subscription_url(
-            subscription.external_id,
-            host: UrlService.domain_with_protocol,
-          )
-          expect(props[:manage_subscription_note]).to eq(
+        it "dates the final charge on the last installment, not on the end of the plan" do
+          expect(described_class.new(purchase).props[:manage_subscription_note]).to eq(
             "Installment plan initiated on Mar 14, 2025. " \
-            "Your final charge will be on Aug 14, 2025. " \
-            "You can manage your payment settings <a target=\"_blank\" href=\"#{url}\">here</a>."
+            "Your final charge will be on May 14, 2025. " \
+            "#{manage_link_sentence}"
           )
         end
 
-        it "omits the final charge date when the expected completion time is unknown" do
-          travel_to(Time.zone.parse("2025-03-14"))
+        it "keeps the final charge date fixed as installments are paid" do
+          travel_to(Time.utc(2025, 4, 14, 4, 25))
+          create(:purchase, link: purchase.link, subscription:, purchaser: purchase.purchaser, email: purchase.email)
 
-          product_installment_plan = create(
-            :product_installment_plan,
-            number_of_installments: 5,
-            recurrence: "monthly",
+          expect(subscription.reload.remaining_charges_count).to eq(1)
+          expect(described_class.new(purchase).props[:manage_subscription_note]).to include("Your final charge will be on May 14, 2025.")
+        end
+
+        it "formats the dates in UTC like the rest of the receipt" do
+          subscription.update!(user: create(:user, timezone: "Pacific Time (US & Canada)"))
+
+          expect(described_class.new(purchase.reload).props[:manage_subscription_note]).to start_with(
+            "Installment plan initiated on Mar 14, 2025. Your final charge will be on May 14, 2025."
           )
-          purchase = create(:installment_plan_purchase, link: product_installment_plan.link)
-          subscription = purchase.subscription
+        end
 
-          # Fully refunding the only successful charge leaves the subscription
-          # without a paid period to project the final charge date from.
+        it "omits the final charge date once every installment is paid" do
+          2.times { create(:purchase, link: purchase.link, subscription:, purchaser: purchase.purchaser, email: purchase.email) }
+
+          expect(subscription.reload.charges_completed?).to eq(true)
+          expect(described_class.new(purchase).props[:manage_subscription_note]).to eq(
+            "Installment plan initiated on Mar 14, 2025. #{manage_link_sentence}"
+          )
+        end
+
+        it "omits the final charge date when no paid charge anchors the schedule" do
           purchase.update!(stripe_refunded: true)
-          expect(subscription.expected_completion_time).to be_nil
+          expect(subscription.expected_final_charge_time).to be_nil
 
-          props = described_class.new(purchase).props
-
-          url = Rails.application.routes.url_helpers.manage_subscription_url(
-            subscription.external_id,
-            host: UrlService.domain_with_protocol,
-          )
-          expect(props[:manage_subscription_note]).to eq(
-            "Installment plan initiated on Mar 14, 2025. " \
-            "You can manage your payment settings <a target=\"_blank\" href=\"#{url}\">here</a>."
+          expect(described_class.new(purchase).props[:manage_subscription_note]).to eq(
+            "Installment plan initiated on Mar 14, 2025. #{manage_link_sentence}"
           )
         end
       end
