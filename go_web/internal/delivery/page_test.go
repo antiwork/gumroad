@@ -3,11 +3,13 @@ package delivery
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 	"github.com/antiwork/gumroad/go_web/internal/session/testdb"
+	"github.com/antiwork/gumroad/go_web/internal/storage"
 	"github.com/antiwork/gumroad/go_web/internal/web"
 )
 
@@ -128,12 +130,6 @@ func TestContentItemsLeaveToRailsWhatTheyDoNotMap(t *testing.T) {
 		"subtitles": func(e *env) {
 			e.insert("subtitle_files", base+8_701, map[string]any{"product_file_id": pageFile, "created_at": stamp, "updated_at": stamp})
 		},
-		"thumbnail": func(e *env) {
-			e.insert("active_storage_blobs", base+8_703, map[string]any{"key": "gowebthumb", "filename": "t.png", "byte_size": 1,
-				"service_name": "test", "created_at": stamp})
-			e.insert("active_storage_attachments", base+8_702, map[string]any{"name": "thumbnail", "record_type": "ProductFile",
-				"record_id": pageFile, "blob_id": base + 8_703, "created_at": stamp})
-		},
 		"non-ASCII type": func(e *env) {
 			e.exec("UPDATE product_files SET filetype = 'straße', url = NULL WHERE id = ?", pageFile)
 		},
@@ -148,6 +144,78 @@ func TestContentItemsLeaveToRailsWhatTheyDoNotMap(t *testing.T) {
 			}
 		})
 	}
+}
+
+// fakeCache is Rails.cache with fixed entries.
+type fakeCache map[string]any
+
+func (c fakeCache) Read(_ context.Context, key string) (any, bool, error) {
+	v, ok := c[key]
+	return v, ok, nil
+}
+
+func TestContentItemsThumbnails(t *testing.T) {
+	const attachment, blob, variantRecord, variantImage, variantBlob = base + 8_702, base + 8_703, base + 8_704, base + 8_705, base + 8_706
+	cacheKey := "attachment_product_file_thumbnail_" + strconv.FormatInt(attachment, 10) + "_variant_url"
+	thumbnailURL := func(t *testing.T, filetype, filegroup, contentType string, cache fakeCache, variant bool) (any, error) {
+		e, r := newPageEnv(t)
+		e.file(pageFile, map[string]any{"link_id": pageProduct, "position": 0, "filetype": filetype, "filegroup": filegroup})
+		e.insert("active_storage_blobs", blob, map[string]any{"key": "gowebthumb", "filename": "t.png", "content_type": contentType,
+			"byte_size": 1, "service_name": "amazon", "created_at": stamp})
+		e.insert("active_storage_attachments", attachment, map[string]any{"name": "thumbnail", "record_type": "ProductFile",
+			"record_id": pageFile, "blob_id": blob, "created_at": stamp})
+		if variant {
+			e.insert("active_storage_variant_records", variantRecord, map[string]any{"blob_id": blob,
+				"variation_digest": storage.VariantDigest("t.png", contentType, 1280, 720)})
+			e.insert("active_storage_blobs", variantBlob, map[string]any{"key": "gowebthumbvariant", "filename": "t.png", "byte_size": 1,
+				"service_name": "amazon", "created_at": stamp})
+			e.insert("active_storage_attachments", variantImage, map[string]any{"name": "image", "record_type": "ActiveStorage::VariantRecord",
+				"record_id": variantRecord, "blob_id": variantBlob, "created_at": stamp})
+		}
+		cfg := pageConfig
+		cfg.IDs, cfg.PublicStorage = e.ids, "https://gumroad-public-storage.s3.amazonaws.com/"
+		if cache != nil {
+			cfg.Cache = cache
+		}
+		cfg.CDNMap = [][2]string{{"https://gumroad-public-storage.s3.amazonaws.com/", "https://public-files.gumroad.com/"}}
+		items, err := NewPage(context.Background(), e.db, r, e.ids).ContentItems(ContentRedirect{Token: "tok"}, cfg)
+		if err != nil {
+			return nil, err
+		}
+		return items[0].(*rails.RHash).Get("thumbnail_url"), nil
+	}
+	for name, c := range map[string]struct {
+		filetype, filegroup, contentType string
+		cache                            fakeCache
+		variant                          bool
+		want                             any
+	}{
+		// The editor uploads an image's thumbnail already downscaled.
+		"image":             {"png", "image", "image/png", nil, false, "https://public-files.gumroad.com/gowebthumb"},
+		"document":          {"pdf", "document", "image/png", nil, false, nil},
+		"video, cached":     {"mp4", "video", "image/png", fakeCache{cacheKey: "https://gumroad-public-storage.s3.amazonaws.com/cached"}, false, "https://public-files.gumroad.com/cached"},
+		"video, variant":    {"mp4", "video", "image/png", fakeCache{}, true, "https://public-files.gumroad.com/gowebthumbvariant"},
+		"video, no variant": {"mp4", "video", "image/webp", fakeCache{}, false, "https://public-files.gumroad.com/gowebthumb"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got, err := thumbnailURL(t, c.filetype, c.filegroup, c.contentType, c.cache, c.variant)
+			if err != nil || got != c.want {
+				t.Errorf("got %v, %v; want %v", got, err, c.want)
+			}
+		})
+	}
+	// A variant still to be made is resized in Rails' request, and without Rails.cache the
+	// cached URL is unknown.
+	t.Run("unprocessed variant", func(t *testing.T) {
+		if _, err := thumbnailURL(t, "mp4", "video", "image/png", fakeCache{}, false); !errors.Is(err, ErrUnported) {
+			t.Errorf("got %v", err)
+		}
+	})
+	t.Run("no cache", func(t *testing.T) {
+		if _, err := thumbnailURL(t, "mp4", "video", "image/png", nil, true); !errors.Is(err, ErrUnported) {
+			t.Errorf("got %v", err)
+		}
+	})
 }
 
 func TestRichContentPagesInPositionOrder(t *testing.T) {
@@ -170,6 +238,39 @@ func TestRichContentPagesInPositionOrder(t *testing.T) {
 	e.exec("UPDATE rich_contents SET description = 'null' WHERE id = ?", base+8_801)
 	if _, err := NewPage(context.Background(), e.db, r, e.ids).RichContentPages(); !errors.Is(err, ErrUnported) {
 		t.Errorf("a null description: %v", err)
+	}
+}
+
+func TestRichContentPagesOfAPurchasedVariant(t *testing.T) {
+	e, r := newPageEnv(t)
+	category, variant := base+8_901, base+8_911
+	e.category(category, pageProduct)
+	e.variant(variant, category, nil)
+	e.file(pageFile, map[string]any{"link_id": pageProduct, "position": 0})
+	e.attach(variant, pageFile)
+	e.buys(pagePurchase, variant)
+	e.insert("rich_contents", base+8_803, map[string]any{"entity_type": "BaseVariant", "entity_id": variant, "title": "Deluxe", "position": 0,
+		"description": textPage, "created_at": stamp, "updated_at": stamp})
+	e.insert("rich_contents", base+8_804, map[string]any{"entity_type": "Link", "entity_id": pageProduct, "title": "Shared", "position": 0,
+		"description": textPage, "created_at": stamp, "updated_at": stamp})
+	pages, err := NewPage(context.Background(), e.db, r, e.ids).RichContentPages()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := rails.EncodeJSON(pages.JSON); !strings.HasPrefix(got, `[{"id":"`+e.ids.Encrypt(base+8_803)+`","page_id":"`+e.ids.Encrypt(base+8_803)+
+		`","title":"Deluxe","variant_id":"`+e.ids.Encrypt(variant)+`",`) {
+		t.Errorf("variant pages %s", got)
+	}
+
+	// While the product shares one set of pages, the purchase gets the product's.
+	e.exec("UPDATE links SET flags = flags | ? WHERE id = ?", productHasSameRichContentForAllVariants, pageProduct)
+	pages, err = NewPage(context.Background(), e.db, r, e.ids).RichContentPages()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := rails.EncodeJSON(pages.JSON); !strings.HasPrefix(got, `[{"id":"`+e.ids.Encrypt(base+8_804)+`","page_id":"`+e.ids.Encrypt(base+8_804)+
+		`","title":"Shared","variant_id":null,`) {
+		t.Errorf("shared pages %s", got)
 	}
 }
 
