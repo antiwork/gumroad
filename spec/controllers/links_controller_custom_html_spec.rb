@@ -297,6 +297,17 @@ describe LinksController, :vcr, type: :controller do
       expect(response.body).not_to include(%(src="/l/#{product.unique_permalink}/landing/embed"))
     end
 
+    it "serves the custom page to a team member of the store while the product is unpublished" do
+      product.update!(purchase_disabled_at: Time.current)
+      member = create(:user)
+      create(:team_membership, user: member, seller:, role: TeamMembership::ROLE_ADMIN)
+      sign_in member
+
+      get :show, params: { id: product.unique_permalink }
+
+      expect(response.body).to include(%(src="/l/#{product.unique_permalink}/landing/embed"))
+    end
+
     it "skips the wrapper when ?wanted=true and lets the checkout redirect fire" do
       get :show, params: { id: product.unique_permalink, wanted: "true" }
       expect(response).to be_redirect
@@ -460,6 +471,27 @@ describe LinksController, :vcr, type: :controller do
 
       expect(response).to be_successful
       expect(response.body).to include("<h1>Live landing page</h1>")
+    end
+
+    it "allows a team member of the store to preview unpublished custom_html" do
+      product.update!(purchase_disabled_at: Time.current)
+      member = create(:user)
+      create(:team_membership, user: member, seller:, role: TeamMembership::ROLE_ADMIN)
+      sign_in member
+
+      get :landing_iframe_content, params: { id: product.unique_permalink }
+
+      expect(response).to be_successful
+      expect(response.body).to include("<h1>Live landing page</h1>")
+    end
+
+    it "404s for a signed-in visitor who is not on the store's team" do
+      product.update!(purchase_disabled_at: Time.current)
+      sign_in create(:user)
+
+      get :landing_iframe_content, params: { id: product.unique_permalink }
+
+      expect(response).to have_http_status(:not_found)
     end
 
     it "404s when requested through another seller's custom domain" do

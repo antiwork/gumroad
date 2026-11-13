@@ -1030,7 +1030,9 @@ module RendersCustomHtmlPages
     end
 
     def can_preview_product_custom_html?(product)
-      logged_in_user.present? && (logged_in_user == product.user || logged_in_user.collaborator_for?(product) || logged_in_user.is_team_member?)
+      # member_of? covers the seller and the store's own team (a TeamMembership row), which the
+      # staff-flag clause below does not — it is the user flag (`admin: is_team_member?`).
+      logged_in_user.present? && (logged_in_user.member_of?(product.user) || logged_in_user.collaborator_for?(product) || logged_in_user.is_team_member?)
     end
 
     # Hostnames the product landing page's navigation bridge accepts as "this
