@@ -85,7 +85,7 @@ class CustomersController < Sellers::BaseController
       count: sales.results.total
     )
 
-    render json: customers_presenter.customers_props
+    render json: customers_presenter.paged_props
   end
 
   def customer_charges
