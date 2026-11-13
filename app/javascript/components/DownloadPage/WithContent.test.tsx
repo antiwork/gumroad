@@ -99,7 +99,11 @@ const purchaseProps = () => ({
   call: null,
 });
 
-const renderPage = (contentProps: ContentProps, purchase: ReturnType<typeof purchaseProps> | null = purchaseProps()) =>
+const renderPage = (
+  contentProps: ContentProps,
+  purchase: ReturnType<typeof purchaseProps> | null = purchaseProps(),
+  isMobileAppWebView = false,
+) =>
   render(
     <DomainSettingsProvider
       value={{
@@ -117,7 +121,7 @@ const renderPage = (contentProps: ContentProps, purchase: ReturnType<typeof purc
         product_has_third_party_analytics={null}
         seller_analytics={null}
         content_unavailability_reason_code={null}
-        is_mobile_app_web_view={false}
+        is_mobile_app_web_view={isMobileAppWebView}
         terms_page_url="https://gumroad.com/terms"
         token="token"
         redirect_id="redirect-1"
@@ -211,6 +215,121 @@ describe("DownloadPage content navigation", () => {
     await waitFor(() => expect(scrollWithinScrollableAncestor).toHaveBeenCalled());
     const firstCall = vi.mocked(scrollWithinScrollableAncestor).mock.calls[0];
     expect(firstCall?.[0].dataset.contentPageId).toBe("page-c");
+  });
+});
+
+describe("DownloadPage commission deliverables", () => {
+  beforeEach(() => {
+    window.history.replaceState(null, "", "/d/token");
+    vi.mocked(useIsAboveBreakpoint).mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    cleanup();
+    delete window.ReactNativeWebView;
+  });
+
+  const file = {
+    type: "file" as const,
+    file_name: "CV final",
+    description: null,
+    extension: "PDF",
+    file_size: 57712,
+    pagelength: null,
+    duration: null,
+    id: "signed-1",
+    download_url: "https://example.com/cv.pdf",
+    view_url: null,
+    stream_url: null,
+    kindle_data: null,
+    latest_media_location: null,
+    content_length: null,
+    read_url: null,
+    external_link_url: null,
+    subtitle_files: [],
+    pdf_stamp_enabled: false,
+    processing: false,
+    thumbnail_url: null,
+    width: null,
+    height: null,
+  };
+
+  it("shows deliverables above the first page without navigating", () => {
+    const { container } = renderPage({ ...content(null), commission_deliverables: [file] });
+    expect(screen.getByRole("heading", { name: "Downloads" })).toBeTruthy();
+    expect(container.textContent).toContain("CV final");
+    expect(container.textContent).toContain("Lesson 1 body");
+  });
+
+  it("shows no Downloads section when the commission is not completed", () => {
+    renderPage(content(null));
+    expect(screen.queryByRole("heading", { name: "Downloads" })).toBeNull();
+  });
+
+  // Mobile web and app WebViews older than the page-navigation bridge have no way to reach a
+  // second content page, so the section has to be present in the page HTML on both.
+  it("shows the deliverables on mobile web, below the desktop breakpoint", () => {
+    vi.mocked(useIsAboveBreakpoint).mockReturnValue(false);
+
+    const { container } = renderPage({ ...content(null), commission_deliverables: [file] });
+
+    expect(screen.getByRole("heading", { name: "Downloads" })).toBeTruthy();
+    expect(container.textContent).toContain("CV final");
+  });
+
+  it("shows the deliverables on an old mobile app WebView, above the page content", () => {
+    vi.mocked(useIsAboveBreakpoint).mockReturnValue(false);
+    window.ReactNativeWebView = { postMessage: vi.fn() };
+    const { container } = renderPage({ ...content(null), commission_deliverables: [file] }, purchaseProps(), true);
+
+    // Inside the app the bottom page nav is hidden, so page 1 is all the buyer can reach.
+    expect(screen.queryByRole("navigation")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Downloads" })).toBeTruthy();
+    // The fix is the position: the deliverables come before the page body, so page 1 alone is enough.
+    const text = container.textContent;
+    expect(text.indexOf("CV final")).toBeLessThan(text.indexOf("Lesson 1 body"));
+  });
+
+  // UrlRedirect#rich_content_json also appends this page, embedding the same files.
+  const commissionDownloadsPage = {
+    id: "",
+    page_id: "",
+    variant_id: null,
+    title: "Downloads",
+    description: { type: "doc", content: [{ type: "fileEmbed", attrs: { id: file.id } }] },
+    updated_at: "2026-10-01T00:00:00Z",
+  };
+
+  const expectDeliverablesListedOnceOnDownloadsPage = async () => {
+    await waitFor(() => expect(document.querySelector("[data-node-view-wrapper]")).not.toBeNull());
+    expect(screen.getAllByText("CV final")).toHaveLength(1);
+    expect(screen.queryByRole("heading", { name: "Downloads" })).toBeNull();
+  };
+
+  it("lists deliverables once when the commission Downloads page is the only page", async () => {
+    renderPage({
+      ...content(null),
+      rich_content_pages: [commissionDownloadsPage],
+      content_items: [file],
+      commission_deliverables: [file],
+    });
+    await expectDeliverablesListedOnceOnDownloadsPage();
+  });
+
+  // Sellers often leave the intake page untitled and text-only, so page 1 has no files of its own.
+  it("lists deliverables once after navigating from an untitled intake page to the commission Downloads page", async () => {
+    renderPage({
+      ...content(null),
+      rich_content_pages: [{ ...page("page-a", "Intake"), title: null }, commissionDownloadsPage],
+      content_items: [file],
+      commission_deliverables: [file],
+    });
+    expect(screen.getByRole("tab", { name: /Untitled/u }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("heading", { name: "Downloads" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("tab", { name: /Downloads/u }));
+
+    await expectDeliverablesListedOnceOnDownloadsPage();
   });
 });
 
