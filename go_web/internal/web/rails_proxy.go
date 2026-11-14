@@ -109,6 +109,7 @@ func (p *RailsProxy) Forward(w http.ResponseWriter, r *http.Request, reason stri
 	for k := range w.Header() {
 		delete(w.Header(), k)
 	}
+	w.Header().Set(ServedByHeader, servedProxied)
 	keep := r.ContentLength > 0 && r.ContentLength <= maxReplayBody
 	if id != "" || keep {
 		r = r.Clone(r.Context())

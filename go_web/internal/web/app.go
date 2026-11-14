@@ -147,9 +147,17 @@ func (a *App) wrap(action string, h http.Handler, redirect bool) http.Handler {
 	})
 }
 
+// ServedByHeader marks every response go_web sends, so a browser can tell it from Rails'.
+const (
+	ServedByHeader = "X-Go-Web"
+	servedRendered = "rendered"
+	servedProxied  = "proxied"
+)
+
 // setDefaultHeaders covers debug_headers, ActionDispatch::RequestId and SecureHeaders'
-// static headers.
+// static headers, and ServedByHeader.
 func (a *App) setDefaultHeaders(h http.Header, requestID string) {
+	h.Set(ServedByHeader, servedRendered)
 	h.Set("X-Request-Id", requestID)
 	h.Set("X-Revision", a.env.Revision)
 	h.Set("X-GR", a.env.GRNum)

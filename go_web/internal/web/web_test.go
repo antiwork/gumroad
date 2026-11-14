@@ -199,7 +199,8 @@ func TestAppLogsOneLinePerActionAndSetsDebugHeaders(t *testing.T) {
 	w := httptest.NewRecorder()
 	app.ServeHTTP(w, r)
 
-	if w.Header().Get("X-Request-Id") != "req1" || w.Header().Get("X-Revision") != "abc123" || w.Header().Get("X-GR") != "PROD" {
+	if w.Header().Get("X-Request-Id") != "req1" || w.Header().Get("X-Revision") != "abc123" || w.Header().Get("X-GR") != "PROD" ||
+		w.Header().Get("X-Go-Web") != "rendered" {
 		t.Fatalf("headers = %v", w.Header())
 	}
 	var line map[string]any
