@@ -139,33 +139,22 @@ describe PtOscLeftovers do
     end
   end
 
-  describe ".blocking?" do
-    it "is true when triggers were left behind, since those are what pt-osc trips over" do
-      create_pt_osc_triggers("pt_osc_spec_targets")
-
-      expect(described_class.blocking?(described_class.all)).to be(true)
-    end
-
-    it "is false for a shadow table with no triggers, which pt-osc renames around" do
-      create_shadow_table("pt_osc_spec_targets")
-
-      expect(described_class.blocking?(described_class.all)).to be(false)
-    end
-
-    it "is true when any table has triggers, even if another has only a shadow table" do
+  describe "Leftover#triggers?" do
+    it "is true only for tables with triggers, since those are what pt-osc trips over" do
       create_pt_osc_triggers("pt_osc_spec_targets")
       connection.execute("CREATE TABLE `_pt_osc_spec_others_new` LIKE `pt_osc_spec_others`")
 
-      expect(described_class.blocking?(described_class.all)).to be(true)
+      expect(described_class.all.to_h { [_1.table, _1.triggers?] })
+        .to eq("pt_osc_spec_targets" => true, "pt_osc_spec_others" => false)
     end
   end
 
-  describe ".failure_message" do
+  describe ".warning_message" do
     it "names the tables, the artifacts, and the cleanup order" do
       create_pt_osc_triggers("pt_osc_spec_targets")
       create_shadow_table("pt_osc_spec_targets")
 
-      message = described_class.failure_message(described_class.all)
+      message = described_class.warning_message(described_class.all)
 
       expect(message).to include("pt_osc_spec_targets")
       expect(message).to include("_pt_osc_spec_targets_new")
@@ -175,14 +164,17 @@ describe PtOscLeftovers do
     it "warns against the schema_migrations workaround that caused the original incident" do
       create_pt_osc_triggers("pt_osc_spec_targets")
 
-      expect(described_class.failure_message(described_class.all))
+      expect(described_class.warning_message(described_class.all))
         .to include("Do NOT work around this by inserting the migration's version into schema_migrations")
     end
 
-    it "documents the escape hatch for a genuinely in-flight run" do
-      create_shadow_table("pt_osc_spec_targets")
+    it "does not tell anyone to drop triggers a run may still be using" do
+      create_pt_osc_triggers("pt_osc_spec_targets")
 
-      expect(described_class.failure_message(described_class.all)).to include("ALLOW_PT_OSC_LEFTOVERS=1")
+      message = described_class.warning_message(described_class.all)
+
+      expect(message).to include("still in flight")
+      expect(message).to include("Once no pt-osc run is in flight, clean the artifacts up")
     end
 
     it "does not blame triggers when only a shadow table was left behind" do
@@ -191,7 +183,7 @@ describe PtOscLeftovers do
       # sends whoever reads this looking for something that is not there.
       create_shadow_table("pt_osc_spec_targets")
 
-      message = described_class.failure_message(described_class.all)
+      message = described_class.warning_message(described_class.all)
 
       expect(message).to include("no leftover triggers")
       expect(message).to include("Drop the leftover shadow table")
@@ -207,28 +199,45 @@ describe PtOscLeftovers do
       # shadow table alone is not a reason to refuse a deploy.
       create_shadow_table("pt_osc_spec_targets")
 
-      message = described_class.failure_message(described_class.all)
+      message = described_class.warning_message(described_class.all)
 
       expect(message).to start_with("Found:")
       expect(message).not_to include("Refusing to migrate")
       expect(message).to include("schema changes are not blocked")
     end
 
-    it "says it is refusing to migrate when triggers are present" do
+    it "says only the tables with triggers refuse schema changes" do
       create_pt_osc_triggers("pt_osc_spec_targets")
 
-      expect(described_class.failure_message(described_class.all)).to start_with("Refusing to migrate")
+      message = described_class.warning_message(described_class.all)
+
+      expect(message).to start_with("Found:")
+      expect(message).to include("Schema changes to pt_osc_spec_targets are refused while the triggers exist; migrations on other tables run normally.")
     end
 
     it "explains each table on its own terms when one has triggers and another does not" do
       create_pt_osc_triggers("pt_osc_spec_targets")
       connection.execute("CREATE TABLE `_pt_osc_spec_others_new` LIKE `pt_osc_spec_others`")
 
-      message = described_class.failure_message(described_class.all)
+      message = described_class.warning_message(described_class.all)
 
-      expect(message).to include("Any schema change to pt_osc_spec_targets will fail")
+      expect(message).to include("Schema changes to pt_osc_spec_targets are refused")
       expect(message).to include("pt_osc_spec_others carries a leftover shadow table but no leftover triggers")
       expect(message).to include("drop its triggers FIRST")
+    end
+  end
+
+  describe ".refusal_message" do
+    it "says to let an in-flight run finish before treating the triggers as leftovers" do
+      create_pt_osc_triggers("pt_osc_spec_targets")
+
+      message = described_class.refusal_message(described_class.leftovers_for("pt_osc_spec_targets"))
+
+      expect(message).to start_with("Refusing to change the schema of pt_osc_spec_targets")
+      expect(message).to include("pt_osc_#{database}_pt_osc_spec_targets_ins")
+      expect(message).to include("Let the run finish, then redeploy.")
+      expect(message).to include("Once no pt-osc run is in flight, clean the artifacts up: drop the triggers FIRST")
+      expect(message).to include("Do NOT work around this by inserting the migration's version into schema_migrations")
     end
   end
 end

@@ -48,7 +48,15 @@ class PtOscLeftovers
   # distinguishes it from an application table; `\\_` escapes it for LIKE.
   SHADOW_TABLE_NAME_PATTERN = "\\_%\\_new"
 
+  SCHEMA_MIGRATIONS_WARNING = "Do NOT work around this by inserting the migration's version into schema_migrations by hand. That leaves the schema claiming a change that does not exist, which is how antiwork/gumroad-private#1417 happened."
+
   Leftover = Struct.new(:table, :triggers, :shadow_tables, keyword_init: true) do
+    # Only triggers block schema changes: pt-osc renames around a stray shadow table
+    # (`__<table>_new`) but cannot create triggers that already exist.
+    def triggers?
+      triggers.any?
+    end
+
     def description
       parts = []
       parts << "triggers #{triggers.sort.join(', ')}" if triggers.any?
@@ -87,20 +95,6 @@ class PtOscLeftovers
       all(connection:).find { |leftover| leftover.table == table.to_s }
     end
 
-    # Whether these leftovers will actually break the migration about to run.
-    #
-    # Only leftover TRIGGERS block. pt-osc fails because it cannot create triggers
-    # that already exist -- not because of the shadow table, which it simply renames
-    # around: Ershad's reproduction on antiwork/gumroad-private#1417 shows it creating
-    # `__purchases_new` and altering it successfully with `_purchases_new` already
-    # present, then failing at "Creating triggers...".
-    #
-    # So a shadow table on its own is dead storage worth reporting, not a reason to
-    # refuse a deploy that would have worked.
-    def blocking?(leftovers)
-      leftovers.any? { |leftover| leftover.triggers.any? }
-    end
-
     # The operator-facing explanation. Kept next to the detection so the message a
     # deploy prints and the message a console prints cannot drift apart.
     #
@@ -108,17 +102,16 @@ class PtOscLeftovers
     # different problems with different cleanup steps. Telling somebody to drop
     # triggers on a table that has none sends them looking for something that is
     # not there instead of at the shadow table that is.
-    def failure_message(leftovers)
-      with_triggers = leftovers.select { |leftover| leftover.triggers.any? }
-      shadow_only = leftovers.reject { |leftover| leftover.triggers.any? }
+    def warning_message(leftovers)
+      with_triggers, shadow_only = leftovers.partition(&:triggers?)
 
       paragraphs = [
-        "#{blocking?(leftovers) ? 'Refusing to migrate' : 'Found'}: #{leftovers.size} table#{'s' if leftovers.size > 1} still #{leftovers.size > 1 ? 'carry' : 'carries'} pt-online-schema-change artifacts from a run that never cleaned up.",
+        "Found: #{leftovers.size} table#{'s' if leftovers.size > 1} still #{leftovers.size > 1 ? 'carry' : 'carries'} pt-online-schema-change artifacts, from a run that is still in flight or one that never cleaned up.",
         leftovers.map { |leftover| "  - #{leftover.description}" }.join("\n"),
       ]
 
       if with_triggers.any?
-        paragraphs << "Any schema change to #{table_list(with_triggers)} will fail, because pt-online-schema-change cannot create triggers that already exist -- and those leftover triggers are duplicating every write to the table in the meantime."
+        paragraphs << "Schema changes to #{table_list(with_triggers)} are refused while the triggers exist; migrations on other tables run normally. If no run is in flight, those triggers are leftovers duplicating every write to the table."
       end
 
       if shadow_only.any?
@@ -127,11 +120,21 @@ class PtOscLeftovers
 
       paragraphs << cleanup_instruction(with_triggers:, shadow_only:)
 
-      paragraphs << "Do NOT work around this by inserting the migration's version into schema_migrations by hand. That leaves the schema claiming a change that does not exist, which is how antiwork/gumroad-private#1417 happened."
-
-      paragraphs << "If you are deliberately deploying while a pt-osc run is genuinely in flight, set ALLOW_PT_OSC_LEFTOVERS=1 for that deploy."
+      paragraphs << SCHEMA_MIGRATIONS_WARNING
 
       paragraphs.join("\n\n").strip
+    end
+
+    # Why one statement was refused. The run may still be copying the table, so this
+    # must not read as "drop the triggers": doing that mid-copy loses writes.
+    def refusal_message(leftover)
+      [
+        "Refusing to change the schema of #{leftover.table}, which carries pt-online-schema-change artifacts:\n  - #{leftover.description}",
+        "If a pt-osc run is still copying #{leftover.table}, this change would be lost when pt-osc swaps its copy in. Let the run finish, then redeploy.",
+        "Otherwise the triggers are leftovers, and pt-online-schema-change cannot create triggers that already exist.",
+        cleanup_instruction(with_triggers: [leftover], shadow_only: []),
+        SCHEMA_MIGRATIONS_WARNING,
+      ].join("\n\n")
     end
 
     private
@@ -144,9 +147,9 @@ class PtOscLeftovers
         shadow_warning = "Dropping a large shadow table unlinks a multi-gigabyte file and can briefly lag the replicas."
 
         if with_triggers.any? && shadow_only.any?
-          "Clean the artifacts up before deploying this migration, one table at a time and off-peak: where a table has both, drop its triggers FIRST and then its shadow table; where it has only a shadow table, drop that. #{shadow_warning}"
+          "Once no pt-osc run is in flight, clean the artifacts up one table at a time and off-peak: where a table has both, drop its triggers FIRST and then its shadow table; where it has only a shadow table, drop that. #{shadow_warning}"
         elsif with_triggers.any?
-          "Clean the artifacts up before deploying this migration: drop the triggers FIRST, then the shadow table, one table at a time and off-peak. #{shadow_warning}"
+          "Once no pt-osc run is in flight, clean the artifacts up: drop the triggers FIRST, then the shadow table, one table at a time and off-peak. #{shadow_warning}"
         else
           "Drop the leftover shadow table#{'s' if shadow_only.size > 1} when convenient, one table at a time and off-peak -- this does not block the migration. #{shadow_warning}"
         end
