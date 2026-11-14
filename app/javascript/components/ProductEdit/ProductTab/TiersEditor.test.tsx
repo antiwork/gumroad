@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
 
 import { CurrentSellerProvider } from "$app/components/CurrentSeller";
 import { TiersEditor } from "$app/components/ProductEdit/ProductTab/TiersEditor";
+import { VARIANT_DESCRIPTION_MAX_LENGTH } from "$app/components/ProductEdit/ProductTab/VariantDescriptionInput";
 import { type Tier } from "$app/components/ProductEdit/state";
 
 const productEditContext = vi.hoisted(() => ({
@@ -210,4 +211,17 @@ it("keeps the close switch on a tier added after every tier was removed", () => 
   expect(closeSwitch).toHaveProperty("checked", false);
   fireEvent.click(closeSwitch);
   expect(onChange.mock.lastCall?.[0]?.[0]?.closed_to_new_purchases).toBe(true);
+});
+
+it("caps the tier description at the column's length and shows how much room is left", () => {
+  const onChange = vi.fn<(tiers: Tier[]) => void>();
+  const view = render(<StatefulTiersEditor initial={[tier]} onChange={onChange} />);
+
+  const description = view.getByRole("textbox", { name: "Description", description: "0/255 characters" });
+  expect(description).toHaveProperty("maxLength", VARIANT_DESCRIPTION_MAX_LENGTH);
+
+  fireEvent.change(description, { target: { value: "x".repeat(VARIANT_DESCRIPTION_MAX_LENGTH) } });
+
+  expect(onChange.mock.lastCall?.[0]?.[0]?.description).toHaveLength(VARIANT_DESCRIPTION_MAX_LENGTH);
+  expect(view.getByRole("textbox", { name: "Description", description: "255/255 characters" })).toBe(description);
 });

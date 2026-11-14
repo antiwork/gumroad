@@ -7,6 +7,7 @@ import { Button } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
 import { PriceInput } from "$app/components/PriceInput";
+import { VariantDescriptionInput } from "$app/components/ProductEdit/ProductTab/VariantDescriptionInput";
 import { Duration, useProductEditContext } from "$app/components/ProductEdit/state";
 import { Drawer, ReorderingHandle, SortableList } from "$app/components/SortableList";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
@@ -16,7 +17,6 @@ import { Label } from "$app/components/ui/Label";
 import { Pill } from "$app/components/ui/Pill";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
-import { Textarea } from "$app/components/ui/Textarea";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 let newDurationId = 0;
@@ -188,14 +188,11 @@ const DurationEditor = ({
                 <Pill className="-mr-2 shrink-0">minutes</Pill>
               </InputGroup>
             </Fieldset>
-            <Fieldset>
-              <Label htmlFor={`${uid}-description`}>Description</Label>
-              <Textarea
-                id={`${uid}-description`}
-                value={duration.description}
-                onChange={(evt) => updateDuration({ description: evt.target.value })}
-              />
-            </Fieldset>
+            <VariantDescriptionInput
+              id={`${uid}-description`}
+              value={duration.description}
+              onChange={(description) => updateDuration({ description })}
+            />
             <section
               style={{ display: "grid", gap: "var(--spacer-5)", gridAutoFlow: "column", alignItems: "flex-end" }}
             >

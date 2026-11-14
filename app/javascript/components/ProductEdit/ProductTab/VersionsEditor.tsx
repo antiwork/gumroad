@@ -8,6 +8,7 @@ import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
 import { PriceInput } from "$app/components/PriceInput";
 import { useProductUrl } from "$app/components/ProductEdit/Layout";
+import { VariantDescriptionInput } from "$app/components/ProductEdit/ProductTab/VariantDescriptionInput";
 import { Version, useProductEditContext } from "$app/components/ProductEdit/state";
 import { Drawer, ReorderingHandle, SortableList } from "$app/components/SortableList";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
@@ -17,7 +18,6 @@ import { Label } from "$app/components/ui/Label";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { Switch } from "$app/components/ui/Switch";
-import { Textarea } from "$app/components/ui/Textarea";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 let newVersionId = 0;
@@ -187,14 +187,11 @@ const VersionEditor = ({
                 </a>
               </InputGroup>
             </Fieldset>
-            <Fieldset>
-              <Label htmlFor={`${uid}-description`}>Description</Label>
-              <Textarea
-                id={`${uid}-description`}
-                value={version.description}
-                onChange={(evt) => updateVersion({ description: evt.target.value })}
-              />
-            </Fieldset>
+            <VariantDescriptionInput
+              id={`${uid}-description`}
+              value={version.description}
+              onChange={(description) => updateVersion({ description })}
+            />
             <section className="grid grid-flow-col items-end gap-6">
               <Fieldset>
                 <Label htmlFor={`${uid}-price`}>Additional amount</Label>

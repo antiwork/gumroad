@@ -22,6 +22,7 @@ import { Modal } from "$app/components/Modal";
 import { NumberInput } from "$app/components/NumberInput";
 import { PriceInput } from "$app/components/PriceInput";
 import { useProductUrl } from "$app/components/ProductEdit/Layout";
+import { VariantDescriptionInput } from "$app/components/ProductEdit/ProductTab/VariantDescriptionInput";
 import { RecurrencePriceValue, Tier, useProductEditContext } from "$app/components/ProductEdit/state";
 import { RichTextEditor } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -36,7 +37,6 @@ import { LinkButton } from "$app/components/ui/LinkButton";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Row, RowActions, RowContent, RowDetails, Rows } from "$app/components/ui/Rows";
 import { Switch } from "$app/components/ui/Switch";
-import { Textarea } from "$app/components/ui/Textarea";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useRunOnce } from "$app/components/useRunOnce";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -263,14 +263,11 @@ const TierEditor = ({
                 </a>
               </InputGroup>
             </Fieldset>
-            <Fieldset>
-              <Label htmlFor={`${uid}-description`}>Description</Label>
-              <Textarea
-                id={`${uid}-description`}
-                value={tier.description}
-                onChange={(evt) => updateTier({ description: evt.target.value })}
-              />
-            </Fieldset>
+            <VariantDescriptionInput
+              id={`${uid}-description`}
+              value={tier.description}
+              onChange={(description) => updateTier({ description })}
+            />
             <Fieldset>
               <Label htmlFor={`${uid}-max-purchase-count`}>Maximum number of active supporters</Label>
               <NumberInput
