@@ -85,6 +85,7 @@ func TestRailsProxyForwardsTheRequestAsItArrived(t *testing.T) {
 	w := httptest.NewRecorder()
 	w.Header().Set("X-Revision", "go_web")
 	w.Header().Set("X-Request-Id", "go-web-request-id")
+	w.Header().Set("X-Go-Web", "rendered")
 	tp.Forward(w, r, "test")
 
 	if got == nil {
@@ -103,7 +104,7 @@ func TestRailsProxyForwardsTheRequestAsItArrived(t *testing.T) {
 	}
 	if w.Code != http.StatusFound || w.Body.String() != "from rails" || len(w.Header().Values("X-Revision")) != 1 ||
 		w.Header().Get("X-Revision") != "rails" || w.Header().Get("X-Request-Id") != "" || w.Header().Get("Set-Cookie") != "a=1" ||
-		w.Header().Get("Content-Encoding") != "gzip" {
+		w.Header().Get("Content-Encoding") != "gzip" || strings.Join(w.Header().Values("X-Go-Web"), ",") != "proxied" {
 		t.Errorf("client got %d %q %v", w.Code, w.Body.String(), w.Header())
 	}
 }
