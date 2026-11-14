@@ -280,7 +280,7 @@ const LinkNodeView = ({ node, editor, getPos, deleteNode }: NodeViewProps) => {
     return (
       <NodeActionsWrapper asChild>
         <NodeViewWrapper as="span" style={{ display: "inline-block" }}>
-          <NodeActionsMenu editor={editor} getPos={getPos} />
+          <NodeActionsMenu editor={editor} getPos={getPos} className="max-lg:static" />
           {content}
         </NodeViewWrapper>
       </NodeActionsWrapper>
