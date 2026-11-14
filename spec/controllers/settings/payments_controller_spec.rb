@@ -3341,6 +3341,9 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         ["currently_due", "individual.verification.additional_document"],
         ["past_due", "individual.verification.additional_document"],
         ["currently_due", "person_123.verification.additional_document"],
+        ["currently_due", "individual.verification.proof_of_liveness"],
+        ["past_due", "individual.verification.proof_of_liveness"],
+        ["past_due", "person_123.verification.proof_of_liveness"],
       ].each do |due_list, requirement|
         it "requests account_onboarding when requirements.#{due_list} lists #{requirement}" do
           stub_stripe_requirements(requirements: { due_list => [requirement] })
@@ -3368,6 +3371,8 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         "requirements.pending_verification" => { requirements: { "pending_verification" => ["individual.verification.document"] } },
         "future_requirements.currently_due" => { future_requirements: { "currently_due" => ["individual.verification.document"] } },
         "future_requirements.past_due" => { future_requirements: { "past_due" => ["individual.verification.document"] } },
+        "requirements.eventually_due liveness" => { requirements: { "eventually_due" => ["individual.verification.proof_of_liveness"] } },
+        "requirements.pending_verification liveness" => { requirements: { "pending_verification" => ["individual.verification.proof_of_liveness"] } },
       }.each do |location, stubbed_requirements|
         it "keeps account_update when the document is only in #{location}" do
           create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID)
