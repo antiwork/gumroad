@@ -14,6 +14,7 @@ import { Modal } from "$app/components/Modal";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { MenuItem, validateUrl } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
+import { NodeActionsMenu, NodeActionsWrapper } from "$app/components/TiptapExtensions/NodeActionsMenu";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { MenuItem as MenuListItem } from "$app/components/ui/Menu";
@@ -205,78 +206,90 @@ const LinkNodeView = ({ node, editor, getPos, deleteNode }: NodeViewProps) => {
     if (node.textContent.trim() === "") queueMicrotask(() => getPos() && deleteNode());
   }, [node.textContent]);
 
+  const content =
+    editor.isEditable && (isPopoverShown || isButton) ? (
+      <Popover
+        open={isPopoverShown}
+        onOpenChange={(open) => {
+          setLink({ label: node.textContent, url: assertString(node.attrs.href) });
+          setIsPopoverShown(open);
+        }}
+      >
+        <PopoverTrigger className={classNames("invisible all-unset", { visible: isButton || isPopoverVisible })}>
+          <NodeViewContent
+            as="a"
+            href={assertString(node.attrs.href)}
+            className={cx({ [tiptapButtonClassName]: isButton })}
+            target="_blank"
+            rel="noopener noreferrer nofollow"
+          />
+        </PopoverTrigger>
+        <PopoverContent usePortal>
+          <Fieldset>
+            <Input
+              placeholder="Enter text"
+              value={link.label}
+              onChange={(evt) => setLink({ ...link, label: evt.target.value })}
+              onKeyDown={handleKeyPress}
+            />
+            <Input
+              placeholder="Enter URL"
+              value={link.url}
+              ref={linkInputRef}
+              onChange={(evt) => setLink({ ...link, url: evt.target.value })}
+              onKeyDown={handleKeyPress}
+            />
+            <div className="flex items-end gap-2">
+              {!isButton && (
+                <Button contentEditable={false} color="danger" onClick={removeLink}>
+                  Remove link
+                </Button>
+              )}
+              <Button
+                contentEditable={false}
+                color="primary"
+                onClick={handleSave}
+                disabled={(link.url === node.attrs.href && link.label === node.textContent) || link.label.trim() === ""}
+              >
+                Save
+              </Button>
+            </div>
+          </Fieldset>
+        </PopoverContent>
+      </Popover>
+    ) : (
+      <NodeViewContent
+        style={{ display: "grid" }}
+        as="a"
+        href={assertString(node.attrs.href)}
+        contentEditable={editor.isEditable}
+        className={cx({ [tiptapButtonClassName]: isButton })}
+        target="_blank"
+        rel="noopener noreferrer nofollow"
+        onClick={(event: React.MouseEvent) => {
+          if (editor.isEditable) {
+            event.preventDefault();
+            setLink({ label: node.textContent, url: assertString(node.attrs.href) });
+            setIsPopoverShown(true);
+          }
+        }}
+      />
+    );
+
+  if (isButton && editor.isEditable) {
+    return (
+      <NodeActionsWrapper asChild>
+        <NodeViewWrapper as="span" style={{ display: "inline-block" }}>
+          <NodeActionsMenu editor={editor} getPos={getPos} className="max-lg:static" />
+          {content}
+        </NodeViewWrapper>
+      </NodeActionsWrapper>
+    );
+  }
+
   return (
     <NodeViewWrapper as="span" style={{ display: "inline-block" }}>
-      {editor.isEditable && (isPopoverShown || isButton) ? (
-        <Popover
-          open={isPopoverShown}
-          onOpenChange={(open) => {
-            setLink({ label: node.textContent, url: assertString(node.attrs.href) });
-            setIsPopoverShown(open);
-          }}
-        >
-          <PopoverTrigger className={classNames("invisible all-unset", { visible: isButton || isPopoverVisible })}>
-            <NodeViewContent
-              as="a"
-              href={assertString(node.attrs.href)}
-              className={cx({ [tiptapButtonClassName]: isButton })}
-              target="_blank"
-              rel="noopener noreferrer nofollow"
-            />
-          </PopoverTrigger>
-          <PopoverContent usePortal>
-            <Fieldset>
-              <Input
-                placeholder="Enter text"
-                value={link.label}
-                onChange={(evt) => setLink({ ...link, label: evt.target.value })}
-                onKeyDown={handleKeyPress}
-              />
-              <Input
-                placeholder="Enter URL"
-                value={link.url}
-                ref={linkInputRef}
-                onChange={(evt) => setLink({ ...link, url: evt.target.value })}
-                onKeyDown={handleKeyPress}
-              />
-              <div className="flex items-end gap-2">
-                {!isButton && (
-                  <Button contentEditable={false} color="danger" onClick={removeLink}>
-                    Remove link
-                  </Button>
-                )}
-                <Button
-                  contentEditable={false}
-                  color="primary"
-                  onClick={handleSave}
-                  disabled={
-                    (link.url === node.attrs.href && link.label === node.textContent) || link.label.trim() === ""
-                  }
-                >
-                  Save
-                </Button>
-              </div>
-            </Fieldset>
-          </PopoverContent>
-        </Popover>
-      ) : (
-        <NodeViewContent
-          style={{ display: "grid" }}
-          as="a"
-          href={assertString(node.attrs.href)}
-          contentEditable={editor.isEditable}
-          className={cx({ [tiptapButtonClassName]: isButton })}
-          target="_blank"
-          rel="noopener noreferrer nofollow"
-          onClick={(event: React.MouseEvent) => {
-            if (editor.isEditable) {
-              event.preventDefault();
-              setLink({ label: node.textContent, url: assertString(node.attrs.href) });
-              setIsPopoverShown(true);
-            }
-          }}
-        />
-      )}
+      {content}
     </NodeViewWrapper>
   );
 };
