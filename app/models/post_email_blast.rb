@@ -85,7 +85,7 @@ class PostEmailBlast < ApplicationRecord
 
   # Its post was deleted, unpublished, or had its emails turned off before the send finished, from
   # whichever copy of the job noticed first. A blast that never delivered gives back the day's
-  # large-send slot it claimed; one that did keeps it, because the slot was spent on real sends.
+  # large-send slot it claimed; one that did, or may have, keeps it, because the slot was spent on real sends.
   def self.stop_for_removed_post(id)
     blast = find_by(id:)
     return 0 if blast.nil?
@@ -93,12 +93,31 @@ class PostEmailBlast < ApplicationRecord
     stopped = stop(id, EXPIRY_POST_REMOVED)
     return stopped unless stopped.positive?
 
-    $redis.del(RedisKey.blast_quota_deferred_until(id))
-    # Re-read after the stop: a delivery that landed in between means the slot was spent.
+    # Re-read after the stop: a delivery that landed in between means the slot was spent. The pending
+    # count is written before the first provider handoff, so its presence covers one still in flight.
     blast.reload
-    SellerLargeBlastQuota.release(seller_id: blast.seller_id, blast_id: id, kind: "post_blast") if blast.first_email_delivered_at.nil?
+    if blast.first_email_delivered_at.nil? && !handoff_may_be_in_flight?(id)
+      SellerLargeBlastQuota.release(seller_id: blast.seller_id, blast_id: id, kind: "post_blast")
+    end
+    # No later run revisits a stopped row, so nothing after the stop may raise: a raise would skip the
+    # caller's cleanup for good and, in the stalled-blast scan, that tick's alert for every other row.
+    begin
+      $redis.del(RedisKey.blast_quota_deferred_until(id))
+    rescue Redis::BaseError, RedisClient::Error => e
+      ErrorNotifier.notify(e, blast_id: id)
+    end
     stopped
   end
+
+  # An unreadable count counts as in flight, keeping the slot until the day ends, which is what a
+  # failed `SellerLargeBlastQuota.release` leaves too. Releasing after a handoff would allow a second large send.
+  def self.handoff_may_be_in_flight?(id)
+    $redis.exists?(RedisKey.blast_pending_recipients(id))
+  rescue Redis::BaseError, RedisClient::Error => e
+    ErrorNotifier.notify(e, blast_id: id)
+    true
+  end
+  private_class_method :handoff_may_be_in_flight?
 
   def to_non_openers?
     recipient_filter == RECIPIENT_FILTER_UNOPENED

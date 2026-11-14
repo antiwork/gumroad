@@ -190,7 +190,10 @@ class SendPostBlastEmailsJob
     # has no send left. This job is the only writer that ever revisits the blast, so returning here
     # would leave the row unfinished until the stalled-blast scan gives up on it days later.
     def end_if_post_unsendable
-      PostEmailBlast.stop_for_removed_post(@blast.id)
+      # A copy that loses the stop leaves the state to the writer that ended the row, including an
+      # expired quota decision kept as a fence.
+      return unless PostEmailBlast.stop_for_removed_post(@blast.id).positive?
+
       clear_blast_state
       Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} expired: the post can no longer send")
     end
