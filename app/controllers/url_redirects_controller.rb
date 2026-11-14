@@ -13,16 +13,17 @@ class UrlRedirectsController < ApplicationController
 
   before_action :fetch_url_redirect, except: %i[
     show stream download_subtitle_file subtitle_file_vtt read download_archive download_product_files
+    download_commission_file
   ]
   before_action :redirect_bundle_purchase_to_library_if_needed, only: :download_page
   before_action :redirect_to_coffee_page_if_needed, only: :download_page
   before_action :check_permissions, only: %i[show stream download_page
                                              hls_playlist download_subtitle_file subtitle_file_vtt read
                                              download_archive download_product_files
-                                             save_last_content_page play]
+                                             download_commission_file save_last_content_page play]
   before_action :require_product_build_player, only: :play
   before_action :hide_layouts, only: %i[
-    show download_product_files smil hls_playlist download_subtitle_file subtitle_file_vtt
+    show download_product_files download_commission_file smil hls_playlist download_subtitle_file subtitle_file_vtt
   ]
   # smil does not run check_permissions, so this must precede the rental stamp.
   # Otherwise a leaked token starts the viewing window and the request still 404s.
@@ -154,6 +155,15 @@ class UrlRedirectsController < ApplicationController
       flash[:warning] = "The file is no longer available. Please contact the seller."
       redirect_to(@url_redirect.download_page_url, allow_other_host: true)
     end
+  end
+
+  def download_commission_file
+    commission = @url_redirect.purchase&.commission
+    blob = ActiveStorage::Blob.find_signed(params[:file_id])
+    e404 unless commission&.is_completed? && blob.present? && commission.files.exists?(blob_id: blob.id)
+
+    redirect_to blob.url(expires_in: 5.minutes, disposition: "attachment"), allow_other_host: true
+    create_consumption_event!(ConsumptionEvent::EVENT_TYPE_DOWNLOAD)
   end
 
   def download_archive
