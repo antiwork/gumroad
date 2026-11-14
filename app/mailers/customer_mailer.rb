@@ -391,7 +391,13 @@ class CustomerMailer < ApplicationMailer
   end
 
   def review_response(review_response)
-    review = review_response.product_review
+    # A worker's SELECTs read a replica (USE_DB_WORKER_REPLICAS), and the response row is seconds old
+    # when this delayed render runs, so the review's `response` can come back empty and the template
+    # dereferences nil. The presenter also reads the purchase and its purchaser, so both are preloaded
+    # from the primary in the same block. TeamMailer#invite pins the same way.
+    review = ApplicationRecord.connected_to(role: :writing) do
+      ProductReview.includes(:response, purchase: :purchaser).find(review_response.product_review_id)
+    end
     @review_presenter = ProductReviewPresenter.new(review).product_review_props
     @product = review.link
     seller = @product.user

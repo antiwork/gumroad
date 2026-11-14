@@ -1761,6 +1761,36 @@ describe CustomerMailer do
       expect(mail.body).to have_selector(".content.response .byline", text: "Olivander")
       expect(mail.body).to have_link("View product", href: product.long_url)
     end
+
+    it "reads the review, its response and the purchase from the primary, not a replica" do
+      # Tests share one connection across roles, so the pin is only observable by looking at
+      # which statements run while the writing-role block is open.
+      pinned = false
+      reads = []
+      allow(ApplicationRecord).to receive(:connected_to).and_wrap_original do |original, **kwargs, &block|
+        next original.call(**kwargs, &block) unless kwargs[:role] == :writing
+
+        pinned = true
+        begin
+          original.call(**kwargs, &block)
+        ensure
+          pinned = false
+        end
+      end
+      subscriber = ->(_name, _start, _finish, _id, payload) do
+        sql = payload[:sql].to_s
+        reads << [sql, pinned] if sql.match?(/FROM `product_reviews`|FROM `product_review_responses`|FROM `purchases`/)
+      end
+
+      body = ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record") do
+        # ActionMailer is lazy: the render is what loads the rows, so it runs in here.
+        CustomerMailer.review_response(response).body.encoded
+      end
+
+      expect(reads.map(&:last)).to all(be(true))
+      expect(reads.map(&:first).grep(/product_review_responses/)).not_to be_empty
+      expect(body).to include("Here is a response.")
+    end
   end
 
   describe ".upcoming_call_reminder" do
