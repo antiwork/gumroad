@@ -38,7 +38,9 @@ describe "Checkout bundles", :js, type: :system do
     click_on "Pay"
     expect(page).to have_alert(text: "Your purchase was successful!")
 
-    expect(page).to_not have_link("Product")
+    # The stamp is still pending in this snapshot; the confirmation screen links the download page anyway,
+    # because the download page shows its own "preparing the file" state.
+    expect(page).to have_link("Product", href: Purchase.find_by(link: product).url_redirect.download_page_url)
     expect(page).to have_section("Product")
     expect(page).to have_link("Versioned product - Untitled 1", href: Purchase.last.url_redirect.download_page_url)
     expect(page).to_not have_link("Bundle")
@@ -201,7 +203,7 @@ describe "Checkout bundles", :js, type: :system do
         expect(purchase.is_test_purchase?).to eq(true)
       end
 
-      expect(page).to_not have_link("Product")
+      expect(page).to have_link("Product", href: Purchase.find_by(link: product).url_redirect.download_page_url)
       expect(page).to have_section("Product")
       expect(page).to have_link("Versioned product - Untitled 1", href: purchases.last.url_redirect.download_page_url)
     end
