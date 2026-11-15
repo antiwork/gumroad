@@ -73,8 +73,22 @@ class ReceiptPresenter::ItemInfo
         free_trial_purchase_note,
         physical_product_note,
         rental_product_note,
-        preorder_note
+        preorder_note,
+        eu_withdrawal_consent_note
       ].compact
+    end
+
+    # The durable-medium confirmation Directive (EU) 2023/2673 asks for: what the buyer agreed to,
+    # when, and which wording they saw. Printed whenever checkout captured the consent, which is
+    # every EU non-physical sale since the capture shipped (gp#4574).
+    def eu_withdrawal_consent_note
+      consented_at = purchase.eu_withdrawal_consent_at
+      return if consented_at.blank?
+
+      "You asked for immediate access and agreed that you lose your EU statutory right of withdrawal " \
+        "(consent #{purchase.eu_withdrawal_consent_version}, #{Date.parse(consented_at).strftime("%-d %B %Y")})."
+    rescue Date::Error
+      nil
     end
 
     def custom_receipt_note

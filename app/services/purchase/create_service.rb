@@ -565,6 +565,15 @@ class Purchase::CreateService < Purchase::BaseService
     end
 
     def build_purchase(params_for_purchase)
+      # The EU withdrawal consent is a checkout-only input rather than a Purchase attribute, so
+      # read it here and keep it out of the hash `sales.build` receives (an unknown key there
+      # raises UnknownAttributeError). The submitted country has to be read before the next line
+      # overwrites it with the display name — for a non-shippable product the record keeps no
+      # country at all, so this is the only place the buyer's country is still knowable.
+      eu_withdrawal_consent_given = ActiveModel::Type::Boolean.new.cast(params_for_purchase.delete(:eu_withdrawal_consent))
+      eu_withdrawal_buyer_country_code = ISO3166::Country[
+        params_for_purchase[:country].presence || params_for_purchase[:sales_tax_country_code_election]
+      ]&.alpha2
       params_for_purchase[:country] = ISO3166::Country[params_for_purchase[:country]]&.common_name
 
       purchase = product.sales.build(params_for_purchase)
@@ -632,7 +641,41 @@ class Purchase::CreateService < Purchase::BaseService
       end
 
       purchase.url_parameters = parse_url_parameters(params_for_purchase[:url_parameters])
+      record_eu_withdrawal_consent!(purchase, buyer_country_code: eu_withdrawal_buyer_country_code, consented: eu_withdrawal_consent_given)
       purchase
+    end
+
+    # Records the buyer's immediate-delivery / loss-of-withdrawal-right consent on the purchases the
+    # EU withdrawal right actually covers, and — once the `:eu_withdrawal_consent` flag is on —
+    # refuses a checkout that omits it.
+    #
+    # Scope is every non-physical product sold to a buyer in an EU member state. Services (calls,
+    # commissions, memberships) are included on purpose: art. 16(a) of the Consumer Rights Directive
+    # provides the same prior-consent-and-acknowledgement route for a service performed immediately
+    # that art. 16(m) provides for digital content, and the 2026-11-13 ruling on
+    # antiwork/gumroad-private#4574 chose the conservative reading. Physical goods are excluded —
+    # their withdrawal right cannot be waived, so asking for this consent there would be a false
+    # statement to the buyer.
+    #
+    # The flag gates only the refusal, never the recording. Checkout is JS in a browser, so a buyer
+    # already on the page keeps the previous bundle until they reload; enforcement turns on once
+    # that bundle is out of circulation.
+    def record_eu_withdrawal_consent!(purchase, buyer_country_code:, consented:)
+      return if purchase.link.is_physical
+      # A bundle's member purchases are created from the bundle purchase after the charge, without
+      # the checkout's line-item params; the consent is recorded on the bundle purchase instead.
+      return if purchase.is_bundle_product_purchase?
+      # The giftee never sees the checkout, so the giver's consent belongs on the giver's purchase.
+      return if purchase.is_gift_receiver_purchase
+      return unless Compliance::Countries::EU_WITHDRAWAL_RIGHT_COUNTRY_CODES.include?(buyer_country_code)
+
+      if consented
+        purchase.eu_withdrawal_consent_at = Time.current.iso8601
+        purchase.eu_withdrawal_consent_version = Purchase::EU_WITHDRAWAL_CONSENT_VERSION
+      elsif Feature.active?(:eu_withdrawal_consent)
+        raise Purchase::PurchaseInvalid,
+              "Please confirm that you want immediate access and understand that you lose your EU right of withdrawal."
+      end
     end
 
     def build_custom_fields(purchase, custom_fields_params, product: nil, bundle_product: nil)

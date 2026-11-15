@@ -337,6 +337,14 @@ module Compliance
       GBR, # United Kingdom
     ].map(&:alpha2).freeze
 
+    # The consumers the Consumer Rights Directive's withdrawal right covers — the EU member
+    # states, i.e. the VAT-application list minus the UK, which left the EU and legislated its
+    # own regime. Same subtraction `SalesTax::SalesTaxCalculator::EU_VAT_DESTINATION_COUNTRY_CODES`
+    # makes, so the two cannot drift. Used by the checkout consent capture for Directive (EU)
+    # 2023/2673 (the "withdraw from contract here" function and the immediate-delivery waiver);
+    # see the ruling on antiwork/gumroad-private#4574.
+    EU_WITHDRAWAL_RIGHT_COUNTRY_CODES = (EU_VAT_APPLICABLE_COUNTRY_CODES - [GBR.alpha2]).freeze
+
     NORWAY_VAT_APPLICABLE_COUNTRY_CODES = [
       NOR, # Norway
     ].map(&:alpha2).freeze

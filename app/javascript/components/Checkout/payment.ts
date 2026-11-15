@@ -23,6 +23,10 @@ import {
   isRecurringUpiPaymentConfig,
 } from "$app/components/Checkout/buyerCurrencyDisplay";
 import { Creator } from "$app/components/Checkout/cartState";
+import {
+  EU_WITHDRAWAL_CONSENT_FIELD_KEY,
+  euWithdrawalConsentApplies,
+} from "$app/components/Checkout/euWithdrawalConsent";
 import { showAlert } from "$app/components/server-components/Alert";
 import { useDebouncedCallback } from "$app/components/useDebouncedCallback";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
@@ -1375,6 +1379,17 @@ function validatePaymentMethodIndependentFields(state: State) {
     if ((field.type === "terms" || field.required) && !state.customFieldValues[field.key])
       errors.add(`customFields.${field.key}`);
   }
+  // The EU immediate-delivery / withdrawal-right waiver (gp#4574). Kept in this pass rather than
+  // the custom-field loop because it is not a seller field — every submit path runs through here,
+  // so this is what actually stops the charge.
+  if (
+    euWithdrawalConsentApplies(
+      state.country,
+      state.products.map((product) => product.nativeType),
+    ) &&
+    !state.customFieldValues[EU_WITHDRAWAL_CONSENT_FIELD_KEY]
+  )
+    errors.add(EU_WITHDRAWAL_CONSENT_FIELD_KEY);
   if (isTippingEnabled(state) && state.tip.type === "fixed" && state.tip.amount === null) errors.add("tip");
   if (
     requiresPayment(state) &&

@@ -91,6 +91,10 @@ export type PurchaseLineItemPayload = {
   acceptsPppDiscount?: boolean;
   forceNewSubscription: boolean;
   restartIntent?: string | null;
+  // The EU immediate-delivery / withdrawal-right waiver the checkout collected for this line
+  // (see Checkout/euWithdrawalConsent.ts). Recorded server-side on the purchases the withdrawal
+  // right covers, and printed on the receipt.
+  euWithdrawalConsent?: boolean;
   // Set once the buyer has explicitly confirmed a same-product repeat charge that
   // Purchase#not_double_charged flagged — see confirmedDuplicatePurchaseUidsRef in Checkout/Show.tsx.
   confirmedDuplicatePurchase: boolean;
@@ -322,6 +326,7 @@ export const createPurchasesRequestData = (
       restart_intent: lineItem.restartIntent ?? undefined,
       confirmed_duplicate_purchase: lineItem.confirmedDuplicatePurchase,
       custom_fields: lineItem.customFields,
+      eu_withdrawal_consent: lineItem.euWithdrawalConsent ?? false,
     })),
   };
   if (payload.fullName) {

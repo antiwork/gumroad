@@ -549,6 +549,10 @@ class OrdersController < ApplicationController
                      :was_product_recommended, :recommended_by, :referrer, :is_rental, :is_multi_buy,
                      :was_discover_fee_charged, :price_cents, :tax_cents, :gumroad_tax_cents, :shipping_cents, :price_id, :affiliate_id, :url_parameters, :is_purchasing_power_parity_discounted, :accepts_purchasing_power_parity_discount,
                      :recommender_model_name, :tip_cents, :pay_in_installments, :force_new_subscription, :restart_intent, :confirmed_duplicate_purchase,
+                     # The EU immediate-delivery / withdrawal-right waiver the checkout collects for
+                     # buyers in an EU member state. Checkout-only: Purchase::CreateService reads it
+                     # off the service params and records it on the purchase (gp#4574).
+                     :eu_withdrawal_consent,
                      custom_fields: [:id, :value], variants: [], perceived_free_trial_duration: [:unit, :amount], accepted_offer: [:id, :original_variant_id, :original_product_id],
                      bundle_products: [:product_id, :variant_id, :quantity, custom_fields: [:id, :value]]])
     end

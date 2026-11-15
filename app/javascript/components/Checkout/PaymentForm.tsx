@@ -43,6 +43,7 @@ import { getApplePayRecurringPaymentRequest } from "$app/components/Checkout/app
 import { useShouldInvertNativePayPalButton } from "$app/components/Checkout/checkoutTheme";
 import { CreditCardInput, StripeElementsProvider } from "$app/components/Checkout/CreditCardInput";
 import { CustomFields } from "$app/components/Checkout/CustomFields";
+import { EuWithdrawalConsentField } from "$app/components/Checkout/EuWithdrawalConsentField";
 import { resolveHeldWalletPayment, type HeldWalletPayment } from "$app/components/Checkout/heldWalletPayment";
 import {
   addressFields,
@@ -2117,6 +2118,7 @@ export const PaymentForm = ({
   return (
     <div className={`flex flex-col gap-6 ${className}`} aria-label="Payment form" ref={paymentFormRef}>
       {showCustomFields ? <CustomFields className="p-4 sm:p-5" /> : null}
+      <EuWithdrawalConsentField className="p-4 sm:p-5" />
       <CustomerDetails className="flex flex-wrap items-center justify-between gap-4 p-4 sm:p-5" />
       {!showFreeLayout ? (
         // One box for the whole payment step: the buyer's email address (plus name/country when

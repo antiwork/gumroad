@@ -58,6 +58,7 @@ import {
   useCheckoutStyle,
 } from "$app/components/Checkout/checkoutTheme";
 import { CrossSellModal } from "$app/components/Checkout/CrossSellModal";
+import { EU_WITHDRAWAL_CONSENT_FIELD_KEY } from "$app/components/Checkout/euWithdrawalConsent";
 import { computeInitialCheckout, type InitialCheckout } from "$app/components/Checkout/initialCheckout";
 import {
   BUYER_CURRENCY_QUOTE_REFRESH_MESSAGE,
@@ -694,6 +695,7 @@ const CheckoutIndexPage = () => {
               recommenderModelName: item.recommender_model_name,
               affiliateId: item.affiliate_id,
               customFields: buildCustomFieldValues(item.product.custom_fields, state.customFieldValues, item.product),
+              euWithdrawalConsent: state.customFieldValues[EU_WITHDRAWAL_CONSENT_FIELD_KEY] === "true",
               // TODO: Pass item.url_parameters (Record<string, string>) here after new checkout experience is rolled out
               urlParameters: JSON.stringify(item.url_parameters),
               referrer: item.referrer,

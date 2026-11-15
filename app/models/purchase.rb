@@ -113,10 +113,25 @@ class Purchase < ApplicationRecord
   attr_json_data_accessor :direct_affiliate_credit_cents
   attr_json_data_accessor :direct_affiliate_basis_points
   attr_json_data_accessor :collaborator_basis_points
+  # The buyer's agreement, captured at checkout, to immediate delivery of a non-physical
+  # product and to the loss of their EU statutory right of withdrawal (Consumer Rights
+  # Directive art. 16(m) / Directive (EU) 2023/2673). The timestamp and the wording version
+  # are both the evidence: a later change to the copy must never silently rewrite what an
+  # earlier buyer actually agreed to, so the version stored here is what the receipt prints.
+  # See the ruling on antiwork/gumroad-private#4574.
+  attr_json_data_accessor :eu_withdrawal_consent_at
+  attr_json_data_accessor :eu_withdrawal_consent_version
 
   CAN_CONTACT_REASON_BUYER_UNSUBSCRIBE = "buyer_unsubscribe"
   CAN_CONTACT_REASON_SPAM_REPORT = "spam_report"
   CAN_CONTACT_REASON_INHERITED = "inherited"
+
+  # Version of the EU withdrawal-consent copy the buyer agrees to at checkout. Bump this in the
+  # same change that edits the wording (the buyer-facing text lives in
+  # `app/javascript/components/Checkout/EuWithdrawalConsent.tsx` and is echoed on the receipt by
+  # `ReceiptPresenter::ItemInfo#eu_withdrawal_consent_note`), so a purchase's stored version
+  # always identifies the exact text that buyer saw.
+  EU_WITHDRAWAL_CONSENT_VERSION = "2026-11-15.1"
 
   alias_attribute :total_transaction_cents_usd, :total_transaction_cents
 
