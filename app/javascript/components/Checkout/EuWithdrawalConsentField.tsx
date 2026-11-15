@@ -52,10 +52,14 @@ export const EuWithdrawalConsentField = ({ className }: { className?: string | u
             style={{ margin: 0 }}
             disabled={isProcessing(state)}
           />
-          {EU_WITHDRAWAL_CONSENT_TEXT}{" "}
-          <a href="https://gumroad.com/help/article/190" target="_blank" rel="noreferrer">
-            Learn more
-          </a>
+          {/* One flex item for the sentence and its link: as two siblings the anchor is its own
+              flex item and shrinks to min-content, so "Learn more" wraps letter by letter. */}
+          <span>
+            {EU_WITHDRAWAL_CONSENT_TEXT}{" "}
+            <a href="https://gumroad.com/help/article/190" target="_blank" rel="noreferrer">
+              Learn more
+            </a>
+          </span>
         </Label>
         {hasError ? (
           <FieldsetDescription id={`${uid}-error`}>
