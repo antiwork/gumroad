@@ -60,6 +60,9 @@ describe "Tiered Membership VAT Spec", type: :system, js: true do
       # shows the prorated price to be charged today, including VAT
       expect(page).to have_text "You'll be charged US$7.86 today, including US$1.31 for VAT in France"
 
+      # The upgrade checkout carries the same required consent box as the product checkout.
+      accept_eu_withdrawal_consent
+
       click_on "Update membership"
       wait_for_ajax
 
@@ -94,6 +97,9 @@ describe "Tiered Membership VAT Spec", type: :system, js: true do
       choose "Second Tier"
 
       expect(page).to have_text "You'll be charged US$6.55"
+
+      # The upgrade checkout carries the same required consent box as the product checkout.
+      accept_eu_withdrawal_consent
 
       click_on "Update membership"
       wait_for_ajax

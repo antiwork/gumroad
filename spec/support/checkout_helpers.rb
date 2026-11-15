@@ -16,6 +16,22 @@ module CheckoutHelpers
   # its own button, is never the match.
   PAY_BUTTON_TEXT = /\APay\b/
 
+  # The EU immediate-delivery / withdrawal-right consent (Checkout/euWithdrawalConsent.ts) is a
+  # required checkbox for a non-physical cart bought from an EU member state: the submit-time
+  # validation in Checkout/payment.ts refuses the charge without it, so every checkout driven from
+  # here ticks it the way a buyer in that position has to. It renders inside a Label-wrapped
+  # checkbox like a seller's terms field, which is why a plain substring of its copy matches —
+  # `check "I accept"` matches the terms field the same way.
+  EU_WITHDRAWAL_CONSENT_LABEL = "I want access to this product now"
+
+  # Absent for a buyer outside the EU and for a physical-only cart, where the consent does not
+  # apply. `wait: 0` because a checkout that does not carry the field must not pay a timeout for it.
+  def accept_eu_withdrawal_consent
+    return unless has_field?(EU_WITHDRAWAL_CONSENT_LABEL, wait: 0)
+
+    check EU_WITHDRAWAL_CONSENT_LABEL
+  end
+
   # The buy CTA's text follows the seller's call to action, so find the checkout link itself.
   def product_page_cta
     within(find(:article)) { first(:link, href: %r{/checkout\?}) }
@@ -157,6 +173,8 @@ module CheckoutHelpers
         fill_in field[:name], with: "Not nothing"
       end
     end
+
+    accept_eu_withdrawal_consent
 
     if logged_in_user&.id == product.user.id
       expect(page).to have_alert("This will be a test purchase as you are the creator of at least one of the products. Your payment method will not be charged.")
