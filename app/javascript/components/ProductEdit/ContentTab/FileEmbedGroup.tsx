@@ -192,6 +192,7 @@ const FileEmbedGroupNodeView = ({
                   placeholder="Folder name"
                   onClick={(e) => e.stopPropagation()}
                   onKeyDown={(e) => {
+                    if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return; // IME composition
                     if (e.key === "Enter") {
                       updateName(e.currentTarget.value);
                     }

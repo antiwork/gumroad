@@ -272,6 +272,7 @@ export const CreateAccountForm = ({
             </FieldsetTitle>
             <Input
               type="password"
+              autoComplete="new-password"
               value={password}
               onChange={(evt) => setPassword(evt.target.value)}
               id={`${uid}password`}

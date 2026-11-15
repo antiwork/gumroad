@@ -122,6 +122,7 @@ export const PasskeysSection = ({ passkeys: initialPasskeys }: { passkeys: Passk
                     value={editingNickname}
                     onChange={(e) => setEditingNickname(e.target.value)}
                     onKeyDown={(e) => {
+                      if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return; // IME composition
                       if (e.key === "Enter") {
                         e.preventDefault();
                         if (editingNickname.trim()) handleRename(passkey);

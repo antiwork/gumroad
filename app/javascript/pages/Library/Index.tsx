@@ -431,6 +431,7 @@ export default function LibraryPage() {
   };
 
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return; // IME composition
     if (e.key === "Enter") commitQuery();
   };
 

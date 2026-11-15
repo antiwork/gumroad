@@ -466,10 +466,11 @@ const AddToLibrary = ({ add_to_library_option, terms_page_url, purchase_id, purc
             <span>Create an account to access all of your purchases anytime.</span>
           </CardContent>
           <CardContent>
-            <form autoComplete="off" onSubmit={handleSignupAndAddPurchaseToLibrary} className="grid grow gap-4">
+            <form onSubmit={handleSignupAndAddPurchaseToLibrary} className="grid grow gap-4">
               <Fieldset>
                 <Input
                   type="password"
+                  autoComplete="new-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Your password"

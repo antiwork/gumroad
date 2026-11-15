@@ -1534,6 +1534,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
               value={addingButton?.label ?? ""}
               onChange={(el) => setAddingButton({ label: el.target.value, url: addingButton?.url ?? "" })}
               onKeyDown={(el) => {
+                if (el.nativeEvent.isComposing || el.nativeEvent.keyCode === 229) return; // IME composition
                 if (el.key === "Enter") onInsertButton();
               }}
             />
@@ -1543,6 +1544,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
               value={addingButton?.url ?? ""}
               onChange={(el) => setAddingButton({ label: addingButton?.label ?? "", url: el.target.value })}
               onKeyDown={(el) => {
+                if (el.nativeEvent.isComposing || el.nativeEvent.keyCode === 229) return; // IME composition
                 if (el.key === "Enter") onInsertButton();
               }}
             />

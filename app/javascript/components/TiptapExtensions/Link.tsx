@@ -96,6 +96,7 @@ export const LinkDialog = ({
           value={addingLink.label}
           onChange={(el) => setAddingLink({ ...addingLink, label: el.target.value })}
           onKeyDown={(el) => {
+            if (el.nativeEvent.isComposing || el.nativeEvent.keyCode === 229) return; // IME composition
             if (el.key === "Enter") onAddLink();
           }}
         />
@@ -107,6 +108,7 @@ export const LinkDialog = ({
         value={addingLink.url}
         onChange={(el) => setAddingLink({ ...addingLink, url: el.target.value })}
         onKeyDown={(el) => {
+          if (el.nativeEvent.isComposing || el.nativeEvent.keyCode === 229) return; // IME composition
           if (el.key === "Enter") onAddLink();
         }}
       />
@@ -185,6 +187,7 @@ const LinkNodeView = ({ node, editor, getPos, deleteNode }: NodeViewProps) => {
   };
 
   const handleKeyPress = (evt: React.KeyboardEvent<HTMLInputElement>) => {
+    if (evt.nativeEvent.isComposing || evt.nativeEvent.keyCode === 229) return; // IME composition
     if (evt.key === "Enter") handleSave();
   };
 

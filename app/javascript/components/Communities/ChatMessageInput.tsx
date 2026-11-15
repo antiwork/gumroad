@@ -60,6 +60,7 @@ export const ChatMessageInput = React.forwardRef<HTMLTextAreaElement, Props>(
           disabled={draft?.isSending}
           onChange={(e) => updateDraftMessage(e.target.value)}
           onKeyDown={(e) => {
+            if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return; // IME composition
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
               handleSend();
