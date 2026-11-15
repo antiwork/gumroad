@@ -46,13 +46,13 @@ class Checkout::ReturnsController < ApplicationController
       purchase = purchases.first
       return checkout_path if purchase.nil?
 
-      if purchases.one? && purchase.has_content?
+      if purchases.one? && purchase.has_download_page?
         if purchase.link.native_type == Link::NATIVE_TYPE_COFFEE
           "#{purchase.url_redirect.download_page_url}?purchase_email=#{CGI.escape(purchase.email)}"
         else
           "#{purchase.url_redirect.download_page_url}?receipt=true"
         end
-      elsif logged_in_user&.confirmed? && purchases.all?(&:has_content?)
+      elsif logged_in_user&.confirmed? && purchases.all?(&:has_download_page?)
         library_url(purchase_id: purchases.map(&:external_id))
       else
         purchase.link.long_url
