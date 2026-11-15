@@ -1480,7 +1480,7 @@ class Purchase < ApplicationRecord
       gift_receiver_text: purchase.try(:gifter_hidden_from_recipient?) ? "Someone bought this for you." : "#{purchase.try(:gifter_email)} bought this for you.",
       is_gift_sender_purchase: purchase.present? && purchase.is_gift_sender_purchase,
       gift_sender_text: "You bought this for #{purchase&.giftee_name_or_email}.",
-      content_url: purchase.has_content? ? url_redirect.try(:download_page_url) : nil,
+      content_url: purchase.has_download_page? ? url_redirect.try(:download_page_url) : nil,
       redirect_token: url_redirect.try(:token),
       url_redirect_external_id: url_redirect.try(:external_id),
       price: purchase.buyer_presentment? ? purchase.formatted_buyer_presentment_price : purchase.formatted_display_price,
@@ -1567,7 +1567,7 @@ class Purchase < ApplicationRecord
       json[:bundle_products] = purchase.product_purchases.map do |product_purchase|
         {
           id: product_purchase.link.external_id,
-          content_url: product_purchase.has_content? ? product_purchase.url_redirect.try(:download_page_url) : nil,
+          content_url: product_purchase.has_download_page? ? product_purchase.url_redirect.try(:download_page_url) : nil,
         }
       end
     end
@@ -1588,9 +1588,14 @@ class Purchase < ApplicationRecord
     end
   end
 
+  # The download page shows its own "preparing the file" state while a PDF stamp is pending, so
+  # the confirmation screen must not wait on stamping the way has_content? does.
+  def has_download_page?
+    url_redirect.present? && !webhook_failed
+  end
+
   def has_content?
-    return false if url_redirect.nil?
-    return false if webhook_failed
+    return false unless has_download_page?
     return false if link.has_stampable_pdfs? && !url_redirect.is_done_pdf_stamping
 
     true
