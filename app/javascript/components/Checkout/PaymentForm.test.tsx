@@ -853,6 +853,10 @@ describe("PaymentForm validation-failure feedback", () => {
       ).toBeTruthy(),
     );
 
+    // The PayPal billing address moved the buyer to DE, so the checkout now also requires the EU
+    // withdrawal-right consent; the buyer ticks it before clicking PayPal again.
+    fireEvent.click(screen.getByRole("checkbox", { name: /I want access to this product now/u }));
+
     // Pending tax quote lands, then the buyer clicks the same PayPal button again.
     harness.dispatch({
       type: "set-value",
