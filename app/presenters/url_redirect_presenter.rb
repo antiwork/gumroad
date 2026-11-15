@@ -336,8 +336,6 @@ class UrlRedirectPresenter
       { transcode_on_first_sale: product&.transcode_videos_on_purchase.present? }
     end
 
-    # go_web mirrors content_props key by key and hands commission purchases to Rails, so only
-    # a completed commission's page may gain this key.
     def commission_deliverables_props
       commission = purchase&.commission
       return {} unless commission&.is_completed?

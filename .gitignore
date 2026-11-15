@@ -78,8 +78,3 @@ autoresearch.*
 # Baked CI test-database dump (created inside the test image at build time;
 # never committed — see docker/ci/dump_test_db.sh)
 db/prepared_test_db.sql.gz
-
-# Copied in by build_go_image.sh from the credentials repo.
-/go_web/GeoIP2-City.mmdb
-/go_web/credentials/
-/go_web/vite/

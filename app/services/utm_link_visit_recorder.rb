@@ -1,10 +1,9 @@
 # frozen_string_literal: true
 
 # A visit to a UTM-tagged page: the seller's link for these parameters, created when new, and the
-# visit on it. UtmLinkTracking records it in the request; RecordUtmLinkVisitJob records one go_web
-# served, at the time it was made.
+# visit on it.
 class UtmLinkVisitRecorder
-  def initialize(seller:, target_resource_type:, target_resource_id:, utm_params:, user:, referrer:, ip_address:, user_agent:, browser_guid:, visited_at: nil)
+  def initialize(seller:, target_resource_type:, target_resource_id:, utm_params:, user:, referrer:, ip_address:, user_agent:, browser_guid:)
     @seller = seller
     @target_resource_type = target_resource_type
     @target_resource_id = target_resource_id
@@ -14,7 +13,6 @@ class UtmLinkVisitRecorder
     @ip_address = ip_address
     @user_agent = user_agent
     @browser_guid = browser_guid
-    @visited_at = visited_at
   end
 
   def record
@@ -57,18 +55,15 @@ class UtmLinkVisitRecorder
 
   private
     attr_reader :seller, :target_resource_type, :target_resource_id, :utm_params, :user, :referrer, :ip_address,
-                :user_agent, :browser_guid, :visited_at
+                :user_agent, :browser_guid
 
     def track_visit(utm_link)
-      clicked_at = visited_at || Time.current
       ActiveRecord::Base.transaction do
         visit = { user:, referrer:, ip_address:, user_agent:, browser_guid:, country_code: GeoIp.lookup(ip_address)&.country_code }
-        visit.merge!(created_at: visited_at, updated_at: visited_at) if visited_at
         utm_link.utm_link_visits.create!(visit)
 
-        # A visit recorded after a later one keeps the link's click range in order.
-        utm_link.first_click_at = [utm_link.first_click_at, clicked_at].compact.min
-        utm_link.last_click_at = [utm_link.last_click_at, clicked_at].compact.max
+        utm_link.first_click_at ||= Time.current
+        utm_link.last_click_at = Time.current
         utm_link.save!
       end
 
