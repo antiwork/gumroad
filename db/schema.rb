@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_26_000005) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_26_000006) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -982,6 +982,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_26_000005) do
     t.datetime "sent_at", precision: nil
     t.datetime "delivered_at", precision: nil
     t.datetime "opened_at", precision: nil
+    t.index ["installment_id", "delivered_at"], name: "index_email_infos_on_installment_id_and_delivered_at"
     t.index ["installment_id", "purchase_id"], name: "index_email_infos_on_installment_id_and_purchase_id"
     t.index ["purchase_id"], name: "index_email_infos_on_purchase_id"
   end
