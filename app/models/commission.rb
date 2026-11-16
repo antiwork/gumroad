@@ -23,9 +23,7 @@ class Commission < ApplicationRecord
   belongs_to :deposit_purchase, class_name: "Purchase"
   belongs_to :completion_purchase, class_name: "Purchase", optional: true, inverse_of: :commission_as_completion
 
-  FILES_SERVICE = :commission_files
-
-  has_many_attached :files, service: FILES_SERVICE
+  has_many_attached :files
 
   validates :status, inclusion: { in: STATUSES }
   validate :purchases_must_be_different
