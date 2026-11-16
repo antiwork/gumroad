@@ -22,6 +22,8 @@
 # and make webhook and payout attribution ambiguous, since everything downstream
 # assumes one Connect account maps to one user.
 class User::CreateBrandAccountService
+  NETWORK_BLOCKED_ERROR = "We can't create a new account from this network. Try again from a different connection."
+
   attr_reader :creator, :brand_user, :team_membership
 
   def initialize(creator:, email:, username:, name:, account_created_ip: nil, use_existing_payout_setup: false)
@@ -81,7 +83,7 @@ class User::CreateBrandAccountService
 
     true
   rescue ActiveRecord::RecordInvalid => e
-    @error_message = e.record.errors.full_messages.first
+    @error_message = e.record.is_a?(User) && e.record.blocked_by_account_created_ip? ? NETWORK_BLOCKED_ERROR : e.record.errors.full_messages.first
     false
   rescue ActiveRecord::RecordNotUnique
     # A concurrent request can slip past the model-level uniqueness checks and
