@@ -554,6 +554,12 @@ export const Checkout = ({
       if (allocated != null) return allocated;
       return toDisplayedCents(convertToUSD(item, hasFreeTrial(item, isGift) ? 0 : item.price * item.quantity));
     }),
+    // A discounted line prints its post-discount price beside the struck listed one.
+    ...cart.items.flatMap((item, index) => {
+      if (hasFreeTrial(item, isGift) || getDiscountedPrice(cart, item).price >= item.price * item.quantity) return [];
+      const allocated = presentmentAmounts ? buyerCurrencyDisplay?.lineAllocations[index]?.price_cents : undefined;
+      return [allocated ?? toDisplayedCents(convertToUSD(item, getDiscountedPrice(cart, item).price))];
+    }),
     // A free trial's renewal price prints under its line price in this same column, so it counts
     // toward the column's one cents decision even though it is not charged today.
     ...cart.items
@@ -604,6 +610,7 @@ export const Checkout = ({
     const canonicalCents = convertToUSD(item, discountedPrice);
     return {
       name: item.product.name,
+      isDiscounted: !trial && discountedPrice < item.price * item.quantity,
       isFree: discountedPrice === 0,
       price:
         localCents != null && localCurrency
@@ -719,6 +726,7 @@ export const Checkout = ({
                     isGift={isGift}
                     buyerCurrencyDisplay={localCurrency}
                     presentmentPriceCents={localAmounts?.linePriceCents[index] ?? null}
+                    discountedPrice={linePrices[index]?.isDiscounted ? linePrices[index].price : null}
                     noCentsIfWhole={noCentsIfWhole}
                     updateCart={updateCart}
                   />
@@ -1169,6 +1177,7 @@ const CartItemComponent = ({
   isGift,
   buyerCurrencyDisplay,
   presentmentPriceCents,
+  discountedPrice = null,
   noCentsIfWhole,
 }: {
   item: CartItemProps;
@@ -1182,6 +1191,8 @@ const CartItemComponent = ({
   // amount later persisted for the receipt; converting the USD price here instead can be a
   // cent off from both.
   presentmentPriceCents?: number | null;
+  // The line's price after discounts, already formatted in the displayed currency; null when no discount applies.
+  discountedPrice?: string | null;
   noCentsIfWhole: boolean;
 }) => {
   const [editPopoverOpen, setEditPopoverOpen] = React.useState(false);
@@ -1404,11 +1415,27 @@ const CartItemComponent = ({
           second line on narrow viewports instead of squeezing the title column
           down to one letter per line. */}
       <CartItemEnd className="max-w-1/2 text-right">
-        <span className="current-price text-base font-bold sm:text-lg" aria-label="Price">
-          {presentmentPriceCents != null && buyerCurrencyDisplay
-            ? formatPresentmentCents(presentmentPriceCents, buyerCurrencyDisplay, { noCentsIfWhole })
-            : formatCheckoutPrice(convertToUSD(item, price), buyerCurrencyDisplay, { noCentsIfWhole })}
-        </span>
+        {(() => {
+          const listedPrice =
+            presentmentPriceCents != null && buyerCurrencyDisplay
+              ? formatPresentmentCents(presentmentPriceCents, buyerCurrencyDisplay, { noCentsIfWhole })
+              : formatCheckoutPrice(convertToUSD(item, price), buyerCurrencyDisplay, { noCentsIfWhole });
+          return discountedPrice != null ? (
+            // Wraps the struck price under the discounted one when the half-width column is too narrow.
+            <span className="flex flex-wrap items-baseline justify-end gap-x-2">
+              <s className="text-sm font-normal text-muted" aria-label="Original price">
+                {listedPrice}
+              </s>
+              <span className="current-price text-base font-bold sm:text-lg" aria-label="Price">
+                {discountedPrice}
+              </span>
+            </span>
+          ) : (
+            <span className="current-price text-base font-bold sm:text-lg" aria-label="Price">
+              {listedPrice}
+            </span>
+          );
+        })()}
         {freeTrial && item.product.free_trial ? (
           <>
             <span className="text-sm">

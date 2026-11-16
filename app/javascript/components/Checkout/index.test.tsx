@@ -308,6 +308,77 @@ describe("Checkout PWYW edit hint with a discount code", () => {
   });
 });
 
+describe("Checkout discounted cart line", () => {
+  const loaded = (subtotal: number, quote: SurchargesResponse["buyer_currency_quote"] = null): State["surcharges"] => ({
+    type: "loaded",
+    result: {
+      vat_id_valid: false,
+      has_vat_id_input: false,
+      shipping_rate_cents: 0,
+      tax_cents: 0,
+      tax_included_cents: 0,
+      subtotal,
+      buyer_currency_quote: quote,
+    },
+  });
+  const discountedCart = (): CartState => ({
+    items: [cartItem({ product: cartProduct({ has_offer_codes: true }), price: 2_000 })],
+    discountCodes: [{ code: "SAVE25", products: { prod: percent(25) }, fromUrl: false }],
+  });
+
+  it("strikes the listed price beside the discounted price", () => {
+    const view = renderCheckout(
+      buildState({ products: [stateProduct({ price: 2_000 })], surcharges: loaded(1_500) }),
+      discountedCart(),
+    );
+
+    expect(view.getByLabelText("Original price").textContent).toBe("US$20");
+    expect(view.getByLabelText("Original price").tagName).toBe("S");
+    expect(view.getByLabelText("Price").textContent).toBe("US$15");
+  });
+
+  it("shows only the listed price when no discount applies", () => {
+    const view = renderCheckout(buildState({ products: [stateProduct({ price: 2_000 })] }), {
+      items: [cartItem({ price: 2_000 })],
+      discountCodes: [],
+    });
+
+    expect(view.queryByLabelText("Original price")).toBeNull();
+    expect(view.getByLabelText("Price").textContent).toBe("US$20");
+  });
+
+  it("renders both prices from the server allocation in the buyer currency", () => {
+    const view = renderCheckout(
+      buildState({
+        products: [stateProduct({ price: 2_000 })],
+        surcharges: loaded(1_500, {
+          token: "quote-token",
+          currency: "cad",
+          canonical_total_cents: 1_500,
+          presentment_total_cents: 1_875,
+          rate: 1.25,
+          subunit_to_unit: 100,
+          expires_at: "2999-01-01T00:00:00Z",
+          line_allocations: [
+            {
+              permalink: "prod",
+              price_cents: 1_875,
+              tip_cents: 0,
+              tax_cents: 0,
+              shipping_cents: 0,
+              total_cents: 1_875,
+            },
+          ],
+        }),
+      }),
+      discountedCart(),
+    );
+
+    expect(view.getByLabelText("Original price").textContent).toBe("CA$25.00");
+    expect(view.getByLabelText("Price").textContent).toBe("CA$18.75");
+  });
+});
+
 describe("Checkout buyer-currency line amounts", () => {
   // The PR's odd-cent example: 334 + 667 cents at a 1.25 CAD rate. Rounding each line in
   // the browser renders CA$4.18 + CA$8.34 = CA$12.52 while the locked/charged total is
