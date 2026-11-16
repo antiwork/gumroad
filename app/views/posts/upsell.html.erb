@@ -1,3 +1,4 @@
+<% price_cents = @product.price_cents + (@variant&.price_difference_cents || 0) %>
 <div class="item">
   <div class="product-checkout-cell">
     <div class="figure">
@@ -8,13 +9,13 @@
     <div class="section">
       <div class="content">
         <div class="section">
-          <h4><%= link_to @product.name, @upsell_url %></h4>
+          <h4><%= link_to (@variant ? "#{@product.name} (#{@variant.name})" : @product.name), @upsell_url %></h4>
         </div>
         <div class="section">
           <% if @offer_code %>
-            <s style="display: inline;"><%= MoneyFormatter.format(@product.price_cents, @product.price_currency_type, no_cents_if_whole: true, symbol: true) %></s>
+            <s style="display: inline;"><%= MoneyFormatter.format(price_cents, @product.price_currency_type, no_cents_if_whole: true, symbol: true) %></s>
           <% end %>
-          <%= MoneyFormatter.format(@offer_code ? @product.price_cents - @offer_code.amount_off(@product.price_cents) : @product.price_cents, @product.price_currency_type, no_cents_if_whole: true, symbol: true) %>
+          <%= MoneyFormatter.format(@offer_code ? price_cents - @offer_code.amount_off(price_cents) : price_cents, @product.price_currency_type, no_cents_if_whole: true, symbol: true) %>
         </div>
       </div>
     </div>
