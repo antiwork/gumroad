@@ -2236,7 +2236,7 @@ const CommissionSection = ({
         filesToUpload.map(
           (file) =>
             new Promise<Blob>((resolve, reject) => {
-              new DirectUpload(file, Routes.rails_direct_uploads_path()).create((error, blob) => {
+              new DirectUpload(file, Routes.direct_upload_commission_path(commission.id)).create((error, blob) => {
                 if (error) reject(error);
                 else resolve(blob);
               });
