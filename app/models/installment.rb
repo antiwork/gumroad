@@ -392,8 +392,9 @@ class Installment < ApplicationRecord
           layout: false,
           assigns: {
             product: product,
+            variant: upsell.variant,
             offer_code: upsell.offer_code,
-            upsell_url: checkout_url(accepted_offer_id: upsell.external_id, product: product.unique_permalink, host: DOMAIN)
+            upsell_url: checkout_url(accepted_offer_id: upsell.external_id, product: product.unique_permalink, option: upsell.variant&.external_id, host: DOMAIN)
           }
         )
       )

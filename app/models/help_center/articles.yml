@@ -670,3 +670,8 @@
   title: "How to sell Procreate brushes"
   description: "You can sell Procreate brushes on Gumroad. Upload your .brushset files to a digital product, set a price, and share the link with your buyers."
   category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
+- id: 360
+  slug: "360-artstation-migration"
+  title: "Moving your ArtStation listings to Gumroad"
+  description: "ArtStation's marketplace is moving to Gumroad. Open the link ArtStation sends you, set a payout method, then check each product draft and publish it."
+  category_id: <%= HelpCenter::Category::GET_PAID.id %>
