@@ -808,7 +808,7 @@ export const Checkout = ({
                   ) : null}
                   {visibleDiscounts.length || discount > 0 ? (
                     <div className="grid grid-flow-col justify-between gap-4">
-                      <h4 className="inline-flex flex-wrap gap-2">
+                      <h4 className="inline-flex flex-wrap items-center gap-2">
                         Discounts
                         {cart.items.some((item) => !!item.product.ppp_details && item.price !== 0) &&
                         !cart.rejectPppDiscount ? (
@@ -816,7 +816,7 @@ export const Checkout = ({
                             tip="This discount is applied based on the cost of living in your country."
                             position="top"
                           >
-                            <Pill asChild size="small" className="font-inherit cursor-pointer">
+                            <Pill asChild size="small" className="font-inherit cursor-pointer items-center">
                               <button
                                 onClick={() => updateCart({ rejectPppDiscount: true })}
                                 aria-label="Purchasing power parity discount"
@@ -835,7 +835,7 @@ export const Checkout = ({
                           ) : (
                             <Pill
                               size="small"
-                              className="cursor-pointer"
+                              className="cursor-pointer items-center"
                               onClick={() =>
                                 updateCart({ discountCodes: cart.discountCodes.filter((item) => item !== code) })
                               }
