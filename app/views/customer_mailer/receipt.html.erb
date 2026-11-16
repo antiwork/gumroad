@@ -1,1 +1,8 @@
+<% if @seller_branding %>
+  <% content_for :style do %>
+    <style>
+      .email .main .button.primary { background-color: <%= @seller_branding[:accent] %> !important; color: <%= @seller_branding[:accent_text] %> !important; }
+    </style>
+  <% end %>
+<% end %>
 <%= render("customer_mailer/receipt", receipt_presenter: @receipt_presenter, chargeable: @chargeable, order_receipt_url: @order_receipt_url) %>

@@ -1365,6 +1365,41 @@ describe CustomerMailer do
     end
   end
 
+  describe "receipt with seller branding" do
+    let(:seller) { create(:named_seller) }
+    let(:purchase) { create(:free_purchase, link: create(:product, user: seller, price_cents: 0), seller:, email: "buyer@example.com") }
+    let(:body) { CustomerMailer.receipt(purchase.id).body.decoded }
+
+    before do
+      purchase.create_url_redirect!
+      allow(RecommendedProducts::CheckoutService).to receive(:fetch_for_receipt).and_return([])
+      seller.seller_profile.update!(highlight_color: "#0057b8")
+    end
+
+    it "keeps the standard receipt while the flag is off" do
+      expect(body).not_to include("#0057b8")
+    end
+
+    it "colours the button with the seller accent when the flag is on, keeping details and footer" do
+      Feature.activate_user(:seller_branded_receipt, seller)
+
+      expect(body).to include(".button.primary { background-color: #0057b8 !important; color: #ffffff !important; }")
+      expect(body).to include("Order ID:", "Powered by")
+    end
+
+    it "does not brand another seller's receipt" do
+      Feature.activate_user(:seller_branded_receipt, create(:user))
+
+      expect(body).not_to include("#0057b8")
+    end
+
+    it "leaves the grouped receipt unchanged" do
+      Feature.activate_user(:seller_branded_receipt, seller)
+
+      expect(CustomerMailer.grouped_receipt([purchase.id]).body.decoded).not_to include("#0057b8")
+    end
+  end
+
   describe ".abandoned_cart_preview" do
     let(:buyer) { create(:named_user) }
     let(:seller) { create(:named_seller, name: "John Doe") }
