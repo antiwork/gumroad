@@ -357,7 +357,7 @@ class UrlRedirectPresenter
         pagelength: nil,
         duration: nil,
         id: file.signed_id,
-        download_url: url_redirect_download_commission_file_path(url_redirect.token, file.signed_id),
+        download_url: file.blob.url,
         view_url: nil,
         stream_url: nil,
         kindle_data: nil,
