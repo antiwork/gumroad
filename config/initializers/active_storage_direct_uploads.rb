@@ -18,8 +18,22 @@ module ActiveStorageDirectUploadsBadRequest
     unless blob_args && REQUIRED_BLOB_KEYS.all? { |key| blob_args[key].present? }
       return render json: { error: "blob must include filename, byte_size and checksum" }, status: :bad_request
     end
+    # create_before_direct_upload! stores the filename verbatim, and File.extname raises on a NUL
+    # byte when the blob is identified, so a reservation carrying one would 500 its consumers.
+    if blob_args[:filename].to_s.include?("\0")
+      return render json: { error: "blob filename must not contain a null byte" }, status: :bad_request
+    end
 
     super
+  end
+end
+
+# A direct-upload reservation stores the client's filename verbatim, and ActiveStorage reads it back
+# with File.extname and File.basename, both of which raise on a NUL byte — so drop it where the name
+# is read. Every reader (base, extension_with_delimiter, sanitized) works off this value.
+module ActiveStorageFilenameNullByte
+  def initialize(filename)
+    super(filename.to_s.delete("\0"))
   end
 end
 
@@ -75,6 +89,7 @@ end
 Rails.application.config.to_prepare do
   ActiveStorage::DirectUploadsController.prepend(ActiveStorageDirectUploadsBadRequest)
   ActiveStorage::Blob.prepend(ActiveStorageDirectUploadServing)
+  ActiveStorage::Filename.prepend(ActiveStorageFilenameNullByte)
 end
 
 require "active_storage/service/s3_service"

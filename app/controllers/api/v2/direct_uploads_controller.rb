@@ -24,6 +24,9 @@ class Api::V2::DirectUploadsController < Api::V2::BaseController
     blob_args = direct_upload_blob_args
     missing_blob_arg = REQUIRED_BLOB_ARGS.find { |key| !blob_args.key?(key) }
     return error_400("#{missing_blob_arg} is required") if missing_blob_arg.present?
+    # create_before_direct_upload! stores the filename verbatim, and File.extname raises on a NUL
+    # byte when the blob is identified, so a reservation carrying one would 500 its consumers.
+    return error_400("filename must not contain a null byte") if blob_args[:filename].to_s.include?("\0")
     return error_400("byte_size is required") if blob_args[:byte_size].to_i <= 0
     size_error = byte_size_error(blob_args)
     return error_400(size_error) if size_error.present?

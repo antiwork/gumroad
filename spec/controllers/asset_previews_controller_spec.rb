@@ -65,6 +65,21 @@ describe AssetPreviewsController do
       expect(product.asset_previews.alive.last.file.blob).to eq(blob)
     end
 
+    # A direct-upload reservation stores the client's filename verbatim, and identifying the blob
+    # passes that name to File.extname, which raises on a NUL byte.
+    it "attaches a blob whose filename contains a null byte" do
+      blob = ActiveStorage::Blob.create_and_upload!(
+        io: fixture_file_upload("kFDzu.png", "image/png"), filename: "kFDzu.png"
+      )
+      blob.update!(filename: "kFDzu\u0000.png", identified: false)
+
+      post :create, params: { link_id: product.unique_permalink, asset_preview: { signed_blob_id: blob.signed_id }, format: :json }
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to eq(true)
+      expect(product.asset_previews.alive.last.file.blob).to eq(blob)
+    end
+
     it "adds a preview if one already exists" do
       allow_any_instance_of(AssetPreview).to receive(:analyze_file).and_return(nil)
       product = create(:product, user: seller, preview: fixture_file_upload("kFDzu.png", "image/png"))

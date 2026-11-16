@@ -58,6 +58,17 @@ describe Api::V2::DirectUploadsController do
         expect(response.parsed_body["error"]).to eq("Checksum can't be blank")
       end
 
+      # Same NUL hazard as the engine's direct-upload route: File.extname raises when the blob is
+      # identified, so the reservation is refused instead of stored.
+      it "returns a structured error for a filename containing a null byte" do
+        expect do
+          post @action, params: @params.deep_merge(blob: { filename: "cover\u0000.png" })
+        end.not_to change { ActiveStorage::Blob.count }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body["error"]).to eq("filename must not contain a null byte")
+      end
+
       it "returns structured errors when required blob parameters are omitted" do
         [:filename, :byte_size, :checksum].each do |field|
           expect do

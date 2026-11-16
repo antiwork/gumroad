@@ -53,6 +53,17 @@ describe "POST /rails/active_storage/direct_uploads" do
     expect(response.parsed_body["error"]).to eq("blob must include filename, byte_size and checksum")
   end
 
+  # ActiveStorage stores the reserved filename verbatim and identifies the blob from it, where
+  # File.extname raises on a NUL byte — so the reservation is refused rather than stored.
+  it "answers 400 instead of storing a blob whose filename contains a null byte" do
+    expect do
+      post rails_direct_uploads_path, params: { blob: blob_params.merge(filename: "cover\u0000.png") }, as: :json
+    end.not_to change { ActiveStorage::Blob.count }
+
+    expect(response).to have_http_status(:bad_request)
+    expect(response.parsed_body["error"]).to eq("blob filename must not contain a null byte")
+  end
+
   describe "headers stored on the public bucket" do
     def reserve(content_type:, filename: "file.bin", body: "file body")
       post rails_direct_uploads_path, params: {
