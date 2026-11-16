@@ -118,6 +118,20 @@ describe User::CreateBrandAccountService do
       end
     end
 
+    context "when the request IP has an active signup block" do
+      before { PlatformBlock.add!(object_type: PlatformBlock::TYPES[:ip_address], object_value: "1.2.3.4", expires_in: 6.months) }
+
+      it "returns false with a message naming the network and creates nothing" do
+        service = build_service
+
+        expect do
+          expect(service.perform).to eq(false)
+        end.to not_change(User, :count).and not_change(TeamMembership, :count)
+
+        expect(service.error_message).to eq(described_class::NETWORK_BLOCKED_ERROR)
+      end
+    end
+
     context "when the username has an invalid format" do
       it "returns false with a validation message" do
         service = build_service(username: "My Brand!")
