@@ -167,6 +167,13 @@ describe CustomersController, :vcr, type: :controller, inertia: true do
       expect(customer_ids[response]).to match_array([purchases.third.external_id, purchases.fourth.external_id])
     end
 
+    it "ignores blank date filters instead of raising" do
+      get :paged, params: { page: 1, created_after: "", created_before: "" }
+
+      expect(response).to be_successful
+      expect(response.parsed_body.deep_symbolize_keys[:customers].size).to eq(3)
+    end
+
     describe "minimum license uses filter" do
       before do
         purchases.first.license.update!(uses: 10)

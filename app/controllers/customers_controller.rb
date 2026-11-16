@@ -174,10 +174,11 @@ class CustomersController < Sellers::BaseController
 
       search_options[:license_uses_greater_than_or_equal_to] = minimum_license_uses.to_i if minimum_license_uses.present?
 
-      if created_after || created_before
+      if created_after.present? || created_before.present?
         timezone = ActiveSupport::TimeZone[current_seller.timezone]
-        search_options[:created_on_or_after] = timezone.parse(created_after) if created_after
-        search_options[:created_before] = timezone.parse(created_before).tomorrow if created_before
+        search_options[:created_on_or_after] = timezone.parse(created_after) if created_after.present?
+        # Blank or unparseable dates parse to nil, so the `tomorrow` bump must tolerate nil.
+        search_options[:created_before] = timezone.parse(created_before)&.tomorrow if created_before.present?
         if search_options[:created_on_or_after] && search_options[:created_before] && search_options[:created_on_or_after] > search_options[:created_before]
           search_options.except!(:created_before, :created_on_or_after)
         end
