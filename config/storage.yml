@@ -35,7 +35,11 @@ amazon:
 # Private bucket for commission deliverables; reads go through a buyer-authorized redirect.
 commission_files:
   service: S3
+  # Only MinIO (development, test) sets AWS_S3_ENDPOINT. Production must leave the key out: the AWS
+  # SDK raises on an explicit nil endpoint, and this service is built while the app boots.
+  <% if GlobalConfig.get("AWS_S3_ENDPOINT").present? %>
   endpoint: <%= GlobalConfig.get("AWS_S3_ENDPOINT") %>
+  <% end %>
   access_key_id: <%= GlobalConfig.get("AWS_ACCESS_KEY_ID") %>
   secret_access_key: <%= GlobalConfig.get("AWS_SECRET_ACCESS_KEY") %>
   region: us-east-1
