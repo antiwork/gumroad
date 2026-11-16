@@ -56,4 +56,7 @@ export const SUBTITLE_LANGUAGES = [
   "नेपाली",
   "Қазақ тілі",
   "čeština",
+  "Suomi",
+  "Slovenčina",
+  "български",
 ];
