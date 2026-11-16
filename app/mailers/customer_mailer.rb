@@ -446,12 +446,12 @@ class CustomerMailer < ApplicationMailer
   end
 
   private
-    # Seller-only receipts: the avatar is the seller's logo and the profile highlight colour is the accent.
+    # Seller-only receipts: the profile highlight colour is the accent.
     def seller_branding_for(seller)
-      return unless Feature.active?(:seller_branded_receipt, seller) && seller.avatar.attached?
+      return unless Feature.active?(:seller_branded_receipt, seller)
 
       colors = seller.seller_profile.accessible_accent
-      { logo_url: seller.avatar_url, name: seller.name_or_username, profile_url: seller.profile_url, accent: colors[:accent], accent_text: colors[:text] }
+      { accent: colors[:accent], accent_text: colors[:text] }
     end
 
     # Newest receipts are the ones a "resend my receipts" caller is after, so page newest-first;

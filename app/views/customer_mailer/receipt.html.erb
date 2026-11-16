@@ -4,8 +4,5 @@
       .email .main .button.primary { background-color: <%= @seller_branding[:accent] %> !important; color: <%= @seller_branding[:accent_text] %> !important; }
     </style>
   <% end %>
-  <div style="text-align: center; padding-bottom: 16px; margin-bottom: 16px; border-bottom: 4px solid <%= @seller_branding[:accent] %>;">
-    <%= link_to(image_tag(@seller_branding[:logo_url], alt: @seller_branding[:name], style: "max-width: 96px; max-height: 96px; border-radius: 4px;"), @seller_branding[:profile_url], target: "_blank") %>
-  </div>
 <% end %>
 <%= render("customer_mailer/receipt", receipt_presenter: @receipt_presenter, chargeable: @chargeable, order_receipt_url: @order_receipt_url) %>
