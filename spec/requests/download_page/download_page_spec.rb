@@ -897,18 +897,19 @@ describe("Download Page", type: :system, js: true) do
     end
 
     it "renders the commission files" do
-      visit commission.deposit_purchase.url_redirect.download_page_url
+      redirect = commission.deposit_purchase.url_redirect
+      visit redirect.download_page_url
       expect(page).to have_selector("[role='tab'][aria-selected='true']", text: "Downloads")
 
       expect(page).to have_text("test")
       expect(page).to have_text("PDF")
       expect(page).to have_text("8.1 KB")
-      expect(page).to have_link("Download", href: commission.files.first.url)
+      expect(page).to have_link("Download", href: "/r/#{redirect.token}/commission_files/#{commission.files.first.signed_id}")
 
       expect(page).to have_text("smilie")
       expect(page).to have_text("PNG")
       expect(page).to have_text("98.1 KB")
-      expect(page).to have_link("Download", href: commission.files.last.url)
+      expect(page).to have_link("Download", href: "/r/#{redirect.token}/commission_files/#{commission.files.last.signed_id}")
     end
 
     context "when the commission is not completed" do
