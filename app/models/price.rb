@@ -10,6 +10,7 @@ class Price < BasePrice
   validate :recurrence_validation
 
   after_commit :invalidate_product_cache
+  after_commit :check_watched_price_points, if: :saved_change_to_price_cents?
 
   def as_json(*)
     json = {
@@ -31,6 +32,10 @@ class Price < BasePrice
       return if recurrence.in?(ALLOWED_RECURRENCES)
 
       errors.add(:base, "Invalid recurrence")
+    end
+
+    def check_watched_price_points
+      CheckWatchedPricePointsJob.enqueue_for(link&.user_id)
     end
 
     def invalidate_product_cache

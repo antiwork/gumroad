@@ -82,6 +82,7 @@ class RedisKey
     def failed_seller_purchases_watch_minutes = "failed_seller_purchases_watch_minutes"
     def max_seller_failed_purchases_price_cents = "max_seller_failed_purchases_price_cents"
     def seller_age_threshold_days = "seller_age_threshold_days"
+    def watched_price_point_sets = "risk:watched_price_point_sets"
     def sales_report_jobs = "sales_report_jobs"
     def acme_challenge(token) = "acme_challenge:#{token}"
     # Not Rails.cache: its namespace changes on every deploy, which reset this back-off.
