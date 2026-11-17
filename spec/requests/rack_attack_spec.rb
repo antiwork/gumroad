@@ -1137,8 +1137,9 @@ describe "Rack::Attack throttle", type: :request do
         end
 
         expect(throttled?(api_request("/v2/user"))).to be(true)
-        # The IP bucket is shared, so a second token on the same address is capped for that
-        # address too; from another address it has its own, unspent bucket.
+        # Both buckets are spent: the same token from a fresh address is capped by the token bucket, and a
+        # different token on the original address is capped by the address bucket.
+        expect(throttled?(api_request("/v2/user", ip: "203.0.113.47"))).to be(true)
         expect(throttled?(api_request("/v2/user", token: "another-api-token"))).to be(true)
         expect(throttled?(api_request("/v2/user", token: "another-api-token", ip: "203.0.113.46"))).to be(false)
       end
