@@ -183,6 +183,25 @@ describe CreatorAnalytics::ProductPageViews do
       expect(result).to eq(expected_result)
     end
 
+    it "raises instead of walking once the request budget is spent" do
+      expect(ProductPageView).not_to receive(:search)
+
+      CreatorAnalytics::Pagination.within_budget do
+        Current.analytics_pagination_deadline = CreatorAnalytics::Pagination.monotonic_now - 1
+        expect { @service.by_product_and_referrer_and_date }
+          .to raise_error(CreatorAnalytics::Pagination::BudgetExceeded)
+      end
+    end
+
+    it "raises rather than returning a truncated walk at the page cap" do
+      stub_const("#{described_class}::ES_MAX_BUCKET_SIZE", 4)
+      stub_const("CreatorAnalytics::Pagination::MAX_PAGES", 1)
+      expect(ProductPageView).to receive(:search).once.and_call_original
+
+      expect { @service.by_product_and_referrer_and_date }
+        .to raise_error(CreatorAnalytics::Pagination::BudgetExceeded)
+    end
+
     context "when user time zone is Pacific Time" do
       let(:user_timezone) { "Pacific Time (US & Canada)" }
 

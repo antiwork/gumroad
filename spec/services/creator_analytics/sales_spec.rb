@@ -58,6 +58,14 @@ describe CreatorAnalytics::Sales do
       expect(result).to eq(expected_result)
     end
 
+    it "raises rather than returning a truncated walk at the page cap" do
+      stub_const("#{described_class}::ES_MAX_BUCKET_SIZE", 2)
+      stub_const("CreatorAnalytics::Pagination::MAX_PAGES", 1)
+      expect(Purchase).to receive(:search).once.and_call_original
+
+      expect { @service.by_product_and_date }.to raise_error(CreatorAnalytics::Pagination::BudgetExceeded)
+    end
+
     it "covers every product the seller sells, and no one else's, without a product list" do
       other_seller_product = create(:product)
       create(:purchase, link: other_seller_product, created_at: Time.utc(2021, 1, 2))

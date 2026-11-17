@@ -2,11 +2,18 @@
 
 class AnalyticsController < Sellers::BaseController
   before_action :set_time_range, only: %i[data_by_date data_by_state data_by_referral data_by_file]
+  # Only the endpoints that walk Elasticsearch composite buckets; data_by_file has its own
+  # MySQL-side execution limit.
+  around_action :bound_analytics_pagination, only: %i[data_by_date data_by_state data_by_referral]
 
   after_action :set_dashboard_preference_to_sales, only: :index
   before_action :check_payment_details, only: :index
 
   layout "inertia", only: [:index]
+
+  rescue_from CreatorAnalytics::Pagination::BudgetExceeded do
+    render json: { error: "Request timed out" }, status: :gateway_timeout
+  end
 
   def index
     authorize :analytics
@@ -61,6 +68,10 @@ class AnalyticsController < Sellers::BaseController
   end
 
   protected
+    def bound_analytics_pagination(&block)
+      CreatorAnalytics::Pagination.within_budget(&block)
+    end
+
     def set_time_range
       begin
         end_time = DateTime.parse(strip_timestamp_location(params[:end_time]))

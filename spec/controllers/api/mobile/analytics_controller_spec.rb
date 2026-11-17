@@ -266,6 +266,16 @@ describe Api::Mobile::AnalyticsController do
       expect(response.parsed_body).to eq("success" => false, "message" => "Analytics request timed out")
     end
 
+    it "returns 504 when the referral walk runs out of pagination budget" do
+      allow_any_instance_of(CreatorAnalytics::CachingProxy).to receive(:data_for_dates)
+        .and_raise(CreatorAnalytics::Pagination::BudgetExceeded)
+
+      get :by_referral, params: @params
+
+      expect(response).to have_http_status(:gateway_timeout)
+      expect(response.parsed_body).to eq("success" => false, "message" => "Analytics request timed out")
+    end
+
     it "parses short date ranges without clamping" do
       @user.update!(timezone: "Eastern Time (US & Canada)")
       travel_to Time.utc(2021, 6, 16) do
