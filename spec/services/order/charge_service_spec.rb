@@ -3218,6 +3218,44 @@ describe Order::ChargeService, :vcr do
 
         expect(chargeable).to have_received(:skip_platform_customer_on_clone!)
       end
+
+      context "when the cart has a second line" do
+        let(:params) do
+          {
+            line_items: [
+              { uid: "unique-id-0", permalink: product_1.unique_permalink, perceived_price_cents: 10_00, quantity: 1 },
+              { uid: "unique-id-1", permalink: second_product.unique_permalink, perceived_price_cents: second_product.price_cents, quantity: 1 }
+            ]
+          }.merge(common_order_params_without_payment)
+        end
+
+        context "that is refused as a duplicate" do
+          let(:second_product) { product_2 }
+
+          before do
+            create(:purchase, link: product_2, email: common_order_params_without_payment[:email], ip_address: common_order_params_without_payment[:ip_address])
+          end
+
+          it "keeps the platform customer so the buy-again retry can reuse the payment method" do
+            order, purchase_responses = Order::CreateService.new(params:, buyer: create(:user)).perform
+            Order::ChargeService.new(order:, params:).perform
+
+            expect(purchase_responses["unique-id-1"][:error_code]).to eq(PurchaseErrorCode::DUPLICATE_PURCHASE_CONFIRMATION_REQUIRED)
+            expect(chargeable).to have_received(:prepare!)
+            expect(chargeable).not_to have_received(:skip_platform_customer_on_clone!)
+          end
+        end
+
+        context "that is free" do
+          let(:second_product) { free_product_1 }
+
+          it "skips the platform customer" do
+            charge(buyer: create(:user))
+
+            expect(chargeable).to have_received(:skip_platform_customer_on_clone!)
+          end
+        end
+      end
     end
   end
 
@@ -4157,6 +4195,12 @@ describe Order::ChargeService, :vcr do
       it "is false for a free trial or a preorder authorization" do
         expect(one_off?(build(:purchase, link: product, is_preorder_authorization: true))).to be(false)
         expect(one_off?(build(:free_trial_membership_purchase, link: membership))).to be(false)
+      end
+
+      # Unlike installments, Purchase::CreateService does not force save_card for a commission
+      # deposit, yet its completion charge reuses the card.
+      it "is false for a commission deposit without save_card" do
+        expect(one_off?(build(:purchase, link: create(:commission_product, user: seller), save_card: false))).to be(false)
       end
 
       it "is false when any purchase in the group needs the card kept" do

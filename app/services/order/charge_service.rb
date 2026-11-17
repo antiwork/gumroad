@@ -172,6 +172,9 @@ class Order::ChargeService
     return false unless Feature.active?(SKIP_PLATFORM_CUSTOMER_FEATURE, purchases.first.seller)
     # One platform PM serves every seller group in the cart, and a customer-less clone is single use.
     return false if order.purchases.non_free.pluck(:seller_id).uniq.count > 1
+    # A line refused before it reached the order (a duplicate awaiting "Buy again", from any seller)
+    # is resubmitted with this same PM.
+    return false if order.purchases.size < params.fetch(:line_items, []).size
     # The receipt's sign-up form (OrdersController#can_buyer_sign_up) re-sends this PM to save the
     # card on the new account, which Stripe rejects once the PM has been cloned without a customer.
     return false if order.purchaser.blank? && User.alive.where(email: purchases.first.email).none?
