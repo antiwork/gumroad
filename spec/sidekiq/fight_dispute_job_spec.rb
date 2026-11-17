@@ -42,10 +42,11 @@ describe FightDisputeJob do
       end
 
       it "converts at the sale's own recorded rate" do
-        record_processor_amount(13_50, Currency::CAD)
+        # 18.90 CAD is 14 USD here, though its CAD cents alone clear the minimum.
+        record_processor_amount(18_90, Currency::CAD)
         expect(described_class.below_contest_minimum?(purchase)).to be(true)
 
-        record_processor_amount(27_00, Currency::CAD)
+        record_processor_amount(20_25, Currency::CAD)
         expect(described_class.below_contest_minimum?(purchase)).to be(false)
       end
 
@@ -62,7 +63,8 @@ describe FightDisputeJob do
 
       it "converts at the charge's own recorded rate" do
         create(:charge_presentment, charge:, presentment_currency: Currency::EUR, presentment_total_cents: 9_25)
-        dispute.update!(processor_amount_cents: 18_50, processor_currency: Currency::EUR)
+        # 14.80 EUR is 16 USD here, though its EUR cents alone fall below the minimum.
+        dispute.update!(processor_amount_cents: 14_80, processor_currency: Currency::EUR)
         charge.reload
 
         expect(described_class.below_contest_minimum?(charge)).to be(false)
