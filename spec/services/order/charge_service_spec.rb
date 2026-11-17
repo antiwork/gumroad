@@ -4085,4 +4085,42 @@ describe Order::ChargeService, :vcr do
       include_examples "fails the whole seller group without calling PayPal"
     end
   end
+
+  describe "#one_off_card_checkout?" do
+    let(:seller) { create(:user) }
+    let(:service) { described_class.new(order: nil, params: {}) }
+    let(:product) { create(:product, user: seller) }
+    let(:membership) { create(:membership_product, user: seller) }
+
+    def one_off?(*purchases) = service.send(:one_off_card_checkout?, purchases)
+
+    context "when the flag is on for the seller" do
+      before { Feature.activate_user(described_class::SKIP_PLATFORM_CUSTOMER_FEATURE, seller) }
+
+      it "is true for a plain purchase" do
+        expect(one_off?(build(:purchase, link: product))).to be(true)
+      end
+
+      it "is false when the card is saved" do
+        expect(one_off?(build(:purchase, link: product, save_card: true))).to be(false)
+      end
+
+      it "is false for recurring billing" do
+        expect(one_off?(build(:purchase, link: membership))).to be(false)
+      end
+
+      it "is false for a free trial or a preorder authorization" do
+        expect(one_off?(build(:purchase, link: product, is_preorder_authorization: true))).to be(false)
+        expect(one_off?(build(:free_trial_membership_purchase, link: membership))).to be(false)
+      end
+
+      it "is false when any purchase in the group needs the card kept" do
+        expect(one_off?(build(:purchase, link: product), build(:purchase, link: product, save_card: true))).to be(false)
+      end
+    end
+
+    it "is false when the flag is off" do
+      expect(one_off?(build(:purchase, link: product))).to be(false)
+    end
+  end
 end

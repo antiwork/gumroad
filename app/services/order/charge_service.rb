@@ -4,6 +4,8 @@ class Order::ChargeService
   include Events, Order::ResponseHelpers
   include CurrencyHelper
 
+  SKIP_PLATFORM_CUSTOMER_FEATURE = :skip_platform_customer_for_one_off_connect_checkout
+
   attr_accessor :order, :params, :charge_intent, :setup_intent, :charge_responses, :account_setup_intents
 
   def initialize(order:, params:)
@@ -58,7 +60,7 @@ class Order::ChargeService
       end
 
       params_for_chargeable = params.merge(product_permalink: non_free_seller_purchases.first.link.unique_permalink)
-      card_data_handling_mode, card_data_handling_error, chargeable_from_params = create_chargeable_from_params(params_for_chargeable)
+      card_data_handling_mode, card_data_handling_error, chargeable_from_params = create_chargeable_from_params(params_for_chargeable, one_off: one_off_card_checkout?(non_free_seller_purchases))
 
       setup_future_charges = non_free_seller_purchases.any? do |purchase|
         (purchase.purchaser.present? && purchase.save_card && chargeable_from_params&.can_be_saved?) ||
@@ -166,11 +168,22 @@ class Order::ChargeService
     end
   end
 
-  def create_chargeable_from_params(params)
+  def one_off_card_checkout?(purchases)
+    return false unless Feature.active?(SKIP_PLATFORM_CUSTOMER_FEATURE, purchases.first.seller)
+
+    purchases.none? do |purchase|
+      purchase.save_card || purchase.is_preorder_authorization? || purchase.is_free_trial_purchase? ||
+        purchase.is_installment_payment || purchase.link.is_recurring_billing? ||
+        purchase.link.native_type == Link::NATIVE_TYPE_COMMISSION
+    end
+  end
+
+  def create_chargeable_from_params(params, one_off: false)
     card_data_handling_mode = CardParamsHelper.get_card_data_handling_mode(params)
     card_data_handling_error = CardParamsHelper.check_for_errors(params)
 
     chargeable = CardParamsHelper.build_chargeable(params, params[:browser_guid])
+    chargeable&.skip_platform_customer_on_clone! if one_off
     chargeable&.prepare!
 
     return card_data_handling_mode, card_data_handling_error, chargeable
