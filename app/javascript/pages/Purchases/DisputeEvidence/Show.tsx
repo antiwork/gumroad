@@ -37,6 +37,7 @@ type Props = {
     purchased_at: string;
     duration_left_to_submit_evidence_formatted: string;
     seller_response_due_at: string | null;
+    below_contest_minimum: boolean;
     customer_communication_file_max_size: number;
     customer_communication_files_max_count: number;
     blobs: Blobs;
@@ -310,13 +311,29 @@ export default function Show() {
         <p>
           <strong>{disputeReason.message}</strong>
         </p>
-        <p>
-          <strong>
-            {sellerResponseDueAt !== null
-              ? `Any additional information you can provide by ${sellerResponseDueAt} (${dispute_evidence.duration_left_to_submit_evidence_formatted} left) will help us win on your behalf.`
-              : `Any additional information you can provide in the next ${dispute_evidence.duration_left_to_submit_evidence_formatted} will help us win on your behalf.`}
-          </strong>
-        </p>
+        {dispute_evidence.below_contest_minimum ? (
+          <>
+            <p>
+              <strong>
+                {sellerResponseDueAt !== null
+                  ? `Send us information about the sale by ${sellerResponseDueAt} (${dispute_evidence.duration_left_to_submit_evidence_formatted} left) if you want us to respond to this dispute.`
+                  : `Send us information about the sale in the next ${dispute_evidence.duration_left_to_submit_evidence_formatted} if you want us to respond to this dispute.`}
+              </strong>
+            </p>
+            <p>
+              For a dispute this small, our payment processor's fee to respond is more than we would usually recover, so
+              we respond only if you send us information about the sale.
+            </p>
+          </>
+        ) : (
+          <p>
+            <strong>
+              {sellerResponseDueAt !== null
+                ? `Any additional information you can provide by ${sellerResponseDueAt} (${dispute_evidence.duration_left_to_submit_evidence_formatted} left) will help us win on your behalf.`
+                : `Any additional information you can provide in the next ${dispute_evidence.duration_left_to_submit_evidence_formatted} will help us win on your behalf.`}
+            </strong>
+          </p>
+        )}
         <Alert variant="warning">
           <strong>You can keep adding to this until the deadline.</strong> Our payment processor accepts one submission
           per dispute, so we hold your response and send it at the deadline. Come back any time before then to add files

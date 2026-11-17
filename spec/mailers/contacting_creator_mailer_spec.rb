@@ -391,6 +391,9 @@ describe ContactingCreatorMailer do
       refunded_purchase.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -amount_cents), seller.id)
     end
 
+    # The factory's $1 sale is below FightDisputeJob's minimum; these examples cover a dispute we contest.
+    before { allow(FightDisputeJob).to receive(:below_contest_minimum?).and_return(false) }
+
     context "for a dispute on Purchase" do
       let(:purchase) { create(:purchase, link: create(:product, user: seller)) }
       let(:dispute) { create(:dispute_formalized, purchase:) }
@@ -718,6 +721,65 @@ describe ContactingCreatorMailer do
           Feature.activate(:submit_paypal_dispute_evidence)
           expect(ContactingCreatorMailer.chargeback_notice(dispute.id).body.encoded).to include "send PayPal our delivery record for this order"
           expect(mail.body.encoded).not_to include "we don’t have access to your PayPal account"
+        end
+      end
+
+      context "when the disputed amount is below the contest minimum" do
+        before { allow(FightDisputeJob).to receive(:below_contest_minimum?).and_call_original }
+
+        let!(:dispute_evidence) { create(:dispute_evidence, dispute:) }
+
+        it "makes the seller's information the condition for a response instead of promising to fight" do
+          expect(purchase.disputed_amount_cents).to be < FightDisputeJob::MINIMUM_CONTESTED_AMOUNT_CENTS
+          book_chargeback_debits(dispute)
+
+          body = ContactingCreatorMailer.chargeback_notice(dispute.id).body.encoded
+
+          expect(body).to include "(in the next 72 hours) if you want us to respond to this dispute."
+          expect(body).to include "fee to respond is more than we would usually recover, so we respond only if you send us information about the sale. If we succeed, you will automatically be re-credited the full amount."
+          expect(body).to include "Submit additional information"
+          expect(body).not_to include "We fight every dispute"
+          expect(body).not_to include "win on your behalf"
+        end
+
+        it "says the same in the reminder" do
+          dispute_evidence.update!(seller_contacted_at: 49.hours.ago)
+
+          body = ContactingCreatorMailer.chargeback_evidence_due_soon(dispute.id).body.encoded
+
+          expect(body).to include "You have 23 hours left."
+          expect(body).to include "fee to respond is more than we would usually recover, so we respond only if you send us information about the sale."
+        end
+
+        context "when the sale was paid into a Stripe Connect account" do
+          let(:purchase) do
+            create(:purchase, link: create(:product, user: seller), email: "buyer@example.com",
+                              merchant_account: create(:merchant_account_stripe_connect, user: seller))
+          end
+
+          it "submits only the seller's information through the connected account" do
+            body = ContactingCreatorMailer.chargeback_notice(dispute.id).body.encoded
+
+            expect(body).to include "so we respond only if you send us information about the sale. We submit it through your connected Stripe account, and if we win, the amount is released back to that account."
+            expect(body).not_to include "We fight every dispute"
+          end
+        end
+
+        context "when the disputed amount is exactly the minimum" do
+          let(:purchase) { create(:purchase, link: create(:product, user: seller, price_cents: FightDisputeJob::MINIMUM_CONTESTED_AMOUNT_CENTS)) }
+
+          it "keeps promising to fight it in the notice and the reminder" do
+            expect(purchase.disputed_amount_cents).to eq(FightDisputeJob::MINIMUM_CONTESTED_AMOUNT_CENTS)
+
+            notice = ContactingCreatorMailer.chargeback_notice(dispute.id).body.encoded
+            expect(notice).to include "(in the next 72 hours) will help us win on your behalf."
+            expect(notice).to include "We fight every dispute."
+            expect(notice).not_to include "if you want us to respond"
+
+            dispute_evidence.update!(seller_contacted_at: 49.hours.ago)
+            reminder = ContactingCreatorMailer.chargeback_evidence_due_soon(dispute.id).body.encoded
+            expect(reminder).not_to include "we respond only if you send us information"
+          end
         end
       end
     end

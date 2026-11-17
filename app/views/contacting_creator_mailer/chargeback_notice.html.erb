@@ -54,23 +54,28 @@
       </p>
     <% end %>
     <%= @dispute_evidence_content %>
+    <% response_copy = @small_dispute_response_copy || "We fight every dispute." %>
     <% case @balance_debit %>
     <% when :stripe_connect %>
       <p>
-        We fight every dispute and submit the evidence through your connected Stripe account. If we win, the amount is released back to that account.
+        <% if @small_dispute_response_copy %>
+          <%= @small_dispute_response_copy %> We submit it through your connected Stripe account, and if we win, the amount is released back to that account.
+        <% else %>
+          We fight every dispute and submit the evidence through your connected Stripe account. If we win, the amount is released back to that account.
+        <% end %>
       </p>
     <% when :refunded %>
       <p>
-        We fight every dispute. Because the money already went back to your customer, winning the dispute will not change your balance.
+        <%= response_copy %> Because the money already went back to your customer, winning the dispute will not change your balance.
       </p>
     <% else %>
       <p>
         <% if @win_credit == :full %>
-          We fight every dispute. If we succeed, you will automatically be re-credited the full amount. This process takes up to 75 days.
+          <%= response_copy %> If we succeed, you will automatically be re-credited the full amount. This process takes up to 75 days.
         <% elsif @win_credit == :partial %>
-          We fight every dispute. If we succeed, you will automatically be re-credited the amount we deducted. This process takes up to 75 days.
+          <%= response_copy %> If we succeed, you will automatically be re-credited the amount we deducted. This process takes up to 75 days.
         <% else %>
-          We fight every dispute.
+          <%= response_copy %>
         <% end %>
       </p>
       <% if @won_notification %>

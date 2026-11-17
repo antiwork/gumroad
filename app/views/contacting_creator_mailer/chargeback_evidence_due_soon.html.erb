@@ -23,6 +23,11 @@
       You have <%= pluralize(@hours_left, "hour") %> left.
     </strong>
   </p>
+  <% if @small_dispute_response_copy %>
+    <p>
+      <%= @small_dispute_response_copy %>
+    </p>
+  <% end %>
   <p>
     We send your response and all supporting files to our payment processor at the deadline, not when you save, so you can keep adding to it until then.
   </p>

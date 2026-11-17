@@ -9,6 +9,11 @@ class FightDisputeJob
   # Stripe charges $15 per evidence submission and returns it only when the dispute is won.
   MINIMUM_CONTESTED_AMOUNT_CENTS = 15_00
 
+  # Below the minimum only the seller's own saved response is submitted; seller-facing dispute copy reads this too.
+  def self.below_contest_minimum?(disputable)
+    disputable.disputed_amount_cents < MINIMUM_CONTESTED_AMOUNT_CENTS
+  end
+
   def perform(dispute_id)
     dispute = Dispute.find(dispute_id)
     dispute_evidence = dispute.dispute_evidence
@@ -21,13 +26,16 @@ class FightDisputeJob
 
     disputable = dispute.disputable
     # A seller who saved their own evidence is always forwarded; only our default response is skipped.
-    if disputable.disputed_amount_cents < MINIMUM_CONTESTED_AMOUNT_CENTS && !dispute_evidence.seller_submitted?
-      # Enqueued before resolving: a retry stops at resolved? above, so a failed enqueue after it would never be retried.
-      ContactingCreatorMailer.chargeback_not_contested(dispute.id).deliver_later
-      dispute_evidence.update_as_resolved!(
-        resolution: DisputeEvidence::RESOLUTION_NOT_CONTESTED,
-        error_message: "Not contested: disputed amount is below #{MINIMUM_CONTESTED_AMOUNT_CENTS / 100} USD and the seller supplied no evidence."
-      )
+    if self.class.below_contest_minimum?(disputable) && !dispute_evidence.seller_submitted?
+      # One transaction, with the email pushed before COMMIT (MailDeliveryJob does not wait for commit): a failed push
+      # rolls the resolution back for the retry, and a failed resolution leaves no email behind for the retry to repeat.
+      DisputeEvidence.transaction do
+        dispute_evidence.update_as_resolved!(
+          resolution: DisputeEvidence::RESOLUTION_NOT_CONTESTED,
+          error_message: "Not contested: disputed amount is below #{MINIMUM_CONTESTED_AMOUNT_CENTS / 100} USD and the seller supplied no evidence."
+        )
+        ContactingCreatorMailer.chargeback_not_contested(dispute.id).deliver_later
+      end
       return
     end
 

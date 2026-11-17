@@ -31,17 +31,33 @@ describe("Dispute evidence page", type: :system, js: true) do
     end
   end
 
-  it "renders the page" do
+  context "when the disputed amount is at least the contest minimum" do
+    let(:dispute) do
+      create(:dispute_formalized, reason: Dispute::REASON_FRAUDULENT,
+                                  purchase: create(:purchase, link: create(:product, price_cents: FightDisputeJob::MINIMUM_CONTESTED_AMOUNT_CENTS)))
+    end
+
+    it "renders the page" do
+      visit purchase_dispute_evidence_path(evidence_token)
+
+      expect(page).to have_text("Submit additional information")
+      expect(page).to have_text(/Any additional information you can provide by .+ \(72 hours left\) will help us win on your behalf\./)
+      expect(page).to have_text("The cardholder claims they did not authorize the purchase.")
+      expect(page).to have_text("Why should you win this dispute?")
+      expect(page).not_to have_text("Why is the customer not entitled to a refund?")
+      expect(page).to have_button("Save response", disabled: true)
+
+      expect(page).to have_selector("[role=listitem] h4", text: "Receipt")
+    end
+  end
+
+  it "makes the seller's information the condition for a response when the disputed amount is below the contest minimum" do
     visit purchase_dispute_evidence_path(evidence_token)
 
-    expect(page).to have_text("Submit additional information")
-    expect(page).to have_text(/Any additional information you can provide by .+ \(72 hours left\) will help us win on your behalf\./)
-    expect(page).to have_text("The cardholder claims they did not authorize the purchase.")
+    expect(page).to have_text(/Send us information about the sale by .+ \(72 hours left\) if you want us to respond to this dispute\./)
+    expect(page).to have_text("our payment processor's fee to respond is more than we would usually recover, so we respond only if you send us information about the sale.")
+    expect(page).not_to have_text("win on your behalf")
     expect(page).to have_text("Why should you win this dispute?")
-    expect(page).not_to have_text("Why is the customer not entitled to a refund?")
-    expect(page).to have_button("Save response", disabled: true)
-
-    expect(page).to have_selector("[role=listitem] h4", text: "Receipt")
   end
 
   describe "reason_for_winning field" do

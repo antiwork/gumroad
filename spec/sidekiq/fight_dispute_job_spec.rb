@@ -200,6 +200,22 @@ describe FightDisputeJob do
         expect(dispute_evidence.reload.resolution).to eq(DisputeEvidence::RESOLUTION_NOT_CONTESTED)
       end
 
+      it "tells the seller once when resolving fails and the job retries" do
+        attempts = 0
+        allow_any_instance_of(DisputeEvidence).to receive(:update_as_resolved!).and_wrap_original do |original, *args, **kwargs|
+          attempts += 1
+          raise ActiveRecord::Deadlocked if attempts == 1
+          original.call(*args, **kwargs)
+        end
+
+        expect do
+          expect { described_class.new.perform(dispute.id) }.to raise_error(ActiveRecord::Deadlocked)
+          expect(dispute_evidence.reload).not_to be_resolved
+          described_class.new.perform(dispute.id)
+        end.to have_enqueued_mail(ContactingCreatorMailer, :chargeback_not_contested).with(dispute.id).exactly(:once)
+        expect(dispute_evidence.reload.resolution).to eq(DisputeEvidence::RESOLUTION_NOT_CONTESTED)
+      end
+
       it "submits when the seller saved their own evidence" do
         dispute_evidence.update_as_seller_submitted!
         expect_any_instance_of(Purchase).to receive(:fight_chargeback)

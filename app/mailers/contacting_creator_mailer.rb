@@ -109,6 +109,9 @@ class ContactingCreatorMailer < ApplicationMailer
   }.freeze
   private_constant :DISPUTE_REASON_COPY
 
+  SMALL_DISPUTE_RESPONSE_COPY = "For a dispute this small, our payment processor's fee to respond is more than we would usually recover, so we respond only if you send us information about the sale."
+  private_constant :SMALL_DISPUTE_RESPONSE_COPY
+
   def chargeback_notice(dispute_id)
     dispute = Dispute.find(dispute_id)
     @disputable = dispute.disputable
@@ -122,6 +125,7 @@ class ContactingCreatorMailer < ApplicationMailer
     @win_credit = chargeback_win_credit(@disputable, @balance_debit)
     # Mirrors the guard on ContactingCreatorMailer.chargeback_won in handle_event_dispute_won!.
     @won_notification = !@disputable.disputed_purchases.all?(&:refunded?)
+    @small_dispute_response_copy = SMALL_DISPUTE_RESPONSE_COPY if FightDisputeJob.below_contest_minimum?(@disputable)
 
     dispute_evidence = dispute.dispute_evidence
     # Recomputed at delivery, not at enqueue: a notice queued with an hour left can be delivered with
@@ -135,9 +139,15 @@ class ContactingCreatorMailer < ApplicationMailer
     @dispute_evidence_content = \
       if asking_for_evidence
         due_at = format_dispute_evidence_due_at(dispute_evidence.seller_response_due_at)
+        ask = \
+          if @small_dispute_response_copy
+            "Send us information about the sale by #{due_at} (in the next #{pluralize(hours_left, "hour")}) if you want us to respond to this dispute."
+          else
+            "Any additional information you can provide by #{due_at} (in the next #{pluralize(hours_left, "hour")}) will help us win on your behalf."
+          end
         safe_join(
           [
-            tag.p(tag.b("Any additional information you can provide by #{due_at} (in the next #{pluralize(hours_left, "hour")}) will help us win on your behalf.")),
+            tag.p(tag.b(ask)),
             tag.p(
               link_to(
                 "Submit additional information",
@@ -176,6 +186,7 @@ class ContactingCreatorMailer < ApplicationMailer
     return do_not_send unless @hours_left.positive?
 
     @seller_response_due_at_formatted = format_dispute_evidence_due_at(@dispute_evidence.seller_response_due_at)
+    @small_dispute_response_copy = SMALL_DISPUTE_RESPONSE_COPY if FightDisputeJob.below_contest_minimum?(@disputable)
     @subject = "Reminder: Submit dispute evidence within 24 hours"
   end
 

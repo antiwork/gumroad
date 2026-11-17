@@ -39,6 +39,7 @@ describe DisputeEvidencePagePresenter do
           purchased_at: dispute_evidence.purchased_at,
           duration_left_to_submit_evidence_formatted: "71 hours",
           seller_response_due_at: dispute_evidence.seller_response_due_at.iso8601,
+          below_contest_minimum: true,
           customer_communication_file_max_size: dispute_evidence.customer_communication_file_max_size,
           customer_communication_files_max_count: DisputeEvidence::MAX_CUSTOMER_COMMUNICATION_FILES,
           blobs: {
@@ -80,6 +81,15 @@ describe DisputeEvidencePagePresenter do
           is_subscription: purchase.subscription.present?
         }
       )
+    end
+
+    it "does not flag a dispute at the contest minimum as below it" do
+      dispute = create(:dispute_formalized, purchase: create(:purchase, link: create(:product, price_cents: FightDisputeJob::MINIMUM_CONTESTED_AMOUNT_CENTS)))
+      dispute_evidence = create(:dispute_evidence, dispute:)
+
+      props = described_class.new(dispute_evidence, purchase_route_id: dispute.purchase.external_id).props[:dispute_evidence]
+
+      expect(props[:below_contest_minimum]).to be(false)
     end
   end
 end
