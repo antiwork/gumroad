@@ -760,7 +760,7 @@ describe ContactingCreatorMailer do
           it "submits only the seller's information through the connected account" do
             body = ContactingCreatorMailer.chargeback_notice(dispute.id).body.encoded
 
-            expect(body).to include "so we respond only if you send us information about the sale. If your customer tells you they canceled the dispute, let us know: a canceled dispute is still lost unless we respond. We submit it through your connected Stripe account, and if we win, the amount is released back to that account."
+            expect(body).to include "so we respond only if you send us information about the sale. If your customer tells you they canceled the dispute, let us know: a canceled dispute is still lost unless we respond. We submit your information through your connected Stripe account, and if we win, the amount is released back to that account."
             expect(body).not_to include "We fight every dispute"
           end
         end
