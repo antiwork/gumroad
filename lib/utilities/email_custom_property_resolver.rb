@@ -24,6 +24,36 @@ module EmailCustomPropertyResolver
     doc.to_html
   end
 
+  def declarations(block)
+    parts = []
+    current = +""
+    depth = 0
+    quote = nil
+    block.each_char do |char|
+      if quote
+        quote = nil if char == quote
+      elsif char == "\"" || char == "'"
+        quote = char
+      elsif char == "("
+        depth += 1
+      elsif char == ")"
+        depth -= 1
+      elsif char == ";" && depth <= 0
+        parts << current
+        current = +""
+        next
+      end
+      current << char
+    end
+    parts << current
+    parts.filter_map do |part|
+      name, value = part.split(":", 2)
+      next if value.nil? || name.strip.empty?
+
+      [name.strip, value.strip]
+    end
+  end
+
   private
     def resolve_node(node, inherited)
       vars = inherited
@@ -56,36 +86,6 @@ module EmailCustomPropertyResolver
       value.gsub(MODERN_RGB) do
         r, g, b, a = Regexp.last_match.captures
         a ? "rgba(#{r}, #{g}, #{b}, #{a})" : "rgb(#{r}, #{g}, #{b})"
-      end
-    end
-
-    def declarations(block)
-      parts = []
-      current = +""
-      depth = 0
-      quote = nil
-      block.each_char do |char|
-        if quote
-          quote = nil if char == quote
-        elsif char == "\"" || char == "'"
-          quote = char
-        elsif char == "("
-          depth += 1
-        elsif char == ")"
-          depth -= 1
-        elsif char == ";" && depth <= 0
-          parts << current
-          current = +""
-          next
-        end
-        current << char
-      end
-      parts << current
-      parts.filter_map do |part|
-        name, value = part.split(":", 2)
-        next if value.nil? || name.strip.empty?
-
-        [name.strip, value.strip]
       end
     end
 end

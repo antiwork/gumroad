@@ -4,7 +4,7 @@
   <% product_url = product[:url] %>
   <div class="figure">
     <% if product_thumbnail_url.present? %>
-      <%= link_to(image_tag(product_thumbnail_url, alt: product_name), product_url, target: "_blank") %>
+      <%= link_to(image_tag(product_thumbnail_url, alt: product_name, width: 128), product_url, target: "_blank") %>
     <% end %>
   </div>
   <div class="section">

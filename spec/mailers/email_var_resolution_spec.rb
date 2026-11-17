@@ -13,4 +13,15 @@ describe "Receipt email custom properties" do
     expect(styles).to include("font-family")
     expect(styles).not_to include("var(")
   end
+
+  it "leaves no zero-width border with a visible style in the inlined receipt" do
+    purchase = create(:purchase, link: create(:product))
+    mail = CustomerMailer.receipt(purchase.id)
+    body = mail.html_part&.decoded || mail.body.decoded
+    inlined = Premailer::Rails::CustomizedPremailer.new(body).to_inline_css
+    styles = Nokogiri::HTML(inlined).css("[style]").map { |node| node["style"] }
+
+    expect(styles.grep(/border-width: 0(;|\z)/)).to be_present
+    expect(styles.grep(/border-style: solid; border-width: 0(;|\z)/)).to be_empty
+  end
 end
