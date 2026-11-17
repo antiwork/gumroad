@@ -3175,6 +3175,50 @@ describe Order::ChargeService, :vcr do
         merchant_account:
       )
     end
+
+    describe "skipping the platform customer for a one-off card checkout" do
+      let(:chargeable) { instance_double(Chargeable) }
+      let(:params) do
+        {
+          line_items: [{ uid: "unique-id-0", permalink: product_1.unique_permalink, perceived_price_cents: 10_00, quantity: 1 }]
+        }.merge(common_order_params_without_payment)
+      end
+
+      before do
+        Feature.activate_user(described_class::SKIP_PLATFORM_CUSTOMER_FEATURE, seller_1)
+        allow(CardParamsHelper).to receive(:build_chargeable).and_return(chargeable)
+        allow(chargeable).to receive(:skip_platform_customer_on_clone!)
+        # Stops the checkout before any Stripe request.
+        allow(chargeable).to receive(:prepare!).and_raise(ChargeProcessorUnavailableError)
+      end
+
+      def charge(buyer:)
+        order, = Order::CreateService.new(params:, buyer:).perform
+        Order::ChargeService.new(order:, params:).perform
+      end
+
+      it "marks the chargeable before preparing it for a logged-in buyer" do
+        charge(buyer: create(:user))
+
+        expect(chargeable).to have_received(:skip_platform_customer_on_clone!).ordered
+        expect(chargeable).to have_received(:prepare!).ordered
+      end
+
+      it "keeps the platform customer for a logged-out buyer who can sign up from the receipt" do
+        charge(buyer: nil)
+
+        expect(chargeable).to have_received(:prepare!)
+        expect(chargeable).not_to have_received(:skip_platform_customer_on_clone!)
+      end
+
+      it "skips the platform customer for a logged-out buyer whose email already has an account" do
+        create(:user, email: common_order_params_without_payment[:email])
+
+        charge(buyer: nil)
+
+        expect(chargeable).to have_received(:skip_platform_customer_on_clone!)
+      end
+    end
   end
 
   describe "#ensure_all_purchases_processed" do
@@ -4117,6 +4161,20 @@ describe Order::ChargeService, :vcr do
 
       it "is false when any purchase in the group needs the card kept" do
         expect(one_off?(build(:purchase, link: product), build(:purchase, link: product, save_card: true))).to be(false)
+      end
+
+      context "when the buyer is logged out" do
+        before { order.update!(purchaser: nil) }
+
+        it "is false when the receipt will offer to create an account and save the card" do
+          expect(one_off?(build(:purchase, link: product, email: "new-buyer@example.com"))).to be(false)
+        end
+
+        it "is true when the email already belongs to an account" do
+          create(:user, email: "existing-buyer@example.com")
+
+          expect(one_off?(build(:purchase, link: product, email: "existing-buyer@example.com"))).to be(true)
+        end
       end
     end
 
