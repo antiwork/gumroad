@@ -1137,15 +1137,16 @@ describe "Rack::Attack throttle", type: :request do
         end
 
         expect(throttled?(api_request("/v2/user"))).to be(true)
-        # Both buckets are spent: the same token from a fresh address is capped by the token bucket, and a
-        # different token on the original address is capped by the address bucket.
+        # The bucket is the token's, not the address's.
         expect(throttled?(api_request("/v2/user", ip: "203.0.113.47"))).to be(true)
-        expect(throttled?(api_request("/v2/user", token: "another-api-token"))).to be(true)
-        expect(throttled?(api_request("/v2/user", token: "another-api-token", ip: "203.0.113.46"))).to be(false)
+        # Another token on the same address is untouched: an integration's or an office's address
+        # carries many sellers' tokens, so authenticated traffic is never charged to the address.
+        expect(throttled?(api_request("/v2/user", token: "another-api-token"))).to be(false)
+        expect(throttled?(api_request("/v2/user", token: ""))).to be(false)
       end
     end
 
-    it "limits tokenless /v2 traffic per IP" do
+    it "limits tokenless /v2 traffic per IP without charging authenticated traffic to it" do
       travel_to(Time.current) do
         1500.times do |i|
           expect(throttled?(api_request("/v2/sales", token: ""))).to be(false), "request #{i + 1} unexpectedly throttled"
@@ -1153,6 +1154,8 @@ describe "Rack::Attack throttle", type: :request do
 
         expect(throttled?(api_request("/v2/sales", token: ""))).to be(true)
         expect(throttled?(api_request("/v2/sales", token: "", ip: "203.0.113.45"))).to be(false)
+        # A token still gets through from the throttled address.
+        expect(throttled?(api_request("/v2/sales"))).to be(false)
       end
     end
 

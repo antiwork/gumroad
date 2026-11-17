@@ -588,17 +588,23 @@ class Rack::Attack
     end
   end
 
-  # The public API's own limit, per OAuth token (with an IP bucket for tokenless callers). The
-  # edge used to cap `/v2` per IP at 6000/hour and ban the address for the rest of the hour: a
-  # CLI customer-list export is one request per 10 sales, so the ban took the seller's own
-  # browser down with it (coconut#568). A rate, not an hourly volume, is what a bulk read fits in.
-  # Initial: 1500rpm, Max: 7500 requests/9 hours
+  # The public API's own rate limit. The edge used to cap `/v2` per IP (6000/hour, plus an hour-long
+  # ban on the address) and a CLI customer-list export — one request per 10 sales — tripped it,
+  # taking the seller's browser down with it (coconut#568).
+  #
+  # `max_level: 1` skips the backoff tiers on purpose: theirs are a volume budget over 8^N-second
+  # windows, and a bulk export is exactly a long, high-volume read, so they would re-create the ban
+  # this replaces. Holding the rate is the protection.
+  #
+  # Only tokenless requests are charged to an address: one address carries many sellers' tokens
+  # (integrations, NAT), and throttling those together is the same cross-tenant failure.
+  # Initial: 1500rpm, no backoff tiers
   v2_api_path = %r{\A/(?:api/)?v2/}
-  throttle_with_exponential_backoff(name: "v2_api/token", requests: 1500, period: 60.seconds) do |req|
+  throttle_with_exponential_backoff(name: "v2_api/token", requests: 1500, period: 60.seconds, max_level: 1) do |req|
     v2_product_token.call(req) if req.path.match?(v2_api_path)
   end
-  throttle_with_exponential_backoff(name: "v2_api/ip", requests: 1500, period: 60.seconds) do |req|
-    req.remote_ip if req.path.match?(v2_api_path)
+  throttle_with_exponential_backoff(name: "v2_api/ip", requests: 1500, period: 60.seconds, max_level: 1) do |req|
+    req.remote_ip if req.path.match?(v2_api_path) && v2_product_token.call(req).blank?
   end
 
   # Do not throttle for health check requests
