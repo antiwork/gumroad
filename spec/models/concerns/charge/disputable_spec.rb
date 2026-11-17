@@ -768,6 +768,9 @@ describe Charge::Disputable, :vcr do
       describe "the seller's notice against what formalization and a win actually book" do
         let(:won_event) { build(:charge_event_dispute_won, charge_id: "ch_zitkxbhds3zqlt") }
 
+        # The $1 sale is below FightDisputeJob's minimum; these examples cover a dispute we contest.
+        before { allow(FightDisputeJob).to receive(:below_contest_minimum?).and_return(false) }
+
         def refund_before_dispute(refunded_purchase, amount_cents)
           refunded_purchase.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -amount_cents), seller.id)
         end
