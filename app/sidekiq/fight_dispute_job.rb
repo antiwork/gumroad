@@ -27,8 +27,9 @@ class FightDisputeJob
     disputable = dispute.disputable
     # A seller who saved their own evidence is always forwarded; only our default response is skipped.
     if self.class.below_contest_minimum?(disputable) && !dispute_evidence.seller_submitted?
-      # One transaction, with the email pushed before COMMIT (MailDeliveryJob does not wait for commit): a failed push
-      # rolls the resolution back for the retry, and a failed resolution leaves no email behind for the retry to repeat.
+      # Resolution first, email pushed before COMMIT (MailDeliveryJob does not wait for it): a failed resolution leaves no
+      # email for the retry to repeat, and a push that raises rolls the resolution back. reliable_push! buffers a Redis
+      # outage instead of raising, so that email is lost if the process dies before the buffer drains.
       DisputeEvidence.transaction do
         dispute_evidence.update_as_resolved!(
           resolution: DisputeEvidence::RESOLUTION_NOT_CONTESTED,
