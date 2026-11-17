@@ -7,9 +7,8 @@ class ReceiptPresenter::ChargeInfo
   include ERB::Util
   include BuyerPresentmentDisplay
 
-  def initialize(chargeable, for_email:, order_items_count:, presentment_currency: BuyerPresentmentDisplay::PRESENTMENT_CURRENCY_UNDECIDED)
+  def initialize(chargeable, for_email:, presentment_currency: BuyerPresentmentDisplay::PRESENTMENT_CURRENCY_UNDECIDED)
     @for_email = for_email
-    @order_items_count = order_items_count
     @chargeable = chargeable
     @seller = chargeable.seller
     @presentment_currency = presentment_currency
@@ -39,21 +38,19 @@ class ReceiptPresenter::ChargeInfo
   def product_questions_note
     return if chargeable.orderable.receipt_for_gift_sender?
 
-    question = "Questions about your #{"product".pluralize(order_items_count)}?"
-
     action = \
       if for_email
         "Contact #{h(seller.display_name)} by replying to this email."
       else
         "Contact #{h(seller.display_name)} at #{mail_to(chargeable.support_email)}."
       end
-    "#{question} #{action}".html_safe
+    "Have any questions? #{action}".html_safe
   rescue NotImplementedError
     nil
   end
 
   private
-    attr_reader :for_email, :order_items_count, :chargeable, :seller
+    attr_reader :for_email, :chargeable, :seller
 
     def presentment_currency
       presentment_currency_or_decide(chargeable.successful_purchases)

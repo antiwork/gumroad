@@ -17,7 +17,7 @@ describe ReceiptPresenter::ChargeInfo do
       created_at: DateTime.parse("January 1, 2023")
     )
   end
-  let(:presenter) { described_class.new(chargeable, for_email: true, order_items_count: 1) }
+  let(:presenter) { described_class.new(chargeable, for_email: true) }
 
   RSpec.shared_examples "chargeable" do
     describe "#formatted_created_at" do
@@ -67,18 +67,18 @@ describe ReceiptPresenter::ChargeInfo do
     describe "#product_questions_note" do
       it "returns note with reply" do
         expect(presenter.product_questions_note).to eq(
-          "Questions about your product? Contact Seller by replying to this email."
+          "Have any questions? Contact Seller by replying to this email."
         )
       end
 
       context "when is not for email" do
-        let(:presenter) { described_class.new(purchase, for_email: false, order_items_count: 1) }
+        let(:presenter) { described_class.new(purchase, for_email: false) }
 
         it "returns text with seller's email, if there is no product-level support email" do
           product.update!(support_email: nil)
 
           expect(presenter.product_questions_note).to eq(<<~HTML.squish)
-            Questions about your product?
+            Have any questions?
             Contact Seller at <a href="mailto:seller@example.com">seller@example.com</a>.
           HTML
         end
@@ -87,7 +87,7 @@ describe ReceiptPresenter::ChargeInfo do
           product.update!(support_email: "support@product.com")
 
           expect(presenter.product_questions_note).to eq(<<~HTML.squish)
-            Questions about your product?
+            Have any questions?
             Contact Seller at <a href="mailto:support@product.com">support@product.com</a>.
           HTML
         end
@@ -103,7 +103,7 @@ describe ReceiptPresenter::ChargeInfo do
         end
 
         it "escapes the seller name for non-email" do
-          presenter = described_class.new(chargeable, for_email: false, order_items_count: 1)
+          presenter = described_class.new(chargeable, for_email: false)
           expect(presenter.product_questions_note).to include(
             "Contact &lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt; at"
           )
@@ -126,7 +126,7 @@ describe ReceiptPresenter::ChargeInfo do
         describe "for a Charge" do
           let(:charge) { create(:charge) }
           let(:payment_info) { described_class.new(charge) }
-          let(:presenter) { described_class.new(charge, for_email: true, order_items_count: 1) }
+          let(:presenter) { described_class.new(charge, for_email: true) }
 
           before do
             charge.purchases << purchase
@@ -158,24 +158,24 @@ describe ReceiptPresenter::ChargeInfo do
 
   describe "#free?" do
     it "returns false for a paid purchase" do
-      expect(described_class.new(purchase, for_email: true, order_items_count: 1).free?).to be(false)
+      expect(described_class.new(purchase, for_email: true).free?).to be(false)
     end
 
     it "returns true for a $0 purchase" do
       free_purchase = create(:free_purchase, link: create(:product, user: seller, price_cents: 0), seller:)
-      expect(described_class.new(free_purchase, for_email: true, order_items_count: 1).free?).to be(true)
+      expect(described_class.new(free_purchase, for_email: true).free?).to be(true)
     end
 
     it "returns false for a $0 free trial purchase" do
       free_trial_purchase = create(:free_trial_membership_purchase, price_cents: 0)
       expect(free_trial_purchase.free_purchase?).to be(true)
-      expect(described_class.new(free_trial_purchase, for_email: true, order_items_count: 1).free?).to be(false)
+      expect(described_class.new(free_trial_purchase, for_email: true).free?).to be(false)
     end
 
     it "returns false for a charge with a free and a paid purchase" do
       free_purchase = create(:free_purchase, link: create(:product, user: seller, price_cents: 0), seller:)
       charge = create(:charge, seller:, purchases: [purchase, free_purchase], amount_cents: 14_99)
-      expect(described_class.new(charge, for_email: true, order_items_count: 2).free?).to be(false)
+      expect(described_class.new(charge, for_email: true).free?).to be(false)
     end
   end
 

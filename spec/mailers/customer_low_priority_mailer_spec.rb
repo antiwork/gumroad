@@ -217,7 +217,7 @@ describe CustomerLowPriorityMailer do
         expect(mail.subject).to eq "Upcoming automatic membership renewal"
         expect(mail.body.encoded).to include "This is a reminder that your membership to \"#{purchase.link.name}\" will automatically renew on"
         expect(mail.body.encoded).to include "You're paying"
-        expect(mail.body.encoded).to include "Questions about your product?"
+        expect(mail.body.encoded).to include "Have any questions?"
         expect(mail.reply_to).to eq [purchase.link.user.email]
       end
 

@@ -17,7 +17,6 @@ class ReceiptPresenter
     @_charge_info ||= ReceiptPresenter::ChargeInfo.new(
       chargeable,
       for_email:,
-      order_items_count: chargeable.unbundled_purchases.count,
       presentment_currency:
     )
   end

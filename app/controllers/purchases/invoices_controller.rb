@@ -127,7 +127,7 @@ class Purchases::InvoicesController < ApplicationController
       return [] unless payments.size > 1 && payments.include?(@purchase)
 
       payments.map do |payment|
-        charge_info = ReceiptPresenter::ChargeInfo.new(Charge::Chargeable.find_by_purchase_or_charge!(purchase: payment), for_email: false, order_items_count: 1)
+        charge_info = ReceiptPresenter::ChargeInfo.new(Charge::Chargeable.find_by_purchase_or_charge!(purchase: payment), for_email: false)
         {
           id: payment.external_id,
           label: "#{charge_info.formatted_created_at} · #{charge_info.formatted_total_transaction_amount}",
