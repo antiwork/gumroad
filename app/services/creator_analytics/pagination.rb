@@ -8,7 +8,7 @@ module CreatorAnalytics::Pagination
   # Half of rack_timeout.rb's service_timeout, leaving room for the rest of the action and for
   # the page still in flight when the deadline passes.
   BUDGET_SECONDS = 60
-  # Backstop for a walk whose pages are each fast enough never to reach the deadline.
+  # Cap for a walk inside a request whose pages are each fast enough never to reach the deadline.
   MAX_PAGES = 20
 
   # Raised instead of returning the pages collected so far: a short page is indistinguishable
@@ -23,10 +23,10 @@ module CreatorAnalytics::Pagination
   end
 
   def self.exhausted?(pages:)
-    return true if pages >= MAX_PAGES
-
     deadline = Current.analytics_pagination_deadline
-    deadline.present? && monotonic_now >= deadline
+    return false if deadline.nil?
+
+    pages >= MAX_PAGES || monotonic_now >= deadline
   end
 
   def self.monotonic_now

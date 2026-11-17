@@ -23,6 +23,7 @@ describe CreatorAnalytics::Pagination do
   describe ".exhausted?" do
     it "is false with no request budget open, so work outside a request is not cut off" do
       expect(described_class.exhausted?(pages: 0)).to eq(false)
+      expect(described_class.exhausted?(pages: described_class::MAX_PAGES)).to eq(false)
     end
 
     it "is true once the request deadline has passed" do

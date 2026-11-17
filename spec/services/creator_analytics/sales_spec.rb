@@ -63,7 +63,9 @@ describe CreatorAnalytics::Sales do
       stub_const("CreatorAnalytics::Pagination::MAX_PAGES", 1)
       expect(Purchase).to receive(:search).once.and_call_original
 
-      expect { @service.by_product_and_date }.to raise_error(CreatorAnalytics::Pagination::BudgetExceeded)
+      CreatorAnalytics::Pagination.within_budget do
+        expect { @service.by_product_and_date }.to raise_error(CreatorAnalytics::Pagination::BudgetExceeded)
+      end
     end
 
     it "covers every product the seller sells, and no one else's, without a product list" do

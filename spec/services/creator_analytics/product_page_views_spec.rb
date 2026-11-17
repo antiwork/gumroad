@@ -198,8 +198,18 @@ describe CreatorAnalytics::ProductPageViews do
       stub_const("CreatorAnalytics::Pagination::MAX_PAGES", 1)
       expect(ProductPageView).to receive(:search).once.and_call_original
 
-      expect { @service.by_product_and_referrer_and_date }
-        .to raise_error(CreatorAnalytics::Pagination::BudgetExceeded)
+      CreatorAnalytics::Pagination.within_budget do
+        expect { @service.by_product_and_referrer_and_date }
+          .to raise_error(CreatorAnalytics::Pagination::BudgetExceeded)
+      end
+    end
+
+    it "walks past the page cap when no request budget is open" do
+      stub_const("#{described_class}::ES_MAX_BUCKET_SIZE", 4)
+      stub_const("CreatorAnalytics::Pagination::MAX_PAGES", 1)
+      expect(ProductPageView).to receive(:search).at_least(:twice).and_call_original
+
+      expect { @service.by_product_and_referrer_and_date }.not_to raise_error
     end
 
     context "when user time zone is Pacific Time" do
