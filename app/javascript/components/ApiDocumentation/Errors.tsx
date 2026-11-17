@@ -52,9 +52,9 @@ export const Errors = () => (
         <p></p>
         <p>When present, the message will describe the particular problem and suggestions on what went wrong.</p>
         <p>
-          Requests are rate limited per access token: 1500 requests per minute, and a request over that
-          returns <strong>429</strong> with a <strong>Retry-After</strong> header giving the number of seconds
-          to wait before retrying.
+          Requests are rate limited per access token: 1500 requests per minute, and a request over that returns{" "}
+          <strong>429</strong> with a <strong>Retry-After</strong> header giving the number of seconds to wait before
+          retrying.
         </p>
       </div>
     </CardContent>
