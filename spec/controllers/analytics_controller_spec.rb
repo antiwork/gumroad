@@ -257,6 +257,16 @@ describe AnalyticsController do
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body).to eq("error" => "Date range cannot exceed 7 days for the hourly interval.")
     end
+
+    it "returns 504 when the referral walk runs out of pagination budget" do
+      allow_any_instance_of(CreatorAnalytics::CachingProxy).to receive(:data_for_dates)
+        .and_raise(CreatorAnalytics::Pagination::BudgetExceeded)
+
+      get :data_by_referral, params: { start_time: "Mon Jun 01 2025 00:00:00 GMT-0000", end_time: "Wed Jul 30 2025 00:00:00 GMT-0000" }
+
+      expect(response).to have_http_status(:gateway_timeout)
+      expect(response.parsed_body).to eq("error" => "Request timed out")
+    end
   end
 
   describe "GET data_by_date" do

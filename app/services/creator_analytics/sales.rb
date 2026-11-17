@@ -111,10 +111,16 @@ class CreatorAnalytics::Sales
       after_key = nil
       body = build_body(sources)
       buckets = []
+      pages = 0
       loop do
+        # Out of budget means the walk cannot finish inside this request; stop rather than let
+        # Rack::Timeout SIGTERM the worker mid-page with the buckets half-converted.
+        raise CreatorAnalytics::Pagination::BudgetExceeded if CreatorAnalytics::Pagination.exhausted?(pages:)
+
         body[:aggs][:composite_agg][:composite][:after] = after_key if after_key
         response_agg = Purchase.search(body).aggregations.composite_agg
         buckets += response_agg.buckets
+        pages += 1
         break if response_agg.buckets.size < ES_MAX_BUCKET_SIZE
         after_key = response_agg["after_key"]
       end

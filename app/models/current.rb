@@ -10,5 +10,7 @@ class Current < ActiveSupport::CurrentAttributes
   # can be the default on many products of a page.
   # auto_apply_offer_codes memoizes user_id => the seller's shop-wide auto-apply code (or nil),
   # so a listing page resolves it once per seller instead of once per product.
-  attribute :admin_actor, :admin_token, :buyer_currency_merchant_accounts, :default_offer_code_uses_left, :auto_apply_offer_codes
+  # analytics_pagination_deadline is the monotonic instant the analytics endpoints' composite
+  # walks must stop by; it is request-scoped so the two walks in one referral request share one.
+  attribute :admin_actor, :admin_token, :buyer_currency_merchant_accounts, :default_offer_code_uses_left, :auto_apply_offer_codes, :analytics_pagination_deadline
 end
