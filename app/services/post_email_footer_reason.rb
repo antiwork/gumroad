@@ -1,13 +1,8 @@
 # frozen_string_literal: true
 
-# The footer sentence telling a recipient why they received a post email. Both PostSendgridApi and
-# PostResendApi render it, so it lives here rather than in either: as separate copies they drifted
-# (one said "post", the other "email") and both fell back to the purchase wording for a recipient
-# whose record carries no purchase, telling a follower who never bought anything that they had.
-#
-# A recipient carries at most one of :purchase, :follower, :affiliate — the senders reject a mixed
-# record — so whichever is present decides the sentence. A recipient carrying none (a preview sent
-# straight through the API) gets no sentence, because no purchase can be claimed for it.
+# Why a recipient got a post email. Both senders render this sentence; as separate copies they
+# drifted ("post" vs "email") and claimed a purchase for a recipient whose record carries none.
+# The recipient carries at most one of :purchase, :follower, :affiliate; a preview gets none.
 module PostEmailFooterReason
   module_function
 
@@ -18,6 +13,7 @@ module PostEmailFooterReason
     return "You've received this email because you follow #{seller_name}." if recipient[:follower]
     return "You've received this email because you're an affiliate of #{seller_name}." if recipient[:affiliate]
 
+    # A $0 purchase (free download, PWYW at $0) is not a purchase, so the footer says "got".
     if post.seller_type?
       recipient[:purchase].free_purchase? ?
         "You've received this email because you got a product from #{seller_name}." :
