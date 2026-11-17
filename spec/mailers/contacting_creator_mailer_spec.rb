@@ -2698,6 +2698,14 @@ describe ContactingCreatorMailer do
       expect(mail.body.encoded).to include "We did not respond to the dispute on #{purchase.email}'s purchase of #{purchase.link.name} for #{purchase.formatted_disputed_amount}."
     end
 
+    # The backstop job can resolve a dispute whose seller was never sent the evidence link.
+    it "does not imply the seller was asked for evidence" do
+      body = ContactingCreatorMailer.chargeback_not_contested(dispute.id).body.encoded
+
+      expect(body).to include "With no evidence from you, the dispute will be lost."
+      expect(body).not_to include "did not send"
+    end
+
     it "says the disputed amount stays deducted when the seller balance was debited" do
       purchase.update!(purchase_chargeback_balance: create(:balance, user: seller))
 

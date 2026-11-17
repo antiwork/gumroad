@@ -9,7 +9,7 @@ class FightDisputeJob
   # Stripe charges $15 per evidence submission and returns it only when the dispute is won.
   MINIMUM_CONTESTED_AMOUNT_CENTS = 15_00
 
-  # Below the minimum only the seller's own saved response is submitted; seller-facing dispute copy reads this too.
+  # Below the minimum evidence is submitted only if the seller saved a response; seller-facing dispute copy reads this too.
   def self.below_contest_minimum?(disputable)
     disputable.disputed_amount_cents < MINIMUM_CONTESTED_AMOUNT_CENTS
   end
