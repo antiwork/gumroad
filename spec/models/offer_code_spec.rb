@@ -819,6 +819,59 @@ describe OfferCode do
       expect(first.reload.auto_apply).to be(true)
     end
 
+    it "allows a second auto-applied code whose window does not overlap the first" do
+      universal_code(auto_apply: true, valid_at: 1.week.from_now, expires_at: 2.weeks.from_now).save!
+
+      expect(universal_code(auto_apply: true, valid_at: Time.current, expires_at: 3.days.from_now)).to be_valid
+    end
+
+    it "rejects a second auto-applied code whose window overlaps the first" do
+      universal_code(auto_apply: true, valid_at: Time.current, expires_at: 2.weeks.from_now).save!
+
+      overlapping = universal_code(auto_apply: true, valid_at: 1.week.from_now, expires_at: 3.weeks.from_now)
+      expect(overlapping).not_to be_valid
+      expect(overlapping.errors.full_messages.first).to include("is already applied automatically")
+    end
+
+    it "allows a new auto-applied code once the previous one has ended" do
+      universal_code(auto_apply: true, valid_at: 2.weeks.ago, expires_at: 1.week.ago).save!
+
+      expect(universal_code(auto_apply: true, valid_at: Time.current, expires_at: 3.days.from_now)).to be_valid
+    end
+
+    it "rejects an edit that moves an auto-applied code onto another one's window" do
+      universal_code(auto_apply: true, valid_at: Time.current, expires_at: 3.days.from_now).save!
+      scheduled = universal_code(auto_apply: true, valid_at: 1.week.from_now, expires_at: 2.weeks.from_now)
+      scheduled.save!
+
+      expect(scheduled.update(valid_at: Time.current, expires_at: 3.weeks.from_now)).to be(false)
+      expect(scheduled.errors.full_messages.first).to include("is already applied automatically")
+    end
+
+    it "rejects a second auto-applied code while an open-ended one is running" do
+      universal_code(auto_apply: true, valid_at: Time.current).save!
+
+      expect(universal_code(auto_apply: true, valid_at: 1.week.from_now, expires_at: 2.weeks.from_now)).not_to be_valid
+    end
+
+    it "resolves the auto-applied code that is open now" do
+      scheduled = universal_code(auto_apply: true, valid_at: 1.week.from_now, expires_at: 2.weeks.from_now)
+      scheduled.save!
+      live = universal_code(auto_apply: true, valid_at: Time.current, expires_at: 3.days.from_now)
+      live.save!
+
+      Current.reset
+      expect(seller.reload.auto_apply_offer_code).to eq(live)
+      expect(User.includes(:auto_apply_offer_code).find(seller.id).auto_apply_offer_code).to eq(live)
+    end
+
+    it "resolves no auto-applied code before its window opens" do
+      universal_code(auto_apply: true, valid_at: 1.week.from_now, expires_at: 2.weeks.from_now).save!
+
+      Current.reset
+      expect(seller.reload.auto_apply_offer_code).to be_nil
+    end
+
     it "lets another seller auto apply their own code" do
       universal_code(auto_apply: true).save!
       other = create(:user)

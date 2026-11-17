@@ -104,6 +104,14 @@ class OfferCode < ApplicationRecord
   scope :not_excluding_product, ->(product) {
     where("NOT EXISTS (SELECT 1 FROM offer_codes_excluded_products WHERE offer_codes_excluded_products.offer_code_id = offer_codes.id AND offer_codes_excluded_products.product_id = ?)", product.id)
   }
+  # Inside its validity window now — the SQL twin of `inactive?`, for the preloaded auto-applied code.
+  scope :active, -> { where("valid_at IS NULL OR valid_at <= ?", Time.current).where("expires_at IS NULL OR expires_at >= ?", Time.current) }
+  # Codes whose window can be open at the same instant as [from, to). A nil bound is unbounded on
+  # that side, so it overlaps everything; windows that only touch do not overlap.
+  scope :overlapping, ->(from, to) {
+    where("offer_codes.valid_at IS NULL OR :to IS NULL OR offer_codes.valid_at < :to", to:)
+      .where("offer_codes.expires_at IS NULL OR :from IS NULL OR offer_codes.expires_at > :from", from:)
+  }
 
   # Codes may contain accented Latin characters (see the format validation above), so NFC-normalize
   # before comparing — a decomposed client submission must match its precomposed stored form. For
@@ -780,9 +788,9 @@ class OfferCode < ApplicationRecord
       User.where(id: user_id).lock.pick(:id)
     end
 
-    # A seller has at most one shop-wide auto-applied code, and it must be a plain
-    # "all products" discount. Never clears another code silently: the seller turns
-    # the other one off first.
+    # A seller's shop-wide auto-applied codes must never be open at the same instant, and each must
+    # be a plain "all products" discount. A conflict never clears the other code silently: the seller
+    # turns it off or moves its dates first.
     def validate_auto_apply
       return unless auto_apply?
       return if deleted_at.present?
@@ -798,7 +806,7 @@ class OfferCode < ApplicationRecord
       # take gap locks that can deadlock two sellers' concurrent inserts.
       other = OfferCode.alive.where(user_id:, auto_apply: true)
       other = other.where.not(id:).lock if persisted?
-      if (existing = other.first)
+      if (existing = other.overlapping(valid_at, expires_at).first)
         errors.add(:base, "Another discount (#{existing.code}) is already applied automatically. Turn it off first.")
       end
     end
