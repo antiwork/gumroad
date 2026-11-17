@@ -89,53 +89,24 @@ describe AddTestingAndQaTaxonomy do
   end
 
   describe "#down" do
-    it "removes the subtree it created" do
-      migration.up
-
-      migration.down
-
-      expect(Taxonomy.find_by_path([described_class::PARENT_SLUG, described_class::CATEGORY_SLUG])).to be_nil
-    end
-
-    it "keeps a subcategory a seller has already categorised a product under" do
+    it "keeps the whole subtree, so a rollback cannot orphan a product saved under it" do
       migration.up
       in_use = Taxonomy.find_by_path(%w[software-development testing-and-qa test-automation])
-      create(:product, taxonomy: in_use)
+      product = create(:product, taxonomy: in_use)
 
-      migration.down
+      expect { migration.down }.not_to change { [Taxonomy.count, TaxonomyHierarchy.count] }
 
-      expect(in_use.reload).to be_present
-      expect(Taxonomy.find_by_path(%w[software-development testing-and-qa manual-testing])).to be_nil
+      expect(product.reload.taxonomy).to eq(in_use)
     end
 
-    it "keeps the parent category when a child is kept, so the child is never orphaned" do
-      migration.up
-      in_use = Taxonomy.find_by_path(%w[software-development testing-and-qa test-automation])
-      create(:product, taxonomy: in_use)
-
-      migration.down
-
-      category = Taxonomy.find_by_path([described_class::PARENT_SLUG, described_class::CATEGORY_SLUG])
-      expect(category).to be_present
-      expect(in_use.reload.parent).to eq(category)
-      expect(in_use.self_and_ancestors.pluck(:slug)).to eq(
-        %w[test-automation testing-and-qa software-development]
-      )
-    end
-
-    it "keeps the category when a product points at the category itself" do
+    it "keeps the category a saved Discover search points at" do
       migration.up
       category = Taxonomy.find_by_path([described_class::PARENT_SLUG, described_class::CATEGORY_SLUG])
-      create(:product, taxonomy: category)
+      search = create(:discover_search, taxonomy: category)
 
       migration.down
 
-      expect(category.reload).to be_present
-      expect(Taxonomy.where(parent: category)).to be_empty
-    end
-
-    it "does nothing when the category is already absent" do
-      expect { migration.down }.not_to raise_error
+      expect(search.reload.taxonomy).to eq(category)
     end
   end
 end
