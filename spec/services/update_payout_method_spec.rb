@@ -428,7 +428,7 @@ describe UpdatePayoutMethod do
         result = described_class.new(user_params: params, seller: user).process
 
         expect(result[:error]).to eq(:bank_account_error)
-        expect(result[:data]).to include("doesn't support the bank this account number belongs to")
+        expect(result[:data]).to include("doesn't support the bank this account number belongs to (bank code 453)")
         expect(result[:field]).to eq(:account_number)
         expect(user.reload.active_bank_account).to eq(existing_bank_account)
         expect(user.bank_accounts.count).to eq(1)

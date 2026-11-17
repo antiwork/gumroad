@@ -201,10 +201,20 @@ describe BankCodeDirectoryCheck do
         rejection = described_class.rejection_for(bank_account)
 
         expect(rejection.message).to eq(
-          "Our payment partner doesn't support the bank this account number belongs to, " \
-          "so it can't be used for payouts. Please enter an account at a different bank."
+          "Our payment partner doesn't support the bank this account number belongs to " \
+          "(bank code 453), so it can't be used for payouts. " \
+          "Please enter an account at a different bank."
         )
         expect(rejection.field).to eq(:account_number)
+      end
+
+      it "names the entity code the refused CBU starts with" do
+        other_bank = build(:argentina_bank_account, user:, account_number: "4050001412345678901233")
+        allow(Stripe::Token).to receive(:create).and_raise(invalid_account_number)
+
+        rejection = described_class.rejection_for(other_bank)
+
+        expect(rejection.message).to include("(bank code 405)")
       end
 
       it "fails open when the CBU's check digits fail, since that is a typo" do

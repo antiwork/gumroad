@@ -193,12 +193,20 @@ class BankCodeDirectoryCheck
       )
     end
 
+    # The first three digits of a CBU are the BCRA entity code — the seller's own handle for the bank
+    # that issued it, and the only identifier we can name: Stripe's refusal carries no bank name, and
+    # the digits the seller typed are not the problem, so the message has to point away from them.
     def argentina_bank_rejection
       Rejection.new(
-        message: "Our payment partner doesn't support the bank this account number belongs to, " \
-                 "so it can't be used for payouts. Please enter an account at a different bank.",
+        message: "Our payment partner doesn't support the bank this account number belongs to " \
+                 "(bank code #{argentina_bank_code}), so it can't be used for payouts. " \
+                 "Please enter an account at a different bank.",
         field: :account_number
       )
+    end
+
+    def argentina_bank_code
+      account_number_of(bank_account).to_s.first(3)
     end
 
     # The code resolves here, and an 8-character SWIFT/BIC re-entered under it resolves no better,
