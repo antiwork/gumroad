@@ -854,6 +854,32 @@ describe OfferCode do
       expect(universal_code(auto_apply: true, valid_at: 1.week.from_now, expires_at: 2.weeks.from_now)).not_to be_valid
     end
 
+    it "allows a second auto-applied code that starts exactly when the first one ends" do
+      boundary = 1.week.from_now.change(usec: 0)
+      universal_code(auto_apply: true, valid_at: 3.days.ago.change(usec: 0), expires_at: boundary).save!
+
+      expect(universal_code(auto_apply: true, valid_at: boundary, expires_at: 2.weeks.from_now)).to be_valid
+    end
+
+    it "hands the shop-wide sale over at a shared boundary, with one code open at a time" do
+      boundary = 1.week.from_now.change(usec: 0)
+      ending = universal_code(auto_apply: true, valid_at: 3.days.ago.change(usec: 0), expires_at: boundary)
+      ending.save!
+      starting = universal_code(auto_apply: true, valid_at: boundary, expires_at: 2.weeks.from_now)
+      starting.save!
+
+      travel_to(boundary - 1.second) do
+        Current.reset
+        expect(seller.reload.auto_apply_offer_code).to eq(ending)
+      end
+
+      travel_to(boundary) do
+        Current.reset
+        expect(seller.reload.auto_apply_offer_code).to eq(starting)
+        expect(OfferCode.active.where(user_id: seller.id, auto_apply: true).pluck(:id)).to eq([starting.id])
+      end
+    end
+
     it "resolves the auto-applied code that is open now" do
       scheduled = universal_code(auto_apply: true, valid_at: 1.week.from_now, expires_at: 2.weeks.from_now)
       scheduled.save!

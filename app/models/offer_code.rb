@@ -104,8 +104,10 @@ class OfferCode < ApplicationRecord
   scope :not_excluding_product, ->(product) {
     where("NOT EXISTS (SELECT 1 FROM offer_codes_excluded_products WHERE offer_codes_excluded_products.offer_code_id = offer_codes.id AND offer_codes_excluded_products.product_id = ?)", product.id)
   }
-  # Inside its validity window now — the SQL twin of `inactive?`, for the preloaded auto-applied code.
-  scope :active, -> { where("valid_at IS NULL OR valid_at <= ?", Time.current).where("expires_at IS NULL OR expires_at >= ?", Time.current) }
+  # Inside its validity window now, as the half-open interval [valid_at, expires_at): a code ending
+  # exactly when the next starts has handed over, so at most one auto-applied code is ever open at an
+  # instant. That is the same interval `overlapping` lets a seller schedule.
+  scope :active, -> { where("valid_at IS NULL OR valid_at <= ?", Time.current).where("expires_at IS NULL OR expires_at > ?", Time.current) }
   # Codes whose window can be open at the same instant as [from, to). A nil bound is unbounded on
   # that side, so it overlaps everything; windows that only touch do not overlap.
   scope :overlapping, ->(from, to) {
