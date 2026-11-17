@@ -2635,6 +2635,61 @@ describe ContactingCreatorMailer do
       expect(mail.subject).to eq "We did not contest a small dispute"
       expect(mail.body.encoded).to include "We did not respond to the dispute on #{purchase.email}'s purchase of #{purchase.link.name} for #{purchase.formatted_disputed_amount}."
     end
+
+    it "says the amount stays deducted when the seller balance was debited" do
+      purchase.update!(purchase_chargeback_balance: create(:balance, user: seller))
+
+      body = ContactingCreatorMailer.chargeback_not_contested(dispute.id).body.encoded
+
+      expect(body).to include "The amount stays deducted from your balance."
+      expect(body).not_to include "Nothing has been deducted"
+    end
+
+    it "says nothing was deducted when the seller balance was never debited" do
+      body = ContactingCreatorMailer.chargeback_not_contested(dispute.id).body.encoded
+
+      expect(body).to include "Nothing has been deducted from your balance."
+      expect(body).not_to include "stays deducted"
+    end
+
+    context "when the sale was refunded in full before the dispute" do
+      before { purchase.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -purchase.total_transaction_cents), seller.id) }
+
+      it "says nothing was deducted because of the refund" do
+        body = ContactingCreatorMailer.chargeback_not_contested(dispute.id).body.encoded
+
+        expect(body).to include "This sale was already refunded in full, so nothing has been deducted from your balance."
+        expect(body).not_to include "stays deducted"
+      end
+    end
+
+    context "when the sale was partially refunded before the seller balance was debited" do
+      before do
+        purchase.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -purchase.price_cents / 2), seller.id)
+        purchase.update!(purchase_chargeback_balance: create(:balance, user: seller))
+      end
+
+      it "says only the unrefunded part stays deducted" do
+        body = ContactingCreatorMailer.chargeback_not_contested(dispute.id).body.encoded
+
+        expect(body).to include "The unrefunded part of that amount stays deducted from your balance."
+        expect(body).not_to include "The amount stays deducted"
+      end
+    end
+
+    context "when the sale was paid into a Stripe Connect account" do
+      let!(:purchase) do
+        create(:purchase, seller:, link: create(:product, user: seller),
+                          merchant_account: create(:merchant_account_stripe_connect, user: seller))
+      end
+
+      it "says nothing left the Gumroad balance" do
+        body = ContactingCreatorMailer.chargeback_not_contested(dispute.id).body.encoded
+
+        expect(body).to include "This sale was paid into your connected Stripe account, so nothing has been deducted from your Gumroad balance."
+        expect(body).not_to include "stays deducted"
+      end
+    end
   end
 
   describe "preorder_summary" do

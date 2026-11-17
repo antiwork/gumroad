@@ -183,6 +183,23 @@ describe FightDisputeJob do
         expect(dispute_evidence.reload.resolution).to eq(DisputeEvidence::RESOLUTION_NOT_CONTESTED)
       end
 
+      it "leaves the evidence unresolved when the notification cannot be enqueued, so the retry still tells the seller" do
+        attempts = 0
+        allow(ContactingCreatorMailer).to receive(:chargeback_not_contested).and_wrap_original do |original, *args|
+          attempts += 1
+          raise Redis::CannotConnectError if attempts == 1
+          original.call(*args)
+        end
+
+        expect { described_class.new.perform(dispute.id) }.to raise_error(Redis::CannotConnectError)
+        expect(dispute_evidence.reload).not_to be_resolved
+
+        expect do
+          described_class.new.perform(dispute.id)
+        end.to have_enqueued_mail(ContactingCreatorMailer, :chargeback_not_contested).with(dispute.id)
+        expect(dispute_evidence.reload.resolution).to eq(DisputeEvidence::RESOLUTION_NOT_CONTESTED)
+      end
+
       it "submits when the seller saved their own evidence" do
         dispute_evidence.update_as_seller_submitted!
         expect_any_instance_of(Purchase).to receive(:fight_chargeback)

@@ -506,6 +506,7 @@ class ContactingCreatorMailer < ApplicationMailer
     dispute = Dispute.find(dispute_id)
     @disputable = dispute.disputable
     @seller = @disputable.seller
+    @balance_debit = chargeback_balance_debit(@disputable)
     @subject = "We did not contest a small dispute"
   end
 

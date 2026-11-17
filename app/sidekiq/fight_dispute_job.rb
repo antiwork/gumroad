@@ -22,11 +22,12 @@ class FightDisputeJob
     disputable = dispute.disputable
     # A seller who saved their own evidence is always forwarded; only our default response is skipped.
     if disputable.disputed_amount_cents < MINIMUM_CONTESTED_AMOUNT_CENTS && !dispute_evidence.seller_submitted?
+      # Enqueued before resolving: a retry stops at resolved? above, so a failed enqueue after it would never be retried.
+      ContactingCreatorMailer.chargeback_not_contested(dispute.id).deliver_later
       dispute_evidence.update_as_resolved!(
         resolution: DisputeEvidence::RESOLUTION_NOT_CONTESTED,
         error_message: "Not contested: disputed amount is below #{MINIMUM_CONTESTED_AMOUNT_CENTS / 100} USD and the seller supplied no evidence."
       )
-      ContactingCreatorMailer.chargeback_not_contested(dispute.id).deliver_later
       return
     end
 

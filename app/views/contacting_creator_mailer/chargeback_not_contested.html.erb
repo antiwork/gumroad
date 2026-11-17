@@ -11,6 +11,20 @@
     <% end %>
   <% end %>
   <p>
-    Our payment processor charges a fee to respond to every dispute, and for a dispute this small the fee is more than we would usually recover. Since you did not send any evidence of your own, the dispute will be lost and the amount stays debited from your balance.
+    Our payment processor charges a fee to respond to every dispute, and for a dispute this small the fee is more than we would usually recover. Since you did not send any evidence of your own, the dispute will be lost.
+  </p>
+  <p>
+    <% case @balance_debit %>
+    <% when :full %>
+      The amount stays deducted from your balance.
+    <% when :partial %>
+      The unrefunded part of that amount stays deducted from your balance.
+    <% when :refunded %>
+      This sale was already refunded in full, so nothing has been deducted from your balance.
+    <% when :stripe_connect %>
+      This sale was paid into your connected Stripe account, so nothing has been deducted from your Gumroad balance.
+    <% else %>
+      Nothing has been deducted from your balance.
+    <% end %>
   </p>
 </div>
