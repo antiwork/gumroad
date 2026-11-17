@@ -38,7 +38,7 @@ export const GetSales = () => (
       <ApiParameter name="license_key" description="(optional) - Filter sales by license key" />
       <ApiParameter
         name="page_key"
-        description="(optional) - A key representing a page of results. It is given in the response as `next_page_key`."
+        description="(optional) - A key representing a page of results. It is given in the response as `next_page_key`. Each page holds up to 100 sales."
       />
     </ApiParameters>
     <ApiResponseFields>

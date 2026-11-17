@@ -11,7 +11,13 @@ class Api::V2::SalesController < Api::V2::BaseController
   before_action(only: [:revoke_access, :undo_revoke_access]) { require_oauth_scope! :edit_sales }
   before_action :set_page, only: :index
 
-  RESULTS_PER_PAGE = 10
+  # Each page costs the caller one HTTP request per RESULTS_PER_PAGE sales, and the callers that
+  # read a whole history (the CLI's `sales buyers`/`sales list --all`, the dashboard's customer
+  # list, any script looping `next_page_key`) pay that in a tight loop. At 10 a seller with ~60k
+  # sales burned ~6,000 requests to read their own sales, which by itself exhausts the edge's
+  # 6,000 requests/hour per-IP budget and gets the IP banned with a 1015 mid-walk. 100 matches
+  # Api::V2::SubscribersController and turns that walk into ~600 requests.
+  RESULTS_PER_PAGE = 100
   # A deprecated `page` becomes the SQL offset `(@page - 1) * RESULTS_PER_PAGE`, and MySQL rejects
   # an offset past its 64-bit range. The signed 64-bit ceiling holds on any server version, and the
   # offset's `- 1` is why the page ceiling is one above this quotient.
