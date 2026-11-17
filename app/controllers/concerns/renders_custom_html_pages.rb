@@ -766,9 +766,10 @@ module RendersCustomHtmlPages
     # Untrusted iframe: only e.source === landing frame; endpoint URL is baked
     # here so the page cannot pick another seller; offset is a non-negative
     # integer, limit is clamped to MAX_ITEMS, both re-validated on the server.
-    # Reply echoes requestId so in-flight requests don't cross. targetOrigin
-    # is "*" (opaque frame origin); the reply is the public catalogue data
-    # page 1 already exposes.
+    # Reply echoes requestId so in-flight requests don't cross, and the asking
+    # document's token, which the page-side bridge requires to accept a reply.
+    # targetOrigin is "*" (opaque frame origin); the reply is the public
+    # catalogue data page 1 already exposes.
     def custom_html_products_wrapper_script(products_src:, nonce:)
       endpoint_json = ERB::Util.json_escape(products_src.to_json)
       <<~HTML
@@ -785,6 +786,7 @@ module RendersCustomHtmlPages
               function reply(payload) {
                 payload.type = "gumroad:products:result";
                 payload.requestId = requestId;
+                payload.documentToken = typeof d.documentToken === "string" ? d.documentToken : null;
                 frame.contentWindow.postMessage(payload, "*");
               }
               var offset = d.offset;

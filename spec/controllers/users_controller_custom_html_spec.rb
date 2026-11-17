@@ -140,6 +140,15 @@ describe UsersController, :vcr, type: :controller do
       expect(response.body).to include("e.source !== frame.contentWindow")
     end
 
+    it "echoes the asking document's token on the products reply" do
+      get :show
+
+      # The page-side bridge discards any reply whose documentToken isn't the
+      # one it minted, so a reply omitting it never resolves the page's promise.
+      reply_body = response.body[/function reply\(payload\) \{(.*?)\n\s*\}/m, 1]
+      expect(reply_body).to include("documentToken")
+    end
+
     it "falls back to the default profile page when custom_html is blank" do
       seller.update!(custom_html: nil)
 
