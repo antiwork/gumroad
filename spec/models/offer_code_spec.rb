@@ -839,6 +839,20 @@ describe OfferCode do
       expect(universal_code(auto_apply: true, valid_at: Time.current, expires_at: 3.days.from_now)).to be_valid
     end
 
+    it "allows an auto-applied code with no start date once the previous one has ended" do
+      universal_code(auto_apply: true, valid_at: 2.weeks.ago, expires_at: 1.week.ago).save!
+
+      expect(universal_code(auto_apply: true)).to be_valid
+    end
+
+    it "lets the seller edit an ended auto-applied code while another one is running" do
+      ended = universal_code(auto_apply: true, valid_at: 2.weeks.ago, expires_at: 1.week.ago)
+      ended.save!
+      universal_code(auto_apply: true).save!
+
+      expect(ended.update(sale_label: "Last week")).to be(true)
+    end
+
     it "rejects an edit that moves an auto-applied code onto another one's window" do
       universal_code(auto_apply: true, valid_at: Time.current, expires_at: 3.days.from_now).save!
       scheduled = universal_code(auto_apply: true, valid_at: 1.week.from_now, expires_at: 2.weeks.from_now)

@@ -803,12 +803,17 @@ class OfferCode < ApplicationRecord
       errors.add(:base, "A discount limited to new customers cannot be applied automatically.") if new_customers_only?
       return if user_id.blank?
 
+      # Only what is left of each window can collide: an ended code never applies again, so a nil or
+      # past start must not reach back into it.
+      from = [valid_at, Time.current].compact.max
+      return if expires_at.present? && expires_at < from
+
       # `update` assigns associations before the seller lock, fixing the REPEATABLE READ snapshot,
       # so it needs a current read. A create's first read is the seller lock; locking here too would
       # take gap locks that can deadlock two sellers' concurrent inserts.
       other = OfferCode.alive.where(user_id:, auto_apply: true)
       other = other.where.not(id:).lock if persisted?
-      if (existing = other.overlapping(valid_at, expires_at).first)
+      if (existing = other.overlapping(from, expires_at).first)
         errors.add(:base, "Another discount (#{existing.code}) is already applied automatically. Turn it off first.")
       end
     end
