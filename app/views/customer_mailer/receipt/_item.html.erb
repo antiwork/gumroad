@@ -5,7 +5,7 @@
     <% seller_name = seller[:name] %>
     <% seller_profile_url = seller[:profile_url] %>
     <div class="footer" title="<%= seller_name %>">
-      <%= link_to(image_tag(seller[:avatar_url], alt: "Avatar of #{seller_name}", class: "user-avatar"), seller_profile_url, target: "_blank") %>
+      <%= link_to(image_tag(seller[:avatar_url], alt: "Avatar of #{seller_name}", class: "user-avatar", width: 18), seller_profile_url, target: "_blank") %>
       <span>
         <%= link_to(seller_name, seller_profile_url, target: "_blank") %>
       </span>

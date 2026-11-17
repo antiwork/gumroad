@@ -2,7 +2,7 @@
   <div class="carousel">
     <div class="items">
       <% thumbnail_url = product[:thumbnail_url] || ActionController::Base.helpers.image_url("native_types/thumbnails/#{product[:native_type]}.png") %>
-      <%= link_to(image_tag(thumbnail_url, alt: product[:name]), product[:url], target: "_blank") %>
+      <%= link_to(image_tag(thumbnail_url, alt: product[:name], width: 190), product[:url], target: "_blank") %>
     </div>
   </div>
   <div class="header">
@@ -13,7 +13,7 @@
       <div>
         <div class="user">
           <% if product[:creator][:avatar_url].present? %>
-            <%= link_to(image_tag(product[:creator][:avatar_url], alt: "Avatar of #{product[:creator][:name]}", class: "user-avatar"), product[:creator][:profile_url], target: "_blank") %>
+            <%= link_to(image_tag(product[:creator][:avatar_url], alt: "Avatar of #{product[:creator][:name]}", class: "user-avatar", width: 18), product[:creator][:profile_url], target: "_blank") %>
           <% end %>
           <%= link_to(product[:creator][:name], product[:creator][:profile_url], target: "_blank", class: "user-name") %>
         </div>

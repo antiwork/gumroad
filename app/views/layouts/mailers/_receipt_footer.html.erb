@@ -3,15 +3,17 @@
     <div>
       <div class="warning" role="alert">
         <div>
-          <table class="reset">
-            <tr>
-              <td>
-                <%= image_tag("email/solid-shield-exclamation.png", alt: "Warning") %>
-              </td>
-              <td style="text-align: left;">
-                This was a test purchase — you have not been charged (you are seeing this message because you are logged in as the creator).
-              </td>
-            </tr>
+          <table class="reset" role="presentation" border="0" cellpadding="0" cellspacing="0">
+            <tbody>
+              <tr>
+                <td>
+                  <%= image_tag("email/solid-shield-exclamation.png", alt: "Warning", width: 24, height: 24) %>
+                </td>
+                <td style="text-align: left;">
+                  This was a test purchase — you have not been charged (you are seeing this message because you are logged in as the creator).
+                </td>
+              </tr>
+            </tbody>
           </table>
         </div>
       </div>

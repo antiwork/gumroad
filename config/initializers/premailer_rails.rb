@@ -22,7 +22,7 @@ module EmailCustomPropertyInlining
   end
 
   def to_inline_css
-    EmailCustomPropertyResolver.resolve(super, @email_root_properties)
+    EmailZeroWidthBorderNormalizer.normalize(EmailCustomPropertyResolver.resolve(super, @email_root_properties))
   end
 end
 Rails.application.config.after_initialize do
