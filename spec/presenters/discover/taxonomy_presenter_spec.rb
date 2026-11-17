@@ -66,6 +66,17 @@ describe Discover::TaxonomyPresenter do
     end
   end
 
+  describe "testing and QA category" do
+    it "sits under Software Development with its subcategories" do
+      testing_and_qa = Taxonomy.find_by_path(["software-development", "testing-and-qa"])
+
+      expect(testing_and_qa).to be_present
+      expect(Taxonomy.where(parent: testing_and_qa).pluck(:slug)).to match_array(
+        %w[test-automation manual-testing]
+      )
+    end
+  end
+
   describe "music categories" do
     it "adds Music Theory and Composition under Music & Sound Design with labels" do
       music = Taxonomy.find_by_path(["music-and-sound-design"])
