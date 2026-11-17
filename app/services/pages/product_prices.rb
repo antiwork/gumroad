@@ -22,6 +22,11 @@ class Pages::ProductPrices
     new(seller, ip:, preferred_currency:, offset:, limit:).build
   end
 
+  # A single product's entry, for the public product JSON.
+  def self.for_product(product, ip:, preferred_currency: nil)
+    new(product.user, ip:, preferred_currency:).entry_for(product)
+  end
+
   # Whether a page can consume this payload at all. Its only consumers live inside the page's
   # own HTML — the interpolator answers data-gumroad-product elements, and a script can only
   # find the blob by its literal id — so a page containing neither string cannot read a price,
@@ -36,6 +41,17 @@ class Pages::ProductPrices
     @preferred_currency = preferred_currency
     @offset = offset
     @limit = limit
+  end
+
+  def entry_for(product)
+    # The number a buyer would be charged, computed exactly as ProductPresenter::Card computes it
+    # for the native grid — including `for_default_duration`, without which a tiered membership
+    # quotes its cheapest recurrence's amount here and its default recurrence's amount there.
+    base_price_cents = product.display_price_cents(for_default_duration: true)
+    price_cents = product.discounted_price_cents(base_price_cents)
+    entry = price_entry(product, base_price_cents:, price_cents:)
+    entry[:options] = option_entries(product) if product.option_records.any?
+    entry
   end
 
   def build
@@ -92,17 +108,6 @@ class Pages::ProductPrices
       return if capped.empty?
 
       cache.merge!(OfferCode.uses_left_by_id(capped))
-    end
-
-    def entry_for(product)
-      # The number a buyer would be charged, computed exactly as ProductPresenter::Card computes it
-      # for the native grid — including `for_default_duration`, without which a tiered membership
-      # quotes its cheapest recurrence's amount here and its default recurrence's amount there.
-      base_price_cents = product.display_price_cents(for_default_duration: true)
-      price_cents = product.discounted_price_cents(base_price_cents)
-      entry = price_entry(product, base_price_cents:, price_cents:)
-      entry[:options] = option_entries(product) if product.option_records.any?
-      entry
     end
 
     def option_entries(product)

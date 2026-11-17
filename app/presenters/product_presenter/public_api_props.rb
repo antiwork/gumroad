@@ -27,10 +27,14 @@ class ProductPresenter::PublicApiProps
   # product-page endpoint.
   PUBLIC_REVIEW_LIMIT = 5
 
-  def initialize(product:, seller_custom_domain_url: nil)
+  # `ip` and `preferred_currency` make `display_price` visitor-specific: a response built with
+  # them must never be shared between visitors.
+  def initialize(product:, seller_custom_domain_url: nil, ip: nil, preferred_currency: nil)
     @product = product
     @seller = product.user
     @seller_custom_domain_url = seller_custom_domain_url
+    @ip = ip
+    @preferred_currency = preferred_currency
   end
 
   def props
@@ -54,6 +58,7 @@ class ProductPresenter::PublicApiProps
       price_cents: product.price_cents,
       currency_code: product.price_currency_type.downcase,
       price_formatted: product.price_formatted_verbose,
+      display_price: display_price_props,
       is_pay_what_you_want: product.customizable_price?,
       suggested_price_cents: product.customizable_price? ? product.suggested_price_cents : nil,
       is_recurring_billing: product.is_recurring_billing,
@@ -86,7 +91,7 @@ class ProductPresenter::PublicApiProps
   end
 
   private
-    attr_reader :product, :seller, :seller_custom_domain_url
+    attr_reader :product, :seller, :seller_custom_domain_url, :ip, :preferred_currency
 
     # Always an object (never null), mirroring the documented shape. Falls back
     # to a username-less byline when the seller has no public profile URL, and
@@ -108,6 +113,15 @@ class ProductPresenter::PublicApiProps
       return seller.profile_url(custom_domain_url: seller_custom_domain_url) if seller_custom_domain_url.present?
 
       seller.subdomain_with_protocol && seller.profile_url
+    end
+
+    # What the product page and checkout show this visitor: discounts applied, converted into the
+    # visitor's currency where checkout can settle in it. Tax is not included; it needs the
+    # billing country, which only exists at checkout.
+    def display_price_props
+      return nil if ip.blank? && preferred_currency.blank?
+
+      Pages::ProductPrices.for_product(product, ip:, preferred_currency:)
     end
 
     def free_trial_props
