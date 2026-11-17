@@ -2636,12 +2636,12 @@ describe ContactingCreatorMailer do
       expect(mail.body.encoded).to include "We did not respond to the dispute on #{purchase.email}'s purchase of #{purchase.link.name} for #{purchase.formatted_disputed_amount}."
     end
 
-    it "says the amount stays deducted when the seller balance was debited" do
+    it "says the disputed amount stays deducted when the seller balance was debited" do
       purchase.update!(purchase_chargeback_balance: create(:balance, user: seller))
 
       body = ContactingCreatorMailer.chargeback_not_contested(dispute.id).body.encoded
 
-      expect(body).to include "The amount stays deducted from your balance."
+      expect(body).to include "The disputed amount stays deducted from your balance."
       expect(body).not_to include "Nothing has been deducted"
     end
 
@@ -2672,8 +2672,8 @@ describe ContactingCreatorMailer do
       it "says only the unrefunded part stays deducted" do
         body = ContactingCreatorMailer.chargeback_not_contested(dispute.id).body.encoded
 
-        expect(body).to include "The unrefunded part of that amount stays deducted from your balance."
-        expect(body).not_to include "The amount stays deducted"
+        expect(body).to include "The unrefunded part of the disputed amount stays deducted from your balance."
+        expect(body).not_to include "The disputed amount stays deducted"
       end
     end
 

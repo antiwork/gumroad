@@ -16,9 +16,9 @@
   <p>
     <% case @balance_debit %>
     <% when :full %>
-      The amount stays deducted from your balance.
+      The disputed amount stays deducted from your balance.
     <% when :partial %>
-      The unrefunded part of that amount stays deducted from your balance.
+      The unrefunded part of the disputed amount stays deducted from your balance.
     <% when :refunded %>
       This sale was already refunded in full, so nothing has been deducted from your balance.
     <% when :stripe_connect %>
