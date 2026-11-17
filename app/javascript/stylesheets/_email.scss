@@ -491,23 +491,49 @@ $accent-color: map-get($colors, "pink"); // [1]
     border-radius: border-radius(1);
     overflow: hidden;
 
-    .product-checkout-cell {
+    // Outlook's Word engine lays out a real table but ignores CSS display on divs, so the product
+    // cell only keeps its two columns and its divider aligned when it is a table. [3]
+    table.product-checkout-cell {
       display: table;
       table-layout: fixed;
       width: 100%;
       border-bottom: $border;
+      border-collapse: separate;
+      border-spacing: 0;
       height: size(8);
 
-      & > .figure {
-        // [3]
+      // The striped-table rules above target every table in .main; this one is a layout table, so
+      // its row and cells are neutralized instead.
+      & > tbody,
+      & > tbody > tr {
+        display: revert;
+        width: 100%;
+        // The striped-table rule above borders every row, and its shorthand expands to
+        // border-style alone — the 1px width has to be zeroed explicitly for Word.
+        border-style: none;
+        border-width: 0;
+        border-radius: 0;
+        margin: 0;
+      }
+
+      & > tbody > tr > .figure,
+      & > tbody > tr > .section {
         display: table-cell;
+        border-style: none;
+        border-width: 0;
+        margin: 0;
+      }
+
+      & > tbody > tr > .figure {
+        // [3]
         background: url("/images/placeholders/product-cover.png");
         background-size: cover;
         width: size(8);
         border-right: $border;
+        padding: 0;
       }
 
-      & > .section {
+      & > tbody > tr > .section {
         display: table-cell;
         padding: spacer(4);
 
