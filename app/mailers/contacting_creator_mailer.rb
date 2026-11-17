@@ -502,6 +502,13 @@ class ContactingCreatorMailer < ApplicationMailer
     @subject = "Your dispute response was sent without your attached file"
   end
 
+  def chargeback_not_contested(dispute_id)
+    dispute = Dispute.find(dispute_id)
+    @disputable = dispute.disputable
+    @seller = @disputable.seller
+    @subject = "We did not contest a small dispute"
+  end
+
   def chargeback_won(dispute_id)
     dispute = Dispute.find(dispute_id)
     @disputable = dispute.disputable

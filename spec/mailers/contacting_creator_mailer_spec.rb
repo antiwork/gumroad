@@ -2623,6 +2623,20 @@ describe ContactingCreatorMailer do
     end
   end
 
+  describe "chargeback_not_contested" do
+    let!(:seller) { create(:user) }
+    let!(:purchase) { create(:purchase, seller:, link: create(:product, user: seller)) }
+    let!(:dispute) { create(:dispute, purchase:) }
+
+    it "tells the seller we did not respond and why" do
+      mail = ContactingCreatorMailer.chargeback_not_contested(dispute.id)
+
+      expect(mail.to).to eq [seller.form_email]
+      expect(mail.subject).to eq "We did not contest a small dispute"
+      expect(mail.body.encoded).to include "We did not respond to the dispute on #{purchase.email}'s purchase of #{purchase.link.name} for #{purchase.formatted_disputed_amount}."
+    end
+  end
+
   describe "preorder_summary" do
     before do
       @product = create(:product, price_cents: 600, is_in_preorder_state: false)

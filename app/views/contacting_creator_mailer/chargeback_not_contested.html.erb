@@ -1,0 +1,16 @@
+<%= header_section(@subject) %>
+<div>
+  <p>
+    We did not respond to the dispute on <%= @disputable.customer_email %>'s purchase of <%= @disputable.multiple_purchases? ? "the following items" : @disputable.purchase_for_dispute_evidence.link.name %> for <%= @disputable.formatted_disputed_amount %>.
+  </p>
+  <% if @disputable.multiple_purchases? %>
+    <% @disputable.disputed_purchases.each do |purchase| %>
+      <p>
+        <%= link_to purchase.link.name, purchase.link.long_url %>
+      </p>
+    <% end %>
+  <% end %>
+  <p>
+    Our payment processor charges a fee to respond to every dispute, and for a dispute this small the fee is more than we would usually recover. Since you did not send any evidence of your own, the dispute will be lost and the amount stays debited from your balance.
+  </p>
+</div>

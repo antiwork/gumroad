@@ -6,6 +6,11 @@ describe FightDisputeJob do
   include_context "without the weekend window extension"
 
   describe "#perform" do
+    before do
+      allow_any_instance_of(Purchase).to receive(:disputed_amount_cents).and_return(50_00)
+      allow_any_instance_of(Charge).to receive(:disputed_amount_cents).and_return(50_00)
+    end
+
     let(:dispute_evidence) { create(:dispute_evidence) }
     let(:dispute) { dispute_evidence.dispute }
 
@@ -159,6 +164,39 @@ describe FightDisputeJob do
             it_behaves_like "submitted dispute evidence"
           end
         end
+      end
+    end
+
+    context "when the disputed amount is below the contest minimum" do
+      before do
+        dispute_evidence.update_as_not_seller_contacted!
+        allow_any_instance_of(Purchase).to receive(:disputed_amount_cents).and_return(14_99)
+      end
+
+      it "does not submit evidence, resolves as not contested and tells the seller" do
+        expect_any_instance_of(Purchase).not_to receive(:fight_chargeback)
+
+        expect do
+          described_class.new.perform(dispute.id)
+        end.to have_enqueued_mail(ContactingCreatorMailer, :chargeback_not_contested).with(dispute.id)
+
+        expect(dispute_evidence.reload.resolution).to eq(DisputeEvidence::RESOLUTION_NOT_CONTESTED)
+      end
+
+      it "submits when the seller saved their own evidence" do
+        dispute_evidence.update_as_seller_submitted!
+        expect_any_instance_of(Purchase).to receive(:fight_chargeback)
+
+        described_class.new.perform(dispute.id)
+
+        expect(dispute_evidence.reload.resolution).to eq(DisputeEvidence::RESOLUTION_SUBMITTED)
+      end
+
+      it "submits at exactly the minimum" do
+        allow_any_instance_of(Purchase).to receive(:disputed_amount_cents).and_return(15_00)
+        expect_any_instance_of(Purchase).to receive(:fight_chargeback)
+
+        described_class.new.perform(dispute.id)
       end
     end
 
