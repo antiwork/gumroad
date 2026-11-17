@@ -5,12 +5,72 @@ require "spec_helper"
 describe FightDisputeJob do
   include_context "without the weekend window extension"
 
-  describe "#perform" do
-    before do
-      allow_any_instance_of(Purchase).to receive(:disputed_amount_cents).and_return(50_00)
-      allow_any_instance_of(Charge).to receive(:disputed_amount_cents).and_return(50_00)
+  describe ".below_contest_minimum?" do
+    let(:purchase) { create(:purchase, total_transaction_cents: 20_00) }
+    let(:dispute) { create(:dispute_formalized, purchase:) }
+
+    def record_processor_amount(cents, currency = Currency::USD)
+      dispute.update!(processor_amount_cents: cents, processor_currency: currency)
+      purchase.reload
     end
 
+    it "reads the processor's disputed amount when only part of the sale is disputed" do
+      record_processor_amount(10_00)
+
+      expect(described_class.below_contest_minimum?(purchase)).to be(true)
+    end
+
+    it "contests a dispute the bank rolled up from several charges, even against a small sale" do
+      purchase.update!(total_transaction_cents: 10_00)
+      record_processor_amount(30_00)
+
+      expect(described_class.below_contest_minimum?(purchase)).to be(false)
+    end
+
+    it "contests a dispute whose amount was never recorded" do
+      purchase.update!(total_transaction_cents: 1_00)
+      purchase.reload
+
+      expect(described_class.below_contest_minimum?(purchase)).to be(false)
+    end
+
+    context "when the buyer paid in their own currency" do
+      before do
+        purchase.update!(total_transaction_cents: 10_00)
+        create(:purchase_presentment, purchase:, presentment_currency: Currency::CAD, presentment_price_cents: 13_50,
+                                      presentment_gumroad_tax_cents: 0, presentment_total_cents: 13_50)
+      end
+
+      it "converts at the sale's own recorded rate" do
+        record_processor_amount(13_50, Currency::CAD)
+        expect(described_class.below_contest_minimum?(purchase)).to be(true)
+
+        record_processor_amount(27_00, Currency::CAD)
+        expect(described_class.below_contest_minimum?(purchase)).to be(false)
+      end
+
+      it "contests a dispute in a currency the sale has no rate for" do
+        record_processor_amount(1_00, Currency::EUR)
+
+        expect(described_class.below_contest_minimum?(purchase)).to be(false)
+      end
+    end
+
+    context "for a combined charge" do
+      let(:charge) { create(:charge, amount_cents: 10_00) }
+      let(:dispute) { create(:dispute_formalized_on_charge, charge:) }
+
+      it "converts at the charge's own recorded rate" do
+        create(:charge_presentment, charge:, presentment_currency: Currency::EUR, presentment_total_cents: 9_25)
+        dispute.update!(processor_amount_cents: 18_50, processor_currency: Currency::EUR)
+        charge.reload
+
+        expect(described_class.below_contest_minimum?(charge)).to be(false)
+      end
+    end
+  end
+
+  describe "#perform" do
     let(:dispute_evidence) { create(:dispute_evidence) }
     let(:dispute) { dispute_evidence.dispute }
 
@@ -170,7 +230,7 @@ describe FightDisputeJob do
     context "when the disputed amount is below the contest minimum" do
       before do
         dispute_evidence.update_as_not_seller_contacted!
-        allow_any_instance_of(Purchase).to receive(:disputed_amount_cents).and_return(14_99)
+        dispute.update!(processor_amount_cents: 14_99, processor_currency: Currency::USD)
       end
 
       it "does not submit evidence, resolves as not contested and tells the seller" do
@@ -226,7 +286,7 @@ describe FightDisputeJob do
       end
 
       it "submits at exactly the minimum" do
-        allow_any_instance_of(Purchase).to receive(:disputed_amount_cents).and_return(15_00)
+        dispute.update!(processor_amount_cents: 15_00)
         expect_any_instance_of(Purchase).to receive(:fight_chargeback)
 
         described_class.new.perform(dispute.id)

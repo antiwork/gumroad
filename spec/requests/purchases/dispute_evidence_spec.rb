@@ -34,7 +34,8 @@ describe("Dispute evidence page", type: :system, js: true) do
   context "when the disputed amount is at least the contest minimum" do
     let(:dispute) do
       create(:dispute_formalized, reason: Dispute::REASON_FRAUDULENT,
-                                  purchase: create(:purchase, link: create(:product, price_cents: FightDisputeJob::MINIMUM_CONTESTED_AMOUNT_CENTS)))
+                                  purchase: create(:purchase, link: create(:product, price_cents: FightDisputeJob::MINIMUM_CONTESTED_AMOUNT_CENTS)),
+                                  processor_amount_cents: FightDisputeJob::MINIMUM_CONTESTED_AMOUNT_CENTS, processor_currency: Currency::USD)
     end
 
     it "renders the page" do
@@ -52,6 +53,7 @@ describe("Dispute evidence page", type: :system, js: true) do
   end
 
   it "makes the seller's information the condition for a response when the disputed amount is below the contest minimum" do
+    dispute.update!(processor_amount_cents: 1_00, processor_currency: Currency::USD)
     visit purchase_dispute_evidence_path(evidence_token)
 
     expect(page).to have_text(/Send us information about the sale by .+ \(72 hours left\) if you want us to respond to this dispute\./)

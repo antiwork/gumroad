@@ -125,7 +125,9 @@ class ContactingCreatorMailer < ApplicationMailer
     @win_credit = chargeback_win_credit(@disputable, @balance_debit)
     # Mirrors the guard on ContactingCreatorMailer.chargeback_won in handle_event_dispute_won!.
     @won_notification = !@disputable.disputed_purchases.all?(&:refunded?)
-    @small_dispute_response_copy = SMALL_DISPUTE_RESPONSE_COPY if FightDisputeJob.below_contest_minimum?(@disputable)
+    # PayPal-through-Braintree disputes have no evidence form, so the copy would ask for something
+    # the seller cannot send.
+    @small_dispute_response_copy = SMALL_DISPUTE_RESPONSE_COPY if @disputable.eligible_for_dispute_evidence? && FightDisputeJob.below_contest_minimum?(@disputable)
 
     dispute_evidence = dispute.dispute_evidence
     # Recomputed at delivery, not at enqueue: a notice queued with an hour left can be delivered with

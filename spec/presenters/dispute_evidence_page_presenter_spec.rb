@@ -29,6 +29,7 @@ describe DisputeEvidencePagePresenter do
 
   describe "#props" do
     it "returns correct props" do
+      dispute_evidence.dispute.update!(processor_amount_cents: 1_00, processor_currency: Currency::USD)
       receipt_image = dispute_evidence.receipt_image
       policy_image = dispute_evidence.policy_image
 
@@ -84,7 +85,8 @@ describe DisputeEvidencePagePresenter do
     end
 
     it "does not flag a dispute at the contest minimum as below it" do
-      dispute = create(:dispute_formalized, purchase: create(:purchase, link: create(:product, price_cents: FightDisputeJob::MINIMUM_CONTESTED_AMOUNT_CENTS)))
+      dispute = create(:dispute_formalized, purchase: create(:purchase, link: create(:product, price_cents: FightDisputeJob::MINIMUM_CONTESTED_AMOUNT_CENTS)),
+                                            processor_amount_cents: FightDisputeJob::MINIMUM_CONTESTED_AMOUNT_CENTS, processor_currency: Currency::USD)
       dispute_evidence = create(:dispute_evidence, dispute:)
 
       props = described_class.new(dispute_evidence, purchase_route_id: dispute.purchase.external_id).props[:dispute_evidence]

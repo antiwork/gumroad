@@ -10,8 +10,10 @@ class FightDisputeJob
   MINIMUM_CONTESTED_AMOUNT_CENTS = 15_00
 
   # Below the minimum evidence is submitted only if the seller saved a response; seller-facing dispute copy reads this too.
+  # An amount we cannot place in USD is contested, so a large dispute is never skipped on a guess.
   def self.below_contest_minimum?(disputable)
-    disputable.disputed_amount_cents < MINIMUM_CONTESTED_AMOUNT_CENTS
+    amount = disputable.dispute_amount_usd_cents
+    amount.present? && amount < MINIMUM_CONTESTED_AMOUNT_CENTS
   end
 
   def perform(dispute_id)

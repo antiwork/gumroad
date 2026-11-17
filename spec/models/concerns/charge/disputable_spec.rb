@@ -362,6 +362,14 @@ describe Charge::Disputable, :vcr do
         expect(FightDisputeJob).to have_enqueued_sidekiq_job(purchase.dispute.id)
       end
 
+      it "records the amount the processor disputed, which need not be the sale's" do
+        event.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -40)
+
+        Purchase.handle_charge_event(event)
+
+        expect(purchase.reload.dispute).to have_attributes(processor_amount_cents: 40, processor_currency: Currency::USD)
+      end
+
       context "when the product is a subscription" do
         let(:product) { create(:subscription_product, user: seller) }
         let!(:purchase) do
@@ -440,6 +448,12 @@ describe Charge::Disputable, :vcr do
 
       context "when the purchase was made with PayPal Connect" do
         before { purchase.update_columns(charge_processor_id: PaypalChargeProcessor.charge_processor_id) }
+
+        it "records no processor amount" do
+          Purchase.handle_charge_event(event)
+
+          expect(purchase.reload.dispute.processor_amount_cents).to be_nil
+        end
 
         it "enqueues the PayPal delivery record job 10 minutes and 7 days out, once per delivery" do
           Purchase.handle_charge_event(event)
@@ -563,6 +577,12 @@ describe Charge::Disputable, :vcr do
           expect(balance_transaction.issued_amount_currency).to eq(Currency::USD)
           expect(balance_transaction.issued_amount_gross_cents).to eq(-purchase.gross_amount_refundable_cents)
           expect(seller.reload.unpaid_balance_cents).to eq initial_balance - purchase.payment_cents
+        end
+
+        it "records the disputed amount in the currency the processor pulled it in" do
+          Purchase.handle_charge_event(event)
+
+          expect(purchase.reload.dispute).to have_attributes(processor_amount_cents: 135, processor_currency: Currency::CAD)
         end
 
         it "snapshots the canonical gross the debit booked so the dispute-won re-credit can reuse it" do

@@ -52,6 +52,21 @@ module Charge::Disputable
       is_a?(Charge) ? amount_cents : total_transaction_cents
     end
 
+    # What the processor actually disputed, in canonical USD at this sale's own presentment rate.
+    # nil when no amount was recorded or it is in a currency the sale has no rate for.
+    def dispute_amount_usd_cents
+      amount = dispute&.processor_amount_cents
+      return if amount.nil?
+
+      currency = dispute.processor_currency.to_s.downcase
+      return amount if currency == Currency::USD
+
+      presentment_total_cents = presentment_refundable_amount_cents.to_i
+      return unless currency == presentment_currency.to_s.downcase && presentment_total_cents.positive?
+
+      (amount * disputed_amount_cents.to_r / presentment_total_cents).round
+    end
+
     # The disputed amount as it appears to everyone outside Gumroad's own accounting.
     #
     # Consumers are all human-facing, not machine-parsed: the seller chargeback notice /
@@ -127,6 +142,8 @@ module Charge::Disputable
       return
     end
 
+    # Read before the line below can fill it in with the full sale.
+    processor_disputed_amount = event.flow_of_funds&.issued_amount
     if event.flow_of_funds.nil? && event.charge_processor_id != StripeChargeProcessor.charge_processor_id
       event.flow_of_funds = FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -disputed_amount_cents)
     end
@@ -175,6 +192,11 @@ module Charge::Disputable
       end
     end
 
+    # The contest threshold reads this: a partial dispute is below the sale, a rolled-up one above it.
+    if processor_disputed_amount.present? && eligible_for_dispute_evidence?
+      dispute.processor_amount_cents = -processor_disputed_amount.cents
+      dispute.processor_currency = processor_disputed_amount.currency
+    end
     dispute.mark_formalized!
 
     perform_dispute_formalized_side_effects!(event, dispute)

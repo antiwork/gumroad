@@ -725,12 +725,14 @@ describe ContactingCreatorMailer do
       end
 
       context "when the disputed amount is below the contest minimum" do
-        before { allow(FightDisputeJob).to receive(:below_contest_minimum?).and_call_original }
+        before do
+          allow(FightDisputeJob).to receive(:below_contest_minimum?).and_call_original
+          dispute.update!(processor_amount_cents: 1_00, processor_currency: Currency::USD)
+        end
 
         let!(:dispute_evidence) { create(:dispute_evidence, dispute:) }
 
         it "makes the seller's information the condition for a response instead of promising to fight" do
-          expect(purchase.disputed_amount_cents).to be < FightDisputeJob::MINIMUM_CONTESTED_AMOUNT_CENTS
           book_chargeback_debits(dispute)
 
           body = ContactingCreatorMailer.chargeback_notice(dispute.id).body.encoded
@@ -765,12 +767,27 @@ describe ContactingCreatorMailer do
           end
         end
 
+        context "when the sale was paid with PayPal through Braintree" do
+          let(:purchase) do
+            create(:purchase, link: create(:product, user: seller), charge_processor_id: BraintreeChargeProcessor.charge_processor_id)
+          end
+          let!(:dispute_evidence) { nil }
+
+          it "does not ask for information the seller has no way to send" do
+            body = ContactingCreatorMailer.chargeback_notice(dispute.id).body.encoded
+
+            expect(body).not_to include "we respond only if you send us information"
+            expect(body).not_to include "Submit additional information"
+            expect(body).to include "We fight every dispute."
+          end
+        end
+
         context "when the disputed amount is exactly the minimum" do
           let(:purchase) { create(:purchase, link: create(:product, user: seller, price_cents: FightDisputeJob::MINIMUM_CONTESTED_AMOUNT_CENTS)) }
 
-          it "keeps promising to fight it in the notice and the reminder" do
-            expect(purchase.disputed_amount_cents).to eq(FightDisputeJob::MINIMUM_CONTESTED_AMOUNT_CENTS)
+          before { dispute.update!(processor_amount_cents: FightDisputeJob::MINIMUM_CONTESTED_AMOUNT_CENTS) }
 
+          it "keeps promising to fight it in the notice and the reminder" do
             notice = ContactingCreatorMailer.chargeback_notice(dispute.id).body.encoded
             expect(notice).to include "(in the next 72 hours) will help us win on your behalf."
             expect(notice).to include "We fight every dispute."
