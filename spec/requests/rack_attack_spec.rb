@@ -1128,7 +1128,7 @@ describe "Rack::Attack throttle", type: :request do
       Rack::Attack.configuration.throttled?(request)
     end
 
-    it "spends one bucket per token across every /v2 endpoint" do
+    it "spends one bucket per token across every /v2 endpoint and address" do
       travel_to(Time.current) do
         # Interleaved on purpose: a per-path bucket would let this run twice as deep.
         750.times do |i|
@@ -1137,25 +1137,13 @@ describe "Rack::Attack throttle", type: :request do
         end
 
         expect(throttled?(api_request("/v2/user"))).to be(true)
-        # The bucket is the token's, not the address's.
+        # The bucket is the token's, not the address's: the same token from a fresh address is still
+        # spent, and another token on the original address is untouched, because one address carries
+        # many sellers' tokens (an integration's egress, an office NAT). Address-level limiting is the
+        # zone's API backstop — a token string cannot be validated in middleware, so a rule here that
+        # trusts it would be free to bypass.
         expect(throttled?(api_request("/v2/user", ip: "203.0.113.47"))).to be(true)
-        # Another token on the same address is untouched: an integration's or an office's address
-        # carries many sellers' tokens, so authenticated traffic is never charged to the address.
         expect(throttled?(api_request("/v2/user", token: "another-api-token"))).to be(false)
-        expect(throttled?(api_request("/v2/user", token: ""))).to be(false)
-      end
-    end
-
-    it "limits tokenless /v2 traffic per IP without charging authenticated traffic to it" do
-      travel_to(Time.current) do
-        1500.times do |i|
-          expect(throttled?(api_request("/v2/sales", token: ""))).to be(false), "request #{i + 1} unexpectedly throttled"
-        end
-
-        expect(throttled?(api_request("/v2/sales", token: ""))).to be(true)
-        expect(throttled?(api_request("/v2/sales", token: "", ip: "203.0.113.45"))).to be(false)
-        # A token still gets through from the throttled address.
-        expect(throttled?(api_request("/v2/sales"))).to be(false)
       end
     end
 
