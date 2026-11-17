@@ -170,6 +170,8 @@ class Order::ChargeService
 
   def one_off_card_checkout?(purchases)
     return false unless Feature.active?(SKIP_PLATFORM_CUSTOMER_FEATURE, purchases.first.seller)
+    # One platform PM serves every seller group in the cart, and a customer-less clone is single use.
+    return false if order.purchases.non_free.pluck(:seller_id).uniq.count > 1
 
     purchases.none? do |purchase|
       purchase.save_card || purchase.is_preorder_authorization? || purchase.is_free_trial_purchase? ||

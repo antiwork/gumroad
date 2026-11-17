@@ -4088,7 +4088,8 @@ describe Order::ChargeService, :vcr do
 
   describe "#one_off_card_checkout?" do
     let(:seller) { create(:user) }
-    let(:service) { described_class.new(order: nil, params: {}) }
+    let(:order) { create(:order) }
+    let(:service) { described_class.new(order:, params: {}) }
     let(:product) { create(:product, user: seller) }
     let(:membership) { create(:membership_product, user: seller) }
 
@@ -4117,6 +4118,23 @@ describe Order::ChargeService, :vcr do
       it "is false when any purchase in the group needs the card kept" do
         expect(one_off?(build(:purchase, link: product), build(:purchase, link: product, save_card: true))).to be(false)
       end
+    end
+
+    it "is false for a cart with more than one seller" do
+      Feature.activate_user(described_class::SKIP_PLATFORM_CUSTOMER_FEATURE, seller)
+      mine = create(:purchase, link: product, seller:)
+      theirs = create(:purchase, link: create(:product))
+      order.purchases << [mine, theirs]
+
+      expect(one_off?(mine)).to be(false)
+    end
+
+    it "is true for a single-seller cart" do
+      Feature.activate_user(described_class::SKIP_PLATFORM_CUSTOMER_FEATURE, seller)
+      mine = create(:purchase, link: product, seller:)
+      order.purchases << mine
+
+      expect(one_off?(mine)).to be(true)
     end
 
     it "is false when the flag is off" do
