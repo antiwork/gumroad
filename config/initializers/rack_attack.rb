@@ -11,6 +11,22 @@ class Rack::Attack
   # hold a request far longer than the base window.
   Rack::Attack.throttled_response_retry_after_header = true
 
+  # API clients read the JSON envelope, so a throttled `/v2` call answers in JSON with the same
+  # retry-after math as the default responder. Web requests keep its plain-text body.
+  default_throttled_responder = Rack::Attack.configuration.throttled_responder
+  Rack::Attack.throttled_responder = lambda do |req|
+    next default_throttled_responder.call(req) unless req.path.match?(%r{\A/(?:api/)?v2/})
+
+    match_data = req.env["rack.attack.match_data"] || {}
+    period = match_data[:period].to_i
+    retry_after = period.positive? ? period - (match_data[:epoch_time].to_i % period) : 60
+    [
+      429,
+      { "content-type" => "application/json", "retry-after" => retry_after.to_s },
+      [{ success: false, message: "Rate limited. Retry after #{retry_after} seconds." }.to_json],
+    ]
+  end
+
   class Request < ::Rack::Request
     # When the server is behind a load balancer
     def remote_ip
@@ -570,6 +586,19 @@ class Rack::Attack
       token = req.params["access_token"].presence || req.env["HTTP_AUTHORIZATION"].to_s[/\Abearer\s+(\S+)/i, 1]
       token.presence
     end
+  end
+
+  # The public API's own limit, per OAuth token (with an IP bucket for tokenless callers). The
+  # edge used to cap `/v2` per IP at 6000/hour and ban the address for the rest of the hour: a
+  # CLI customer-list export is one request per 10 sales, so the ban took the seller's own
+  # browser down with it (coconut#568). A rate, not an hourly volume, is what a bulk read fits in.
+  # Initial: 1500rpm, Max: 7500 requests/9 hours
+  v2_api_path = %r{\A/(?:api/)?v2/}
+  throttle_with_exponential_backoff(name: "v2_api/token", requests: 1500, period: 60.seconds) do |req|
+    v2_product_token.call(req) if req.path.match?(v2_api_path)
+  end
+  throttle_with_exponential_backoff(name: "v2_api/ip", requests: 1500, period: 60.seconds) do |req|
+    req.remote_ip if req.path.match?(v2_api_path)
   end
 
   # Do not throttle for health check requests
