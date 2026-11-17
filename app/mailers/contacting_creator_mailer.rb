@@ -109,7 +109,7 @@ class ContactingCreatorMailer < ApplicationMailer
   }.freeze
   private_constant :DISPUTE_REASON_COPY
 
-  SMALL_DISPUTE_RESPONSE_COPY = "For a dispute this small, our payment processor's fee to respond is more than we would usually recover, so we respond only if you send us information about the sale."
+  SMALL_DISPUTE_RESPONSE_COPY = "For a dispute this small, our payment processor's fee to respond is more than we would usually recover, so we respond only if you send us information about the sale. If your customer tells you they canceled the dispute, let us know: a canceled dispute is still lost unless we respond."
   private_constant :SMALL_DISPUTE_RESPONSE_COPY
 
   def chargeback_notice(dispute_id)
