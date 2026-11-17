@@ -894,6 +894,24 @@ describe OfferCode do
       end
     end
 
+    it "closes the ending sale for a product default and checkout at a shared boundary" do
+      boundary = 1.week.from_now.change(usec: 0)
+      ending = universal_code(auto_apply: true, amount_percentage: 20, valid_at: Time.current, expires_at: boundary)
+      ending.save!
+      starting = universal_code(auto_apply: true, valid_at: boundary, expires_at: 2.weeks.from_now)
+      starting.save!
+      @product.update!(default_offer_code_id: ending.id)
+
+      { boundary - 1.second => [ending, 1600], boundary => [starting, 1400] }.each do |now, (live, price_cents)|
+        travel_to(now) do
+          Current.reset
+          expect(User.includes(:auto_apply_offer_code).find(seller.id).auto_apply_offer_code).to eq(live)
+          expect(@product.reload.discounted_price_cents(2000)).to eq(price_cents)
+          expect([ending, starting].reject(&:inactive?)).to eq([live])
+        end
+      end
+    end
+
     it "resolves the auto-applied code that is open now" do
       scheduled = universal_code(auto_apply: true, valid_at: 1.week.from_now, expires_at: 2.weeks.from_now)
       scheduled.save!
@@ -1292,6 +1310,14 @@ describe OfferCode do
   end
 
   describe "#inactive?" do
+    context "when a manually applied offer code reaches its expiry instant" do
+      let(:offer_code) { create(:offer_code, valid_at: 1.day.ago, expires_at: 1.week.from_now.change(usec: 0)) }
+
+      it "returns false" do
+        travel_to(offer_code.expires_at) { expect(offer_code.inactive?).to eq(false) }
+      end
+    end
+
     context "when the offer code has no valid or expiriration date" do
       let(:offer_code) { create(:offer_code) }
 

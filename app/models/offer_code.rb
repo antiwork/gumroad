@@ -356,8 +356,14 @@ class OfferCode < ApplicationRecord
     end
   end
 
+  # An automatic sale is over at its expiry instant, as in `active`, so a sale starting then is the
+  # only one open at the handover. Other codes still redeem through their expiry instant.
   def inactive?
-    !!(valid_at&.future? || expires_at&.past?)
+    now = Time.current
+    return true if valid_at.present? && valid_at > now
+    return false if expires_at.nil?
+
+    auto_apply? ? expires_at <= now : expires_at < now
   end
 
   # Deleted options must retain the product restriction until the seller changes it.
@@ -806,7 +812,7 @@ class OfferCode < ApplicationRecord
       # Only what is left of each window can collide: an ended code never applies again, so a nil or
       # past start must not reach back into it.
       from = [valid_at, Time.current].compact.max
-      return if expires_at.present? && expires_at < from
+      return if expires_at.present? && expires_at <= from
 
       # `update` assigns associations before the seller lock, fixing the REPEATABLE READ snapshot,
       # so it needs a current read. A create's first read is the seller lock; locking here too would
