@@ -222,6 +222,7 @@ describe PostResendApi, :freeze_time do
     it "claims no purchase for a recipient carrying no purchase, follow or affiliation" do
       send_default_email
       expect(sent_email_content).not_to include("You've received this")
+      expect(sent_email_content).not_to include("{{seller_update_reason}}")
     end
 
     context "when installment_type='product' or 'variant'" do
