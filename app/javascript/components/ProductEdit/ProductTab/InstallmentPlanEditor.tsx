@@ -59,6 +59,10 @@ export const InstallmentPlanEditor = ({
           </Fieldset>
         }
       />
+      <FieldsetDescription>
+        This sets up Gumroad installment plans. It is separate from Klarna and other buy-now-pay-later options buyers
+        may see at checkout, which are not affected by this setting.
+      </FieldsetDescription>
       {isPWYW ? (
         <FieldsetDescription id={noteId}>
           Installments aren&apos;t available with pay what you want.
