@@ -405,6 +405,36 @@ describe UpdatePayoutMethod do
       end
     end
 
+    describe "when an Argentine CBU belongs to a bank Stripe cannot pay" do
+      let(:user) { create(:named_user) }
+      let!(:existing_bank_account) { create(:argentina_bank_account, user:, stripe_bank_account_id: "ba_123") }
+      let(:cbu) { "4530001512345678901233" }
+      let(:params) do
+        ActionController::Parameters.new(
+          bank_account: {
+            type: ArgentinaBankAccount.name,
+            account_holder_full_name: "Named User",
+            account_number: cbu,
+            account_number_confirmation: cbu,
+          }
+        )
+      end
+
+      it "names the bank, flags the account number, and keeps the current account" do
+        allow(Stripe::Token).to receive(:create).and_raise(
+          Stripe::InvalidRequestError.new("Invalid account number", "bank_account[account_number]", code: "account_number_invalid")
+        )
+
+        result = described_class.new(user_params: params, seller: user).process
+
+        expect(result[:error]).to eq(:bank_account_error)
+        expect(result[:data]).to include("doesn't support the bank this account number belongs to")
+        expect(result[:field]).to eq(:account_number)
+        expect(user.reload.active_bank_account).to eq(existing_bank_account)
+        expect(user.bank_accounts.count).to eq(1)
+      end
+    end
+
     describe "when account number exceeds maximum length" do
       let(:user) { create(:named_user) }
 
