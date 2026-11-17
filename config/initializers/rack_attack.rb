@@ -11,6 +11,22 @@ class Rack::Attack
   # hold a request far longer than the base window.
   Rack::Attack.throttled_response_retry_after_header = true
 
+  # API clients read the JSON envelope, so a throttled `/v2` call answers in JSON with the same
+  # retry-after math as the default responder. Web requests keep its plain-text body.
+  default_throttled_responder = Rack::Attack.configuration.throttled_responder
+  Rack::Attack.throttled_responder = lambda do |req|
+    next default_throttled_responder.call(req) unless req.path.match?(%r{\A/(?:api/)?v2/})
+
+    match_data = req.env["rack.attack.match_data"] || {}
+    period = match_data[:period].to_i
+    retry_after = period.positive? ? period - (match_data[:epoch_time].to_i % period) : 60
+    [
+      429,
+      { "content-type" => "application/json", "retry-after" => retry_after.to_s },
+      [{ success: false, message: "Rate limited. Retry after #{retry_after} seconds." }.to_json],
+    ]
+  end
+
   class Request < ::Rack::Request
     # When the server is behind a load balancer
     def remote_ip
@@ -570,6 +586,25 @@ class Rack::Attack
       token = req.params["access_token"].presence || req.env["HTTP_AUTHORIZATION"].to_s[/\Abearer\s+(\S+)/i, 1]
       token.presence
     end
+  end
+
+  # The public API's own rate limit: 1500 requests/minute per access token. The edge used to cap `/v2`
+  # per IP (6000/hour, plus an hour-long ban on the address) and a CLI customer-list export — one
+  # request per 10 sales — tripped it, taking the seller's browser down with it (coconut#568).
+  #
+  # `max_level: 1` skips the backoff tiers on purpose: theirs are a volume budget over 8^N-second
+  # windows, and a bulk export is exactly a long, high-volume read, so they would re-create the
+  # lockout this replaces. Holding the rate is the protection.
+  #
+  # Address-level limiting is deliberately not here: the middleware cannot tell a real token from a
+  # made-up string without a lookup, so an IP rule that trusts the token is free to bypass, and one
+  # that counts authenticated traffic charges every seller behind an integration's or an office's
+  # address to a shared budget. The zone's API backstop counts every `/v2` request per IP instead
+  # (gumroad-private#4747).
+  # Initial: 1500rpm, no backoff tiers
+  v2_api_path = %r{\A/(?:api/)?v2/}
+  throttle_with_exponential_backoff(name: "v2_api/token", requests: 1500, period: 60.seconds, max_level: 1) do |req|
+    v2_product_token.call(req) if req.path.match?(v2_api_path)
   end
 
   # Do not throttle for health check requests

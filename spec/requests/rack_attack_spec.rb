@@ -1108,4 +1108,70 @@ describe "Rack::Attack throttle", type: :request do
       reset_rack_attack!
     end
   end
+
+  describe "public API-wide rate limit" do
+    before { reset_rack_attack! }
+    after { reset_rack_attack! }
+
+    def api_request(path, token: "probe-api-token", ip: "203.0.113.44")
+      Rack::Attack::Request.new(
+        Rack::MockRequest.env_for(
+          path,
+          method: "GET",
+          "HTTP_CF_CONNECTING_IP" => ip,
+          "HTTP_AUTHORIZATION" => "Bearer #{token}",
+        )
+      )
+    end
+
+    def throttled?(request)
+      Rack::Attack.configuration.throttled?(request)
+    end
+
+    it "spends one bucket per token across every /v2 endpoint and address" do
+      travel_to(Time.current) do
+        # Interleaved on purpose: a per-path bucket would let this run twice as deep.
+        750.times do |i|
+          expect(throttled?(api_request("/v2/sales"))).to be(false), "sales request #{i + 1} unexpectedly throttled"
+          expect(throttled?(api_request("/api/v2/products"))).to be(false), "products request #{i + 1} unexpectedly throttled"
+        end
+
+        expect(throttled?(api_request("/v2/user"))).to be(true)
+        # The bucket is the token's, not the address's: the same token from a fresh address is still
+        # spent, and another token on the original address is untouched, because one address carries
+        # many sellers' tokens (an integration's egress, an office NAT). Address-level limiting is the
+        # zone's API backstop — a token string cannot be validated in middleware, so a rule here that
+        # trusts it would be free to bypass.
+        expect(throttled?(api_request("/v2/user", ip: "203.0.113.47"))).to be(true)
+        expect(throttled?(api_request("/v2/user", token: "another-api-token"))).to be(false)
+      end
+    end
+
+    it "answers a throttled API request with a JSON body and retry-after" do
+      request = api_request("/v2/sales")
+      epoch = 1_700_000_000
+      request.env["rack.attack.match_data"] = { period: 60, epoch_time: epoch }
+
+      status, headers, body = Rack::Attack.configuration.throttled_responder.call(request)
+
+      expect(status).to eq(429)
+      expect(headers["content-type"]).to eq("application/json")
+      expect(headers["retry-after"]).to eq((60 - (epoch % 60)).to_s)
+      expect(JSON.parse(body.first)).to eq(
+        "success" => false,
+        "message" => "Rate limited. Retry after #{60 - (epoch % 60)} seconds.",
+      )
+    end
+
+    it "keeps the plain-text body for web requests" do
+      request = Rack::Attack::Request.new(Rack::MockRequest.env_for("/l/some-product"))
+      request.env["rack.attack.match_data"] = { period: 60, epoch_time: 1_700_000_000 }
+
+      status, headers, body = Rack::Attack.configuration.throttled_responder.call(request)
+
+      expect(status).to eq(429)
+      expect(headers["content-type"]).to eq("text/plain")
+      expect(body).to eq(["Retry later\n"])
+    end
+  end
 end

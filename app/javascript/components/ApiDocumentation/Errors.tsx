@@ -9,6 +9,10 @@ const ERROR_CODES = [
   { code: "401 Unauthorized", description: "you did not provide a valid access token." },
   { code: "402 Request Failed", description: "the parameters were valid but request failed." },
   { code: "404 Not Found", description: "the requested item doesn't exist." },
+  {
+    code: "429 Too Many Requests",
+    description: "you exceeded the rate limit. Wait the number of seconds in the Retry-After header, then retry.",
+  },
   { code: "500, 502, 503, 504 Server Error", description: "something else went wrong on our end." },
 ];
 
@@ -47,6 +51,11 @@ export const Errors = () => (
         </CodeSnippet>
         <p></p>
         <p>When present, the message will describe the particular problem and suggestions on what went wrong.</p>
+        <p>
+          Requests are rate limited per access token: 1500 requests per minute, and a request over that returns{" "}
+          <strong>429</strong> with a <strong>Retry-After</strong> header giving the number of seconds to wait before
+          retrying.
+        </p>
       </div>
     </CardContent>
   </Card>
