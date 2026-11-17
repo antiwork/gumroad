@@ -112,7 +112,6 @@ class PostSendgridApi
         has_post_url: @post.shown_on_profile?,
         has_download_button: @cache[@post][:has_files?],
         has_comment_button: @post.shown_on_profile? && @post.allow_comments?,
-        has_seller_update_reason: @post.seller_or_product_or_variant_type?,
         gumroad_url: root_url,
       }
       @cache[@post][:template] ||= begin
@@ -150,30 +149,10 @@ class PostSendgridApi
         personalization.add_substitution SendGrid::Substitution.new(key: "{{t_post_a_comment}}", value: "Reply with a comment")
       end
 
-      if assigns[:has_seller_update_reason]
-        # Recipients who got the product for free ($0 purchase, free download, PWYW at $0)
-        # never "purchased" anything, so the footer uses "got" wording for them.
-        free_purchase = recipient[:purchase]&.free_purchase?
-        if @post.seller_type?
-          seller_name = @post.seller.name.presence || @post.seller.email || "Gumroad"
-          seller_update_reason = free_purchase ?
-                                   "You've received this post because you got a product from #{seller_name}." :
-                                   "You've received this post because you've purchased a product from #{seller_name}."
-        elsif @post.product_or_variant_type?
-          product_name = recipient[:product_name] || @cache[@post][:sanitized_product_name]
-          download_url_or_product_url = recipient[:url_redirect]&.download_page_url || @post.link.long_url
-          seller_update_reason = if @post.member_cancellation_trigger?
-            "You've received this email because you cancelled your membership to <a href=\"#{download_url_or_product_url}\">#{product_name}</a>."
-          elsif @post.link.is_recurring_billing
-            "You've received this email because you subscribed to <a href=\"#{download_url_or_product_url}\">#{product_name}</a>."
-          elsif free_purchase
-            "You've received this email because you got <a href=\"#{download_url_or_product_url}\">#{product_name}</a>."
-          else
-            "You've received this email because you've purchased <a href=\"#{download_url_or_product_url}\">#{product_name}</a>."
-          end
-        end
-        personalization.add_substitution SendGrid::Substitution.new(key: "{{seller_update_reason}}", value: seller_update_reason)
-      end
+      # An empty reason (a preview carries no recipient record) still has to replace the token,
+      # or SendGrid leaves the literal placeholder in the email.
+      reason = PostEmailFooterReason.build(post: @post, recipient:, cache: @cache)
+      personalization.add_substitution SendGrid::Substitution.new(key: "{{seller_update_reason}}", value: reason.to_s)
 
       personalization.add_substitution SendGrid::Substitution.new(key: "{{t_powered_by}}", value: "Powered by")
       personalization.add_substitution SendGrid::Substitution.new(key: "{{t_unsubscribe}}", value: "Unsubscribe")

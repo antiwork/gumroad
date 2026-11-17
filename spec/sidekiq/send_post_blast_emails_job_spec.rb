@@ -566,6 +566,70 @@ describe SendPostBlastEmailsJob, :freeze_time do
       end
     end
 
+    describe "footer reason" do
+      let(:product) { create(:product, user: @seller, name: "Product one") }
+
+      [MailerInfo::EMAIL_PROVIDER_SENDGRID, MailerInfo::EMAIL_PROVIDER_RESEND].each do |provider|
+        context "when sent through #{provider}" do
+          let(:api) { provider == MailerInfo::EMAIL_PROVIDER_RESEND ? PostResendApi : PostSendgridApi }
+
+          before do
+            allow(PostEmailApi).to receive(:provider_for).and_return(provider)
+            PostResendApi.mails.clear
+          end
+
+          def content_for(email) = api.mails.fetch(email)[:content]
+          def send_blast(post) = described_class.new.perform(create(:blast, :just_requested, post:).id)
+
+          it "tells a free buyer they got a product and a paying buyer they purchased one" do
+            paid = create(:purchase, link: product)
+            free = create(:free_purchase, link: product)
+            send_blast(create(:seller_post, :published, seller: @seller))
+
+            expect(content_for(paid.email)).to include("You've received this email because you've purchased a product from #{@seller.name}.")
+            expect(content_for(free.email)).to include("You've received this email because you got a product from #{@seller.name}.")
+            expect(content_for(free.email)).not_to include("purchased")
+          end
+
+          it "tells a free buyer of a product post they got the product" do
+            free = create(:free_purchase, link: product)
+            send_blast(create(:product_post, :published, link: product, bought_products: [product.unique_permalink]))
+
+            expect(content_for(free.email)).to match(/because you got <a href="[^"]+">#{product.name}<\/a>\./)
+          end
+
+          it "names the follow in a follower post" do
+            follower = create(:active_follower, user: @seller)
+            send_blast(create(:follower_post, :published, seller: @seller))
+
+            expect(content_for(follower.email)).to include("You've received this email because you follow #{@seller.name}.")
+          end
+
+          it "names the affiliation in an affiliate post" do
+            affiliate = create(:direct_affiliate, seller: @seller, send_posts: true)
+            affiliate.products << product
+            send_blast(create(:affiliate_post, :published, seller: @seller, affiliate_products: [product.unique_permalink]))
+
+            expect(content_for(affiliate.affiliate_user.email)).to include("You've received this email because you're an affiliate of #{@seller.name}.")
+          end
+
+          it "states each recipient's own reason in an audience post" do
+            follower = create(:active_follower, user: @seller)
+            affiliate = create(:direct_affiliate, seller: @seller, send_posts: true)
+            affiliate.products << product
+            paid = create(:purchase, link: product)
+            free = create(:free_purchase, link: product)
+            send_blast(create(:audience_post, :published, seller: @seller))
+
+            expect(content_for(follower.email)).to include("You've received this email because you follow #{@seller.name}.")
+            expect(content_for(affiliate.affiliate_user.email)).to include("You've received this email because you're an affiliate of #{@seller.name}.")
+            expect(content_for(paid.email)).to include("You've received this email because you've purchased a product from #{@seller.name}.")
+            expect(content_for(free.email)).to include("You've received this email because you got a product from #{@seller.name}.")
+          end
+        end
+      end
+    end
+
     describe "recipients who left the audience before the provider handoff" do
       # `update_column` stands in for an eligibility change landing without the audience row
       # being rebuilt (the projection converges out of band), then the assertion pins that the

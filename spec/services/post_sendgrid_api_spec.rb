@@ -209,17 +209,41 @@ describe PostSendgridApi, :freeze_time do
   end
 
   describe "Update reason" do # little text in the footer indicating why the recipient got this email
-    it "is generic when installment_type='seller'" do
-      @post.update!(installment_type: Installment::SELLER_TYPE)
-      send_default_email
-      expect(sent_email_content).to include("You've received this post because you've purchased a product from #{@post.seller.name}.")
+    before { @post.update!(installment_type: Installment::SELLER_TYPE) }
+
+    it "names the purchase for a paying recipient" do
+      send_emails(recipients: [{ email: "c1@example.com", purchase: create(:purchase, link: create(:product, user: @seller)) }])
+      expect(sent_email_content).to include("You've received this email because you've purchased a product from #{@post.seller.name}.")
     end
 
-    it "avoids 'purchased' wording when installment_type='seller' and the recipient's purchase was free" do
-      @post.update!(installment_type: Installment::SELLER_TYPE)
+    it "says 'email', not 'post', for a free recipient" do
       purchase = create(:free_purchase, link: create(:product, user: @seller))
       send_emails(recipients: [{ email: "c1@example.com", purchase: }])
-      expect(sent_email_content).to include("You've received this post because you got a product from #{@post.seller.name}.")
+      expect(sent_email_content).to include("You've received this email because you got a product from #{@post.seller.name}.")
+    end
+
+    it "names the follow in a follower post" do
+      @post.update!(installment_type: Installment::FOLLOWER_TYPE)
+      send_emails(recipients: [{ email: "c1@example.com", follower: create(:follower, user: @seller) }])
+      expect(sent_email_content).to include("You've received this email because you follow #{@post.seller.name}.")
+    end
+
+    it "names the affiliation in an affiliate post" do
+      @post.update!(installment_type: Installment::AFFILIATE_TYPE)
+      send_emails(recipients: [{ email: "c1@example.com", affiliate: create(:direct_affiliate, seller: @seller) }])
+      expect(sent_email_content).to include("You've received this email because you're an affiliate of #{@post.seller.name}.")
+    end
+
+    it "names the purchase for a customer in an audience post" do
+      @post.update!(installment_type: Installment::AUDIENCE_TYPE)
+      send_emails(recipients: [{ email: "c1@example.com", purchase: create(:free_purchase, link: create(:product, user: @seller)) }])
+      expect(sent_email_content).to include("You've received this email because you got a product from #{@post.seller.name}.")
+    end
+
+    it "claims no purchase for a recipient carrying no purchase, follow or affiliation" do
+      send_default_email
+      expect(sent_email_content).not_to include("You've received this")
+      expect(sent_email_content).not_to include("{{seller_update_reason}}")
     end
 
     context "when installment_type='product' or 'variant'" do
@@ -231,33 +255,33 @@ describe PostSendgridApi, :freeze_time do
       it "mentions when it's due to the subscription being cancelled" do # only workflows
         @product.update!(is_recurring_billing: true)
         @post.update!(workflow_trigger: Installment::MEMBER_CANCELLATION_WORKFLOW_TRIGGER)
-        send_default_email
+        send_emails(recipients: [{ email: "c1@example.com", purchase: create(:purchase, link: @product) }])
         expect(sent_email_content).to include("You've received this email because you cancelled your membership to <a href=\"#{@post.link.long_url}\">#{@post.link.name}</a>.")
 
         # similar but different link when there's a url_redirect
         url_redirect = create(:url_redirect, installment: @post)
-        send_emails(recipients: [{ email: "c1@example.com", url_redirect: }])
+        send_emails(recipients: [{ email: "c1@example.com", purchase: create(:purchase, link: @product), url_redirect: }])
         expect(sent_email_content).to include("You've received this email because you cancelled your membership to <a href=\"#{url_redirect.download_page_url}\">#{@post.link.name}</a>.")
       end
 
       it "mentions when it's due to it being an active subscription" do
         @product.update!(is_recurring_billing: true)
-        send_default_email
+        send_emails(recipients: [{ email: "c1@example.com", purchase: create(:purchase, link: @product) }])
         expect(sent_email_content).to include("You've received this email because you subscribed to <a href=\"#{@post.link.long_url}\">#{@post.link.name}</a>.")
 
         # similar but different link when there's a url_redirect
         url_redirect = create(:url_redirect, installment: @post)
-        send_emails(recipients: [{ email: "c1@example.com", url_redirect: }])
+        send_emails(recipients: [{ email: "c1@example.com", purchase: create(:purchase, link: @product), url_redirect: }])
         expect(sent_email_content).to include("You've received this email because you subscribed to <a href=\"#{url_redirect.download_page_url}\">#{@post.link.name}</a>.")
       end
 
       it "mentions when it's due to it being a purchase" do
-        send_default_email
+        send_emails(recipients: [{ email: "c1@example.com", purchase: create(:purchase, link: @product) }])
         expect(sent_email_content).to include("You've received this email because you've purchased <a href=\"#{@post.link.long_url}\">#{@post.link.name}</a>.")
 
         # similar but different link when there's a url_redirect
         url_redirect = create(:url_redirect, installment: @post)
-        send_emails(recipients: [{ email: "c1@example.com", url_redirect: }])
+        send_emails(recipients: [{ email: "c1@example.com", purchase: create(:purchase, link: @product), url_redirect: }])
         expect(sent_email_content).to include("You've received this email because you've purchased <a href=\"#{url_redirect.download_page_url}\">#{@post.link.name}</a>.")
       end
 
