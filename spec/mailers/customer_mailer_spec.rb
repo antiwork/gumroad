@@ -1111,7 +1111,7 @@ describe CustomerMailer do
         expect(mail.body.encoded).to have_link("View content", href: purchase.product_purchases.first.url_redirect.download_page_url)
         expect(mail.body.sanitized).to have_text("Bundle Product 2")
         expect(mail.body.encoded).to have_link("View content", href: purchase.product_purchases.second.url_redirect.download_page_url)
-        expect(mail.body.sanitized).to have_text("Questions about your products? Contact Seller by replying to this email.")
+        expect(mail.body.sanitized).to have_text("Have any questions? Contact Seller by replying to this email.")
       end
     end
 
@@ -1125,14 +1125,14 @@ describe CustomerMailer do
       end
 
       it "generates questions note with reply" do
-        expect(mail.body.sanitized).to have_text("Questions about your product? Contact Seller by replying to this email.")
+        expect(mail.body.sanitized).to have_text("Have any questions? Contact Seller by replying to this email.")
       end
 
       context "when for_email is set to false" do
         subject(:mail) { CustomerMailer.receipt(purchase.id, for_email: false) }
 
         it "generates questions note with email" do
-          expect(mail.body.sanitized).to have_text("Questions about your product? Contact Seller at #{purchase.seller.email}.")
+          expect(mail.body.sanitized).to have_text("Have any questions? Contact Seller at #{purchase.seller.email}.")
         end
       end
     end
