@@ -112,7 +112,6 @@ class PostSendgridApi
         has_post_url: @post.shown_on_profile?,
         has_download_button: @cache[@post][:has_files?],
         has_comment_button: @post.shown_on_profile? && @post.allow_comments?,
-        has_seller_update_reason: @post.seller_or_product_or_variant_type?,
         gumroad_url: root_url,
       }
       @cache[@post][:template] ||= begin
@@ -150,12 +149,10 @@ class PostSendgridApi
         personalization.add_substitution SendGrid::Substitution.new(key: "{{t_post_a_comment}}", value: "Reply with a comment")
       end
 
-      if assigns[:has_seller_update_reason]
-        # An empty reason (a preview carries no recipient record) still has to replace the token,
-        # or SendGrid leaves the literal placeholder in the email.
-        reason = PostEmailFooterReason.build(post: @post, recipient:, cache: @cache)
-        personalization.add_substitution SendGrid::Substitution.new(key: "{{seller_update_reason}}", value: reason.to_s)
-      end
+      # An empty reason (a preview carries no recipient record) still has to replace the token,
+      # or SendGrid leaves the literal placeholder in the email.
+      reason = PostEmailFooterReason.build(post: @post, recipient:, cache: @cache)
+      personalization.add_substitution SendGrid::Substitution.new(key: "{{seller_update_reason}}", value: reason.to_s)
 
       personalization.add_substitution SendGrid::Substitution.new(key: "{{t_powered_by}}", value: "Powered by")
       personalization.add_substitution SendGrid::Substitution.new(key: "{{t_unsubscribe}}", value: "Unsubscribe")

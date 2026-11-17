@@ -191,7 +191,7 @@ module PostBlastSending
     purchase_ids = members_with_specifics.map { _2[:purchase]&.id }.compact
     return if purchase_ids.empty?
 
-    purchases = Purchase.joins(:link).where(id: purchase_ids).select(:id, :link_id, :json_data, :subscription_id, :full_name, "links.name as product_name").index_by(&:id)
+    purchases = Purchase.joins(:link).where(id: purchase_ids).select(:id, :link_id, :json_data, :subscription_id, :full_name, :price_cents, :shipping_cents, "links.name as product_name").index_by(&:id)
     members_with_specifics.each do |_member, specifics|
       purchase_id = specifics[:purchase]&.id
       next if purchase_id.nil?
@@ -201,7 +201,9 @@ module PostBlastSending
         specifics[:product_name] = strip_tags(purchase.product_name)
       end
       specifics[:subscription] = Subscription.new(id: purchase.subscription_id) if purchase.subscription_id.present?
-      # :purchase here is a bare Purchase.new(id:) stub, so the name has to be carried separately —
+      # The footer's free_purchase? reads these off the stub; left nil, every free buyer reads as paid.
+      specifics[:purchase].assign_attributes(price_cents: purchase.price_cents, shipping_cents: purchase.shipping_cents)
+      # :purchase here is a Purchase.new(id:) stub, so the name has to be carried separately —
       # reading full_name off it would silently return nil for every recipient in a blast.
       specifics[:purchaser_name] = purchase.full_name if purchase.full_name.present?
     end

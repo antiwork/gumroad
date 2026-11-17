@@ -125,7 +125,8 @@ class PostResendApi
         "{{subject}}" => @post.subject,
         "{{t_powered_by}}" => "Powered by",
         "{{t_unsubscribe}}" => "Unsubscribe",
-        "{{unsubscribe_url}}" => build_unsubscribe_url(recipient)
+        "{{unsubscribe_url}}" => build_unsubscribe_url(recipient),
+        "{{seller_update_reason}}" => PostEmailFooterReason.build(post: @post, recipient:, cache: @cache),
       }
 
       if assigns[:has_post_url]
@@ -139,10 +140,6 @@ class PostResendApi
 
       if assigns[:has_comment_button]
         substitutions["{{t_post_a_comment}}"] = "Reply with a comment"
-      end
-
-      if assigns[:has_seller_update_reason]
-        substitutions["{{seller_update_reason}}"] = PostEmailFooterReason.build(post: @post, recipient:, cache: @cache)
       end
 
       content = content.dup
@@ -167,7 +164,6 @@ class PostResendApi
         has_post_url: @post.shown_on_profile?,
         has_download_button: @cache[@post][:has_files?],
         has_comment_button: @post.shown_on_profile? && @post.allow_comments?,
-        has_seller_update_reason: @post.seller_or_product_or_variant_type?,
         gumroad_url: root_url,
       }
       @cache[@post][:template] ||= begin

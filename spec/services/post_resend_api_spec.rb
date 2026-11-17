@@ -209,14 +209,22 @@ describe PostResendApi, :freeze_time do
       expect(sent_email_content).to include("You've received this email because you got a product from #{@post.seller.name}.")
     end
 
-    it "names the follow when the recipient is a follower" do
+    it "names the follow in a follower post" do
+      @post.update!(installment_type: Installment::FOLLOWER_TYPE)
       send_emails(recipients: [{ email: "c1@example.com", follower: create(:follower, user: @seller) }])
       expect(sent_email_content).to include("You've received this email because you follow #{@post.seller.name}.")
     end
 
-    it "names the affiliation when the recipient is an affiliate" do
+    it "names the affiliation in an affiliate post" do
+      @post.update!(installment_type: Installment::AFFILIATE_TYPE)
       send_emails(recipients: [{ email: "c1@example.com", affiliate: create(:direct_affiliate, seller: @seller) }])
       expect(sent_email_content).to include("You've received this email because you're an affiliate of #{@post.seller.name}.")
+    end
+
+    it "names the purchase for a customer in an audience post" do
+      @post.update!(installment_type: Installment::AUDIENCE_TYPE)
+      send_emails(recipients: [{ email: "c1@example.com", purchase: create(:free_purchase, link: create(:product, user: @seller)) }])
+      expect(sent_email_content).to include("You've received this email because you got a product from #{@post.seller.name}.")
     end
 
     it "claims no purchase for a recipient carrying no purchase, follow or affiliation" do

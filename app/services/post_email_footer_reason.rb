@@ -1,8 +1,7 @@
 # frozen_string_literal: true
 
-# Why a recipient got a post email. Both senders render this sentence; as separate copies they
-# drifted ("post" vs "email") and claimed a purchase for a recipient whose record carries none.
-# The recipient carries at most one of :purchase, :follower, :affiliate; a preview gets none.
+# Why a recipient got a post email, shared by both senders. The recipient carries at most one of
+# :purchase, :follower, :affiliate; a preview gets none, so it gets no reason.
 module PostEmailFooterReason
   module_function
 
@@ -14,11 +13,7 @@ module PostEmailFooterReason
     return "You've received this email because you're an affiliate of #{seller_name}." if recipient[:affiliate]
 
     # A $0 purchase (free download, PWYW at $0) is not a purchase, so the footer says "got".
-    if post.seller_type?
-      recipient[:purchase].free_purchase? ?
-        "You've received this email because you got a product from #{seller_name}." :
-        "You've received this email because you've purchased a product from #{seller_name}."
-    elsif post.product_or_variant_type?
+    if post.product_or_variant_type?
       product_name = recipient[:product_name] || cache[post][:sanitized_product_name]
       product_url = recipient[:url_redirect]&.download_page_url || post.link.long_url
       if post.member_cancellation_trigger?
@@ -30,6 +25,10 @@ module PostEmailFooterReason
       else
         "You've received this email because you've purchased <a href=\"#{product_url}\">#{product_name}</a>."
       end
+    else
+      recipient[:purchase].free_purchase? ?
+        "You've received this email because you got a product from #{seller_name}." :
+        "You've received this email because you've purchased a product from #{seller_name}."
     end
   end
 end
