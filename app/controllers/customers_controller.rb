@@ -140,6 +140,16 @@ class CustomersController < Sellers::BaseController
       [(total / CUSTOMERS_PER_PAGE.to_f).ceil, MAX_RESULT_WINDOW / CUSTOMERS_PER_PAGE].min
     end
 
+    # Amount filters arrive as user-controlled strings; a non-numeric value must be ignored,
+    # not converted — BigDecimal() raises on arbitrary input and would 500 the page.
+    def numeric_amount?(value)
+      return false if value.blank?
+      BigDecimal(value)
+      true
+    rescue ArgumentError, TypeError
+      false
+    end
+
     def fetch_sales(query: nil, sort: nil, products: nil, variants: nil, excluded_products: nil, excluded_variants: nil, minimum_amount_cents: nil, maximum_amount_cents: nil, created_after: nil, created_before: nil, country: nil, active_customers_only: false, minimum_license_uses: nil)
       search_options = {
         seller: current_seller,
@@ -169,8 +179,8 @@ class CustomersController < Sellers::BaseController
         search_options[:exclude_unreversed_chargedback] = true
       end
 
-      search_options[:price_greater_than] = get_usd_cents(current_seller.currency_type, minimum_amount_cents) if minimum_amount_cents.present?
-      search_options[:price_less_than] = get_usd_cents(current_seller.currency_type, maximum_amount_cents) if maximum_amount_cents.present?
+      search_options[:price_greater_than] = get_usd_cents(current_seller.currency_type, minimum_amount_cents) if numeric_amount?(minimum_amount_cents)
+      search_options[:price_less_than] = get_usd_cents(current_seller.currency_type, maximum_amount_cents) if numeric_amount?(maximum_amount_cents)
 
       search_options[:license_uses_greater_than_or_equal_to] = minimum_license_uses.to_i if minimum_license_uses.present?
 

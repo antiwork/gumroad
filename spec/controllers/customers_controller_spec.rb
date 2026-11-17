@@ -174,6 +174,16 @@ describe CustomersController, :vcr, type: :controller, inertia: true do
       expect(response.parsed_body.deep_symbolize_keys[:customers].size).to eq(3)
     end
 
+    it "ignores a non-numeric amount filter instead of raising" do
+      seller.update!(currency_type: Currency::EUR)
+      allow(controller).to receive(:get_rate).and_return("1.0")
+
+      get :paged, params: { page: 1, minimum_amount_cents: "1) or (1=1", maximum_amount_cents: "1) or (1=1" }
+
+      expect(response).to be_successful
+      expect(response.parsed_body.deep_symbolize_keys[:customers].size).to eq(3)
+    end
+
     describe "minimum license uses filter" do
       before do
         purchases.first.license.update!(uses: 10)
