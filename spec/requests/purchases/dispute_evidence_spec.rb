@@ -57,17 +57,18 @@ describe("Dispute evidence page", type: :system, js: true) do
     visit purchase_dispute_evidence_path(evidence_token)
 
     expect(page).to have_text(/Send us information about the sale by .+ \(72 hours left\) if you want us to respond to this dispute\./)
-    expect(page).to have_text("our payment processor's fee to respond is more than we would usually recover, so we respond only if you send us information about the sale.")
+    expect(page).to have_text("For a dispute this small, our payment processor's fee to respond is more than we would usually recover.")
+    expect(page).not_to have_text("so we respond only if you send us information about the sale")
     expect(page).not_to have_text("win on your behalf")
     expect(page).to have_text("Why should you win this dispute?")
-    expect(page).not_to have_text("The dispute is for")
+    expect(page).not_to have_text("amount in dispute")
   end
 
-  it "names the disputed amount when only part of the sale is disputed" do
+  it "names the sale and the disputed amount apart when only part of the sale is disputed" do
     dispute.update!(processor_amount_cents: 50, processor_currency: Currency::USD)
     visit purchase_dispute_evidence_path(evidence_token)
 
-    expect(page).to have_text("The dispute is for $0.50. For a dispute this small, our payment processor's fee to respond")
+    expect(page).to have_text("#{product.name}. The sale was #{purchase.formatted_disputed_amount}, and the amount in dispute is $0.50.")
   end
 
   describe "reason_for_winning field" do

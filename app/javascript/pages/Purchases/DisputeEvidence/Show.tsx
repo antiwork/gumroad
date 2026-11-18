@@ -134,6 +134,11 @@ export default function Show() {
   const [isUploading, setIsUploading] = React.useState(false);
   const [uploadedFiles, setUploadedFiles] = React.useState<UploadedFile[]>([]);
   const [isConfirming, setIsConfirming] = React.useState(false);
+  // Named apart: a partial or rolled-up dispute is for a different amount than the sale.
+  const disputedAmounts =
+    dispute_evidence.formatted_dispute_amount !== null
+      ? `. The sale was ${disputable.formatted_display_price}, and the amount in dispute is ${dispute_evidence.formatted_dispute_amount}.`
+      : ` for ${disputable.formatted_display_price}.`;
   const hasSavedResponse =
     savedReasonForWinning.option !== null ||
     savedCancellationRebuttal.option !== null ||
@@ -286,7 +291,7 @@ export default function Show() {
           <div className="grow">
             <p>
               A customer of yours ({dispute_evidence.customer_email}) has disputed their purchase made on {purchaseDate}{" "}
-              of the following {products.length} items for {disputable.formatted_display_price}.
+              of the following {products.length} items{disputedAmounts}
             </p>
             <br />
             <ul>
@@ -305,8 +310,8 @@ export default function Show() {
             of{" "}
             <a href={products[0]?.url} target="_blank" rel="noreferrer">
               {products[0]?.name}
-            </a>{" "}
-            for {disputable.formatted_display_price}.
+            </a>
+            {disputedAmounts}
           </p>
         )}
         <p>
@@ -322,11 +327,7 @@ export default function Show() {
               </strong>
             </p>
             <p>
-              {dispute_evidence.formatted_dispute_amount !== null
-                ? `The dispute is for ${dispute_evidence.formatted_dispute_amount}. `
-                : null}
-              For a dispute this small, our payment processor's fee to respond is more than we would usually recover, so
-              we respond only if you send us information about the sale.
+              For a dispute this small, our payment processor's fee to respond is more than we would usually recover.
             </p>
           </>
         ) : (

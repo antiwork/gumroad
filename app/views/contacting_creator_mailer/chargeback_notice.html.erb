@@ -22,12 +22,12 @@
     </p>
   <% else %>
     <p>
-      A customer of yours (<%= @disputable.customer_email %>) has disputed their purchase of <%= @disputable.multiple_purchases? ? "the following items" : @disputable.purchase_for_dispute_evidence.link.name %> for <%= @disputable.formatted_disputed_amount %>.
+      A customer of yours (<%= @disputable.customer_email %>) has disputed their purchase of <%= @disputable.multiple_purchases? ? "the following items" : @disputable.purchase_for_dispute_evidence.link.name %><%= @disputed_amounts_copy %>
       <% case @balance_debit %>
       <% when :full %>
-        We have deducted the amount from your balance, and are looking into it for you.
+        We have taken what you earned from this sale back out of your balance, and are looking into it for you.
       <% when :partial %>
-        We have deducted the unrefunded part of that amount from your balance, and are looking into it for you.
+        We have taken what you earned from the unrefunded part of this sale back out of your balance, and are looking into it for you.
       <% when :refunded %>
         This sale was already refunded in full, so nothing has been deducted from your balance.
       <% when :stripe_connect %>
@@ -54,30 +54,41 @@
       </p>
     <% end %>
     <%= @dispute_evidence_content %>
-    <% response_copy = @small_dispute_response_copy || "We fight every dispute." %>
+    <% if @small_dispute_reason_copy %>
+      <p>
+        <%= @small_dispute_reason_copy %>
+      </p>
+    <% end %>
+    <% if @small_dispute_canceled_copy %>
+      <p>
+        <%= @small_dispute_canceled_copy %>
+      </p>
+    <% end %>
+    <% fight_copy = "We fight every dispute." unless @small_dispute_reason_copy %>
     <% case @balance_debit %>
     <% when :stripe_connect %>
       <p>
-        <% if @small_dispute_response_copy %>
-          <%= @small_dispute_response_copy %> We submit your information through your connected Stripe account, and if we win, the amount is released back to that account.
+        <% if fight_copy %>
+          We fight every dispute and submit the evidence through your connected Stripe account. If we win, the disputed amount is released back to that account.
         <% else %>
-          We fight every dispute and submit the evidence through your connected Stripe account. If we win, the amount is released back to that account.
+          We submit your information through your connected Stripe account, and if we win, the disputed amount is released back to that account.
         <% end %>
       </p>
+      <% if @dispute_evidence_content %>
+        <p>
+          Use the button above to send us your information rather than responding in your Stripe dashboard: our payment processor accepts only one response per dispute.
+        </p>
+      <% end %>
     <% when :refunded %>
       <p>
-        <%= response_copy %> Because the money already went back to your customer, winning the dispute will not change your balance.
+        <%= fight_copy %> Because the money already went back to your customer, winning the dispute will not change your balance.
       </p>
     <% else %>
-      <p>
-        <% if @win_credit == :full %>
-          <%= response_copy %> If we succeed, you will automatically be re-credited the full amount. This process takes up to 75 days.
-        <% elsif @win_credit == :partial %>
-          <%= response_copy %> If we succeed, you will automatically be re-credited the amount we deducted. This process takes up to 75 days.
-        <% else %>
-          <%= response_copy %>
-        <% end %>
-      </p>
+      <% if fight_copy || @win_credit %>
+        <p>
+          <%= fight_copy %><% if @win_credit %> If we succeed, we will automatically add what we deducted back to your balance. This process takes up to 75 days.<% end %>
+        </p>
+      <% end %>
       <% if @won_notification %>
         <p>
           You'll get another notification once we have won the dispute. If you haven't received that notification, we have not yet won this dispute.

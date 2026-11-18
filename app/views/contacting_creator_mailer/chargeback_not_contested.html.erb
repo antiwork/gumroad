@@ -1,7 +1,7 @@
 <%= header_section(@subject) %>
 <div>
   <p>
-    We did not respond to the dispute on <%= @disputable.customer_email %>'s purchase of <%= @disputable.multiple_purchases? ? "the following items" : @disputable.purchase_for_dispute_evidence.link.name %> for <%= @disputable.formatted_disputed_amount %>.<% if (dispute_amount = @disputable.formatted_processor_dispute_amount) %> The dispute is for <%= dispute_amount %>.<% end %>
+    We did not respond to the dispute on <%= @disputable.customer_email %>'s purchase of <%= @disputable.multiple_purchases? ? "the following items" : @disputable.purchase_for_dispute_evidence.link.name %><%= @disputed_amounts_copy %>
   </p>
   <% if @disputable.multiple_purchases? %>
     <% @disputable.disputed_purchases.each do |purchase| %>
@@ -14,9 +14,9 @@
     The dispute will be lost.
     <% case @balance_debit %>
     <% when :full %>
-      The amount we deducted for this sale stays deducted from your balance.
+      What you earned from this sale stays deducted from your balance.
     <% when :partial %>
-      The unrefunded part of this sale stays deducted from your balance.
+      What you earned from the unrefunded part of this sale stays deducted from your balance.
     <% when :refunded %>
       This sale was already refunded in full, so nothing has been deducted from your balance.
     <% when :stripe_connect %>
