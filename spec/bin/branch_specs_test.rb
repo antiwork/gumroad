@@ -122,6 +122,23 @@ check(
   ],
 )
 
+# Partner API controllers -> the partner request specs beside their directory
+check(
+  "Partner API controller maps to the partner request specs instead of escalating",
+  base_files: {
+    "spec/requests/api/v2/partner_spec.rb" => SPEC_STUB,
+    "spec/requests/api/v2/partner_sellers_spec.rb" => SPEC_STUB,
+    "spec/requests/api/v2/partner_migrations_spec.rb" => SPEC_STUB,
+    "app/controllers/api/v2/partner/sellers_controller.rb" => "old",
+  },
+  head_files: { "app/controllers/api/v2/partner/sellers_controller.rb" => "new" },
+  expect_specs: %w[
+    spec/requests/api/v2/partner_spec.rb
+    spec/requests/api/v2/partner_sellers_spec.rb
+    spec/requests/api/v2/partner_migrations_spec.rb
+  ],
+)
+
 # Profile component -> storefront request specs
 check(
   "Profile component fans out to user/profile request specs",
