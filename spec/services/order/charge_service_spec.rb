@@ -4169,7 +4169,7 @@ describe Order::ChargeService, :vcr do
   end
 
   describe "#one_off_card_checkout?" do
-    let(:seller) { create(:user) }
+    let(:seller) { create(:user, :eligible_for_service_products) }
     let(:order) { create(:order) }
     let(:service) { described_class.new(order:, params: {}) }
     let(:product) { create(:product, user: seller) }
