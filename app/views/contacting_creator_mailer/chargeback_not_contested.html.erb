@@ -11,9 +11,7 @@
     <% end %>
   <% end %>
   <p>
-    Our payment processor charges a fee to respond to every dispute, and for a dispute this small the fee is more than we would usually recover. With no evidence from you, the dispute will be lost.
-  </p>
-  <p>
+    The dispute will be lost.
     <% case @balance_debit %>
     <% when :full %>
       The amount we deducted for this sale stays deducted from your balance.
@@ -26,5 +24,8 @@
     <% else %>
       Nothing has been deducted from your balance.
     <% end %>
+  </p>
+  <p>
+    We had no information about the sale from you, and for a dispute this small, our payment processor's fee to respond is more than we would usually recover.
   </p>
 </div>

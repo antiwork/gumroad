@@ -19,7 +19,11 @@
   <% end %>
   <p>
     <strong>
-      Please submit any additional information by <%= @seller_response_due_at_formatted %>.
+      <% if @small_dispute_response_copy %>
+        Send us information about the sale by <%= @seller_response_due_at_formatted %> if you want us to respond to this dispute.
+      <% else %>
+        Please submit any additional information by <%= @seller_response_due_at_formatted %>.
+      <% end %>
       You have <%= pluralize(@hours_left, "hour") %> left.
     </strong>
   </p>

@@ -732,7 +732,7 @@ describe ContactingCreatorMailer do
           body = ContactingCreatorMailer.chargeback_notice(dispute.id).body.encoded
 
           expect(body).to include "(in the next 72 hours) if you want us to respond to this dispute."
-          expect(body).to include "fee to respond is more than we would usually recover, so we respond only if you send us information about the sale. If your customer tells you they canceled the dispute, let us know: a canceled dispute is still lost unless we respond. If we succeed, you will automatically be re-credited the full amount."
+          expect(body).to include "fee to respond is more than we would usually recover, so we respond only if you send us information about the sale. If your customer tells you they canceled the dispute, send us their message: a canceled dispute is still lost unless we respond. If we succeed, you will automatically be re-credited the full amount."
           expect(body).to include "Submit additional information"
           expect(body).not_to include "We fight every dispute"
           expect(body).not_to include "win on your behalf"
@@ -743,8 +743,11 @@ describe ContactingCreatorMailer do
 
           body = ContactingCreatorMailer.chargeback_evidence_due_soon(dispute.id).body.encoded
 
+          expect(body).to include "Send us information about the sale by"
+          expect(body).to include "if you want us to respond to this dispute."
+          expect(body).not_to include "Please submit any additional information"
           expect(body).to include "You have 23 hours left."
-          expect(body).to include "fee to respond is more than we would usually recover, so we respond only if you send us information about the sale. If your customer tells you they canceled the dispute, let us know: a canceled dispute is still lost unless we respond."
+          expect(body).to include "fee to respond is more than we would usually recover, so we respond only if you send us information about the sale. If your customer tells you they canceled the dispute, send us their message: a canceled dispute is still lost unless we respond."
         end
 
         context "when the sale was paid into a Stripe Connect account" do
@@ -756,7 +759,7 @@ describe ContactingCreatorMailer do
           it "submits only the seller's information through the connected account" do
             body = ContactingCreatorMailer.chargeback_notice(dispute.id).body.encoded
 
-            expect(body).to include "so we respond only if you send us information about the sale. If your customer tells you they canceled the dispute, let us know: a canceled dispute is still lost unless we respond. We submit your information through your connected Stripe account, and if we win, the amount is released back to that account."
+            expect(body).to include "so we respond only if you send us information about the sale. If your customer tells you they canceled the dispute, send us their message: a canceled dispute is still lost unless we respond. We submit your information through your connected Stripe account, and if we win, the amount is released back to that account."
             expect(body).not_to include "We fight every dispute"
           end
         end
@@ -2719,7 +2722,7 @@ describe ContactingCreatorMailer do
       mail = ContactingCreatorMailer.chargeback_not_contested(dispute.id)
 
       expect(mail.to).to eq [seller.form_email]
-      expect(mail.subject).to eq "We did not contest a small dispute"
+      expect(mail.subject).to eq "We did not respond to a small dispute"
       expect(mail.body.encoded).to include "We did not respond to the dispute on #{purchase.email}'s purchase of #{purchase.link.name} for #{purchase.formatted_disputed_amount}."
       expect(mail.body.encoded).not_to include "The dispute is for"
     end
@@ -2736,7 +2739,8 @@ describe ContactingCreatorMailer do
     it "does not imply the seller was asked for evidence" do
       body = ContactingCreatorMailer.chargeback_not_contested(dispute.id).body.encoded
 
-      expect(body).to include "With no evidence from you, the dispute will be lost."
+      expect(body).to include "The dispute will be lost."
+      expect(body).to include "We had no information about the sale from you, and for a dispute this small, our payment processor's fee to respond is more than we would usually recover."
       expect(body).not_to include "did not send"
     end
 
@@ -2747,6 +2751,9 @@ describe ContactingCreatorMailer do
 
       expect(body).to include "The amount we deducted for this sale stays deducted from your balance."
       expect(body).not_to include "Nothing has been deducted"
+      # What happened and where the money is come before why.
+      expect(body.index("The dispute will be lost.")).to be < body.index("stays deducted")
+      expect(body.index("stays deducted")).to be < body.index("We had no information about the sale")
     end
 
     # The debit is the seller's share of the whole sale, not the processor's amount named above it.
