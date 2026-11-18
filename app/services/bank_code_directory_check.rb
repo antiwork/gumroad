@@ -24,9 +24,11 @@ class BankCodeDirectoryCheck
   # input for that country.
   DIRECTORY_CHECKED_BANK_ACCOUNT_TYPES = [EgyptBankAccount, UkBankAccount].freeze
 
-  # IBAN rows whose Stripe payload carries no routing number: the bank is looked up from the
-  # account number alone, so the routing-number opt-in above can never reach them.
-  ACCOUNT_NUMBER_CHECKED_BANK_ACCOUNT_TYPES = [IbanBankAccount].freeze
+  # IBAN and CBU rows whose Stripe payload carries no routing number: the bank is looked up from the
+  # account number alone, so the routing-number opt-in above can never reach them. For a CBU Stripe
+  # reports an unknown bank as account_number_invalid, so it counts as a miss only when the CBU's
+  # own check digits pass.
+  ACCOUNT_NUMBER_CHECKED_BANK_ACCOUNT_TYPES = [IbanBankAccount, ArgentinaBankAccount].freeze
 
   # Short budget: this runs inside a settings-save request, before the row lock is taken.
   STRIPE_CLIENT_OPTIONS = { open_timeout: 5, read_timeout: 10, max_network_retries: 0 }.freeze
@@ -39,6 +41,10 @@ class BankCodeDirectoryCheck
   # The seller-facing message, and the input that answers it, so the form flags the field that has
   # to change rather than the one this check is named after.
   Rejection = Data.define(:message, :field)
+
+  CBU_BLOCK_ONE_WEIGHTS = [7, 1, 3, 9, 7, 1, 3].freeze
+  CBU_BLOCK_TWO_WEIGHTS = [3, 9, 7, 1, 3, 9, 7, 1, 3, 9, 7, 1, 3].freeze
+  private_constant :CBU_BLOCK_ONE_WEIGHTS, :CBU_BLOCK_TWO_WEIGHTS
 
   # Returns a Rejection when Stripe cannot resolve the details, or nil when it resolves them, the
   # check does not apply, or Stripe could not be asked.
@@ -129,8 +135,27 @@ class BankCodeDirectoryCheck
     # its sort code only: no probe has shown the directory refusing a UK account number.
     def account_number_rejection?(error)
       return false if bank_account.is_a?(UkBankAccount)
+      return argentina_unknown_bank?(error) if bank_account.is_a?(ArgentinaBankAccount)
 
       error.code == "bank_account_unusable" && error.param.to_s == "bank_account[account_number]"
+    end
+
+    def argentina_unknown_bank?(error)
+      error.code == "account_number_invalid" &&
+        error.param.to_s == "bank_account[account_number]" &&
+        valid_cbu_check_digits?(account_number_of(bank_account))
+    end
+
+    def valid_cbu_check_digits?(cbu)
+      return false unless cbu.match?(/\A[0-9]{22}\z/)
+
+      digits = cbu.chars.map(&:to_i)
+      cbu_check_digit(digits[0, 7], CBU_BLOCK_ONE_WEIGHTS) == digits[7] &&
+        cbu_check_digit(digits[8, 13], CBU_BLOCK_TWO_WEIGHTS) == digits[21]
+    end
+
+    def cbu_check_digit(block, weights)
+      (10 - block.zip(weights).sum { |digit, weight| digit * weight } % 10) % 10
     end
 
     def missing_routing_number_rejection
@@ -159,12 +184,29 @@ class BankCodeDirectoryCheck
     # so only a different bank helps.
     def account_number_rejection
       return missing_branch_rejection if routing_number.present?
+      return argentina_bank_rejection if bank_account.is_a?(ArgentinaBankAccount)
 
       Rejection.new(
         message: "This IBAN can't receive payouts because our payment partner couldn't find its bank. " \
                  "Please enter an IBAN from a different bank.",
         field: :account_number
       )
+    end
+
+    # The first three digits of a CBU are the BCRA entity code — the seller's own handle for the bank
+    # that issued it, and the only identifier we can name: Stripe's refusal carries no bank name, and
+    # the digits the seller typed are not the problem, so the message has to point away from them.
+    def argentina_bank_rejection
+      Rejection.new(
+        message: "Our payment partner doesn't support the bank this account number belongs to " \
+                 "(bank code #{argentina_bank_code}), so it can't be used for payouts. " \
+                 "Please enter an account at a different bank.",
+        field: :account_number
+      )
+    end
+
+    def argentina_bank_code
+      account_number_of(bank_account).to_s.first(3)
     end
 
     # The code resolves here, and an 8-character SWIFT/BIC re-entered under it resolves no better,

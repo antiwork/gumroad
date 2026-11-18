@@ -314,6 +314,9 @@ class Link < ApplicationRecord
                if: ->(link) { link.saved_change_to_is_licensed? && link.is_licensed? }
   after_update :delete_unused_prices, if: :saved_change_to_purchase_type?
   after_commit :submit_to_indexnow, on: :update, if: :indexnow_submission_needed?
+  # Noted at save time: a later save in the same transaction resets saved_changes before commit.
+  after_save -> { @watched_price_points_check_pending = true }, if: :watched_price_points_check_needed?
+  after_commit :check_watched_price_points, if: -> { @watched_price_points_check_pending }
   after_update -> { PartnerMigration.record_first_publication(self) }, if: -> { saved_change_to_first_published_at? && first_published_at.present? }
 
   enum :subscription_duration, %i[monthly yearly quarterly biannually every_two_years]
@@ -2165,6 +2168,18 @@ class Link < ApplicationRecord
     def indexnow_submission_needed?
       saved_change_to_purchase_disabled_at? || saved_change_to_deleted_at? || saved_change_to_draft? ||
         (published? && (saved_change_to_name? || saved_change_to_description? || saved_change_to_custom_permalink?))
+    end
+
+    # Price edits on a persisted product land on its Price rows, which enqueue their own check.
+    def watched_price_points_check_needed?
+      previously_new_record? ||
+        saved_change_to_purchase_disabled_at?(to: nil) ||
+        saved_change_to_deleted_at?(to: nil)
+    end
+
+    def check_watched_price_points
+      @watched_price_points_check_pending = false
+      CheckWatchedPricePointsJob.enqueue_for(user_id)
     end
 
     def submit_to_indexnow

@@ -127,6 +127,9 @@ describe Api::V2::SalesController do
       end
 
       it "serializes a full page without per-sale association lookups" do
+        # This spec budgets queries per association, not the shipped page size: stub a small page so
+        # the eleven-row-per-purchase fixtures stay cheap now that a real page is 100 sales.
+        stub_const("Api::V2::SalesController::RESULTS_PER_PAGE", 4)
         purchases_with_upsells = (Api::V2::SalesController::RESULTS_PER_PAGE - 2).times.map do |index|
           product = create(:physical_product, user: @seller, name: "Product #{index}")
           variant_category = create(:variant_category, link: product, title: "Format")
@@ -211,7 +214,8 @@ describe Api::V2::SalesController do
         expect(sale_json.keys).to include("preorder_authorization_time", "cancellation_date", "subscription_end_date")
       end
 
-      it "returns a link to the next page if there are more than 10 sales" do
+      it "returns a link to the next page if there are more sales than fit on one page" do
+        stub_const("Api::V2::SalesController::RESULTS_PER_PAGE", 5)
         per_page = Api::V2::SalesController::RESULTS_PER_PAGE
         create_list(:purchase, per_page, link: @product)
         expected_sales = @seller.sales.for_sales_api.order(created_at: :desc, id: :desc).to_a
@@ -259,7 +263,22 @@ describe Api::V2::SalesController do
         end
       end
 
+      it "returns the full page the API documents, so a large history costs few requests" do
+        expect(Api::V2::SalesController::RESULTS_PER_PAGE).to eq(100)
+        create_list(:purchase, Api::V2::SalesController::RESULTS_PER_PAGE, link: @product)
+        expected_total = @seller.sales.for_sales_api.count
+
+        get :index, params: @params
+        expect(response.parsed_body["sales"].size).to eq(Api::V2::SalesController::RESULTS_PER_PAGE)
+        expect(response.parsed_body["next_page_key"]).to be_present
+
+        @params[:page_key] = response.parsed_body["next_page_key"]
+        get :index, params: @params
+        expect(response.parsed_body["sales"].size).to eq(expected_total - Api::V2::SalesController::RESULTS_PER_PAGE)
+      end
+
       it "returns the correct link to the next pages from second page onwards" do
+        stub_const("Api::V2::SalesController::RESULTS_PER_PAGE", 5)
         per_page = Api::V2::SalesController::RESULTS_PER_PAGE
         create_list(:purchase, (per_page * 3), link: @product)
         expected_sales = @seller.sales.for_sales_api.order(created_at: :desc, id: :desc).to_a
@@ -462,15 +481,17 @@ describe Api::V2::SalesController do
       end
 
       it "accepts the largest page within the signed 64-bit offset range" do
-        # (922337203685477581 - 1) * 10 fits the signed 64-bit range; the next page's offset does not.
-        @params.merge!(page: "922337203685477581")
+        # The ceiling is derived from RESULTS_PER_PAGE, so compute it rather than hardcoding an
+        # offset that only holds for one page size: MAX_DEPRECATED_PAGE's offset fits the signed
+        # 64-bit range, the next page's offset does not.
+        @params.merge!(page: Api::V2::SalesController::MAX_DEPRECATED_PAGE.to_s)
         get :index, params: @params
 
         expect(response.code).to eq "200"
       end
 
       it "returns a 400 error for the first page past the signed 64-bit offset range" do
-        @params.merge!(page: "922337203685477582")
+        @params.merge!(page: (Api::V2::SalesController::MAX_DEPRECATED_PAGE + 1).to_s)
         get :index, params: @params
         expect(response.code).to eq "400"
         expect(response.parsed_body).to eq({
