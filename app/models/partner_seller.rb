@@ -21,16 +21,23 @@ class PartnerSeller < ApplicationRecord
     by_external_user = partner_sellers.find_by(external_user_id:)
     by_user = partner_sellers.find_by(user:)
 
-    if by_external_user&.user_id.present? && by_external_user.user_id != user.id
+    if by_external_user && by_external_user.user_id != user.id && !by_external_user.released?
       raise LinkConflict, "This #{oauth_application.name} account is already linked to a different Gumroad account."
     end
     if by_user.present? && by_user.external_user_id != external_user_id
       raise LinkConflict, "Your Gumroad account is already linked to a different #{oauth_application.name} account."
     end
 
-    partner_seller = by_user || partner_sellers.build(user:, external_user_id:)
+    partner_seller = by_user || by_external_user || partner_sellers.build(user:, external_user_id:)
+    # A new account that takes over a released link has not migrated yet.
+    partner_seller.migrated_at = nil if partner_seller.user_id != user.id
+    partner_seller.user = user
     partner_seller.deleted_at = nil
     partner_seller.save!
     partner_seller
   end
+
+  # A link that the seller revoked, or whose Gumroad account was closed, no longer holds the partner's
+  # user ID, so another account can take it over. A suspended account keeps it.
+  def released? = deleted? || !user&.alive?
 end
