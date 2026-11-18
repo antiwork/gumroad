@@ -77,7 +77,25 @@ class Api::Internal::ReceiptPreviewsController < Api::Internal::BaseController
       purchase_preview.unbundled_purchases = [purchase_preview]
       purchase_preview.successful_purchases = [purchase_preview]
       purchase_preview.orderable = purchase_preview
+      purchase_preview.purchase_refund_policy = build_purchase_refund_policy
 
       purchase_preview
+    end
+
+    # Mirrors Purchase::CreateService so the preview shows the policy the buyer's receipt will.
+    def build_purchase_refund_policy
+      seller = @product.user
+      policy = if seller.account_level_refund_policy_enabled?
+        seller.refund_policy
+      elsif @product.product_refund_policy_enabled?
+        @product.product_refund_policy
+      end
+      return if policy.blank?
+
+      PurchaseRefundPolicy.new(
+        max_refund_period_in_days: policy.max_refund_period_in_days,
+        title: policy.title,
+        fine_print: policy.fine_print
+      )
     end
 end
