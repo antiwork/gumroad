@@ -303,6 +303,33 @@ describe Charge::Disputable, :vcr do
     end
   end
 
+  describe "#formatted_processor_dispute_amount" do
+    it "is nil when the processor's amount is unrecorded or is the sale's own" do
+      expect(stripe_purchase.formatted_processor_dispute_amount).to be_nil
+
+      create(:dispute, purchase: stripe_purchase, processor_amount_cents: 10_00, processor_currency: Currency::USD)
+      expect(stripe_purchase.reload.formatted_processor_dispute_amount).to be_nil
+    end
+
+    it "returns the amount of a partial dispute" do
+      create(:dispute, purchase: stripe_purchase, processor_amount_cents: 4_00, processor_currency: Currency::USD)
+
+      expect(stripe_purchase.reload.formatted_processor_dispute_amount).to eq("$4")
+    end
+
+    it "leads with the presentment amount, like the sale's own" do
+      create(:purchase_presentment,
+             purchase: stripe_purchase,
+             presentment_currency: Currency::CAD,
+             presentment_price_cents: 13_50,
+             presentment_gumroad_tax_cents: 0,
+             presentment_total_cents: 13_50)
+      create(:dispute, purchase: stripe_purchase, processor_amount_cents: 6_75, processor_currency: Currency::CAD)
+
+      expect(stripe_purchase.reload.formatted_processor_dispute_amount).to eq("CAD$6.75 ($5)")
+    end
+  end
+
   describe "#customer_email" do
     it "returns the email of the Purchase" do
       expect(stripe_purchase.customer_email).to eq(stripe_purchase.email)
@@ -788,7 +815,7 @@ describe Charge::Disputable, :vcr do
       describe "the seller's notice against what formalization and a win actually book" do
         let(:won_event) { build(:charge_event_dispute_won, charge_id: "ch_zitkxbhds3zqlt") }
 
-        # The $1 sale is below FightDisputeJob's minimum; these examples cover a dispute we contest.
+        # Formalizing records a $1 dispute, below FightDisputeJob's minimum; these examples cover a dispute we contest.
         before { allow(FightDisputeJob).to receive(:below_contest_minimum?).and_return(false) }
 
         def refund_before_dispute(refunded_purchase, amount_cents)

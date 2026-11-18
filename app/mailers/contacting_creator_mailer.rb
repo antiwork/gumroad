@@ -127,7 +127,7 @@ class ContactingCreatorMailer < ApplicationMailer
     @won_notification = !@disputable.disputed_purchases.all?(&:refunded?)
     # PayPal-through-Braintree disputes have no evidence form, so the copy would ask for something
     # the seller cannot send.
-    @small_dispute_response_copy = SMALL_DISPUTE_RESPONSE_COPY if @disputable.eligible_for_dispute_evidence? && FightDisputeJob.below_contest_minimum?(@disputable)
+    @small_dispute_response_copy = small_dispute_response_copy(@disputable) if @disputable.eligible_for_dispute_evidence? && FightDisputeJob.below_contest_minimum?(@disputable)
 
     dispute_evidence = dispute.dispute_evidence
     # Recomputed at delivery, not at enqueue: a notice queued with an hour left can be delivered with
@@ -188,7 +188,7 @@ class ContactingCreatorMailer < ApplicationMailer
     return do_not_send unless @hours_left.positive?
 
     @seller_response_due_at_formatted = format_dispute_evidence_due_at(@dispute_evidence.seller_response_due_at)
-    @small_dispute_response_copy = SMALL_DISPUTE_RESPONSE_COPY if FightDisputeJob.below_contest_minimum?(@disputable)
+    @small_dispute_response_copy = small_dispute_response_copy(@disputable) if FightDisputeJob.below_contest_minimum?(@disputable)
     @subject = "Reminder: Submit dispute evidence within 24 hours"
   end
 
@@ -926,6 +926,12 @@ class ContactingCreatorMailer < ApplicationMailer
 
     def format_dispute_evidence_due_at(due_at)
       due_at.in_time_zone(@seller.timezone.presence || Time.zone).strftime("%B %-d, %Y at %-l:%M %p %Z")
+    end
+
+    # A partial dispute can be under the minimum on a sale that is not, so name the amount the copy is about.
+    def small_dispute_response_copy(disputable)
+      amount = disputable.formatted_processor_dispute_amount
+      amount ? "The dispute is for #{amount}. #{SMALL_DISPUTE_RESPONSE_COPY}" : SMALL_DISPUTE_RESPONSE_COPY
     end
 
     # Reads what Purchase#decrement_balance_for_refund_or_chargeback! booked: nothing for a sale refunded

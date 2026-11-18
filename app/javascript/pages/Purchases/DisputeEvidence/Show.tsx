@@ -38,6 +38,7 @@ type Props = {
     duration_left_to_submit_evidence_formatted: string;
     seller_response_due_at: string | null;
     below_contest_minimum: boolean;
+    formatted_dispute_amount: string | null;
     customer_communication_file_max_size: number;
     customer_communication_files_max_count: number;
     blobs: Blobs;
@@ -321,6 +322,9 @@ export default function Show() {
               </strong>
             </p>
             <p>
+              {dispute_evidence.formatted_dispute_amount !== null
+                ? `The dispute is for ${dispute_evidence.formatted_dispute_amount}. `
+                : null}
               For a dispute this small, our payment processor's fee to respond is more than we would usually recover, so
               we respond only if you send us information about the sale.
             </p>

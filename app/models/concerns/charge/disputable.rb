@@ -91,6 +91,20 @@ module Charge::Disputable
       "#{presentment} (#{canonical})"
     end
 
+    # The processor's own disputed amount, formatted like formatted_disputed_amount, but only when it
+    # differs from the sale's (a partial or rolled-up dispute). The contest minimum reads this amount.
+    def formatted_processor_dispute_amount
+      usd_cents = dispute_amount_usd_cents
+      return if usd_cents.nil? || usd_cents == disputed_amount_cents
+
+      canonical = formatted_dollar_amount(usd_cents)
+      currency = dispute.processor_currency.to_s.downcase
+      return canonical if currency == Currency::USD
+
+      presentment = StripeChargeProcessor.format_charge_presentment_amount(dispute.processor_amount_cents, currency, no_cents_if_whole: false)
+      "#{presentment} (#{canonical})"
+    end
+
     def customer_email
       purchase_for_dispute_evidence.email
     end

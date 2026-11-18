@@ -391,9 +391,6 @@ describe ContactingCreatorMailer do
       refunded_purchase.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -amount_cents), seller.id)
     end
 
-    # The factory's $1 sale is below FightDisputeJob's minimum; these examples cover a dispute we contest.
-    before { allow(FightDisputeJob).to receive(:below_contest_minimum?).and_return(false) }
-
     context "for a dispute on Purchase" do
       let(:purchase) { create(:purchase, link: create(:product, user: seller)) }
       let(:dispute) { create(:dispute_formalized, purchase:) }
@@ -779,6 +776,20 @@ describe ContactingCreatorMailer do
             expect(body).not_to include "we respond only if you send us information"
             expect(body).not_to include "Submit additional information"
             expect(body).to include "We fight every dispute."
+          end
+        end
+
+        context "when only part of a larger sale is disputed" do
+          let(:purchase) { create(:purchase, link: create(:product, user: seller, price_cents: 40_00), email: "buyer@example.com") }
+
+          it "names the disputed amount next to the sale's in the notice and the reminder" do
+            notice = ContactingCreatorMailer.chargeback_notice(dispute.id).body.encoded
+            expect(notice).to include "has disputed their purchase of #{purchase.link.name} for $40."
+            expect(notice).to include "The dispute is for $1. For a dispute this small"
+
+            dispute_evidence.update!(seller_contacted_at: 49.hours.ago)
+            reminder = ContactingCreatorMailer.chargeback_evidence_due_soon(dispute.id).body.encoded
+            expect(reminder).to include "The dispute is for $1. For a dispute this small"
           end
         end
 
@@ -2713,6 +2724,15 @@ describe ContactingCreatorMailer do
       expect(mail.to).to eq [seller.form_email]
       expect(mail.subject).to eq "We did not contest a small dispute"
       expect(mail.body.encoded).to include "We did not respond to the dispute on #{purchase.email}'s purchase of #{purchase.link.name} for #{purchase.formatted_disputed_amount}."
+      expect(mail.body.encoded).not_to include "The dispute is for"
+    end
+
+    it "names the disputed amount when only part of the sale is disputed" do
+      dispute.update!(processor_amount_cents: 50, processor_currency: Currency::USD)
+
+      body = ContactingCreatorMailer.chargeback_not_contested(dispute.id).body.encoded
+
+      expect(body).to include "for #{purchase.formatted_disputed_amount}. The dispute is for $0.50."
     end
 
     # The backstop job can resolve a dispute whose seller was never sent the evidence link.
