@@ -305,10 +305,12 @@ module StripeMerchantAccountManager
           Stripe::Account.create_person(stripe_account.id, force_utf8_encoding(person_params))
         end
       rescue Stripe::InvalidRequestError => e
-        raise if replaced_deleted_account || !account_deleted_error?(e)
+        raise if replaced_deleted_account || !account_deleted_error?(e, stripe_account&.id)
 
         # Stripe reports the account it just returned as deleted. Replaying its idempotency key
         # would return that same account, so open one fresh account before surfacing a rejection.
+        # Root cause is unknown; keep reporting it so a successful replacement stays visible.
+        ErrorNotifier.notify(e)
         replaced_deleted_account = true
         idempotency_key = SecureRandom.uuid
         raise Stripe::APIError.new("Uncertain Stripe account creation could not be reconciled") unless remember_account_creation_idempotency_key(user, idempotency_key)
@@ -2927,9 +2929,13 @@ module StripeMerchantAccountManager
     deleted_on_stripe
   end
 
+  # Bound to the linked account: a message naming any other account or bank must not unlink a
+  # live account and open a second one.
   private_class_method
-  def self.account_deleted_error?(error)
-    error.message.to_s.match?(/account .* has been deleted/i)
+  def self.account_deleted_error?(error, stripe_account_id)
+    return false if stripe_account_id.blank?
+
+    error.message.to_s.include?("account '#{stripe_account_id}' has been deleted")
   end
 
   private_class_method

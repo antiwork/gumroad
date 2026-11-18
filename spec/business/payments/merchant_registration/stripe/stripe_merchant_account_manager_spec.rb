@@ -9084,8 +9084,10 @@ describe StripeMerchantAccountManager, :vcr do
 
       it "opens one fresh account with a new idempotency key and succeeds" do
         keys = []
+        stored_keys = []
         allow(Stripe::Account).to receive(:create) do |_params, opts|
           keys << opts[:idempotency_key]
+          stored_keys << user.comments.with_type_payout_note.alive.map { |note| note.json_data[StripeMerchantAccountManager::ACCOUNT_CREATION_IDEMPOTENCY_KEY] }
           keys.size == 1 ? first_account : second_account
         end
         allow(Stripe::Account).to receive(:create_person) do |id, _params|
@@ -9097,7 +9099,21 @@ describe StripeMerchantAccountManager, :vcr do
         expect(merchant_account.charge_processor_merchant_id).to eq("acct_second")
         expect(merchant_account.charge_processor_alive_at).to be_present
         expect(keys.uniq.size).to eq(2)
+        expect(stored_keys.last).to eq([keys.last])
         expect(user.merchant_accounts.alive.count).to eq(1)
+        expect(ErrorNotifier).to have_received(:notify).with(deleted_error)
+      end
+
+      it "does not replace the account when the deleted account Stripe names is a different one" do
+        allow(Stripe::Account).to receive(:create).and_return(first_account)
+        allow(Stripe::Account).to receive(:create_person).and_raise(
+          Stripe::InvalidRequestError.new("The account 'acct_other' has been deleted, so we can't complete this action.", nil)
+        )
+        allow(Stripe::Account).to receive(:delete)
+
+        expect { subject.create_account(user, passphrase: "1234") }.to raise_error(Stripe::InvalidRequestError)
+        expect(Stripe::Account).to have_received(:create).once
+        expect(Stripe::Account).to have_received(:delete).with("acct_first")
       end
 
       it "surfaces the rejection when the replacement account is deleted too" do
