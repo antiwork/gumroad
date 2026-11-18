@@ -1263,6 +1263,16 @@ describe "MCP server" do
         expect(second).not_to have_key("next_cursor")
       end
 
+      it "gives the page query its own deadline and reports the timeout as a tool error" do
+        expect(WithMaxExecutionTime).to receive(:timeout_queries).with(seconds: Mcp::Server::PAGE_QUERY_TIMEOUT)
+          .and_raise(WithMaxExecutionTime::QueryTimeoutError, "maximum statement execution time exceeded")
+
+        list_sales({})
+
+        expect(response.parsed_body.dig("result", "isError")).to eq(true)
+        expect(response.parsed_body.dig("result", "content", 0, "text")).to eq("Listing took too long. Try a smaller limit, or narrow the filters.")
+      end
+
       it "breaks created_at ties by id for products and payouts" do
         @token.update!(scopes: "view_public view_payouts")
         at = 1.hour.ago.change(usec: 0)

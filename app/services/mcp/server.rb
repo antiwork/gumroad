@@ -71,6 +71,9 @@ module Mcp
     CUSTOMERS_DEFAULT_ROWS = 25
     # Rack::Timeout ends the request at 120s, so a query this slow needs its own deadline to report.
     CUSTOMERS_QUERY_TIMEOUT = 30
+    # One deadline for every paginated list, which all share the page query. A page over a very large
+    # creator scans for longer than Rack::Timeout's 120s, which SIGTERMs the Puma worker.
+    PAGE_QUERY_TIMEOUT = 30
     CUSTOMER_REFUNDED = "COALESCE(purchases.stripe_refunded, 0) = 1"
     CUSTOMER_FREE = "COALESCE(purchases.price_cents, 0) = 0"
     TOTALS_BREAKDOWNS = %w[product country day week month].freeze
@@ -1955,10 +1958,14 @@ module Mcp
           raise Error.new("cursor is not valid", code: -32602) if time.year > MAX_DATETIME_YEAR
           scope = scope.where("#{table}.created_at < :t OR (#{table}.created_at = :t AND #{table}.id < :id)", t: time, id: id.to_i)
         end
-        rows = scope.order("#{table}.created_at DESC, #{table}.id DESC").limit(limit + 1).to_a
+        rows = WithMaxExecutionTime.timeout_queries(seconds: PAGE_QUERY_TIMEOUT) do
+          scope.order("#{table}.created_at DESC, #{table}.id DESC").limit(limit + 1).to_a
+        end
         page = rows.first(limit)
         next_cursor = "#{(page.last.created_at.to_r * MICROSECONDS_PER_SECOND).to_i}_#{page.last.id}" if rows.size > limit
         [page, next_cursor]
+      rescue WithMaxExecutionTime::QueryTimeoutError, ActiveRecord::StatementTimeout
+        raise ToolError, "Listing took too long. Try a smaller limit, or narrow the filters."
       end
 
       def parse_time!(value, name)
