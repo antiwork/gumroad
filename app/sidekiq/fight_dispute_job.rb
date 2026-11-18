@@ -6,6 +6,16 @@ class FightDisputeJob
 
   CUSTOMER_COMMUNICATION_OMITTED_MESSAGE = "Submitted without the seller's customer communication file: it exceeds the processor's page limit."
 
+  # Stripe charges $15 per evidence submission and returns it only when the dispute is won.
+  MINIMUM_CONTESTED_AMOUNT_CENTS = 15_00
+
+  # Below the minimum evidence is submitted only if the seller saved a response; seller-facing dispute copy reads this too.
+  # An amount we cannot place in USD is contested, so a large dispute is never skipped on a guess.
+  def self.below_contest_minimum?(disputable)
+    amount = disputable.dispute_amount_usd_cents
+    amount.present? && amount < MINIMUM_CONTESTED_AMOUNT_CENTS
+  end
+
   def perform(dispute_id)
     dispute = Dispute.find(dispute_id)
     dispute_evidence = dispute.dispute_evidence
@@ -17,6 +27,21 @@ class FightDisputeJob
     return if DisputeEvidence.window_open?(dispute_evidence.seller_contacted_at)
 
     disputable = dispute.disputable
+    # A seller who saved their own evidence is always forwarded; only our default response is skipped.
+    if self.class.below_contest_minimum?(disputable) && !dispute_evidence.seller_submitted?
+      # Resolution first, email pushed before COMMIT (MailDeliveryJob does not wait for it): a failed resolution leaves no
+      # email for the retry to repeat, and a push that raises rolls the resolution back. reliable_push! buffers a Redis
+      # outage instead of raising, so that email is lost if the process dies before the buffer drains.
+      DisputeEvidence.transaction do
+        dispute_evidence.update_as_resolved!(
+          resolution: DisputeEvidence::RESOLUTION_NOT_CONTESTED,
+          error_message: "Not contested: disputed amount is below #{MINIMUM_CONTESTED_AMOUNT_CENTS / 100} USD and the seller supplied no evidence."
+        )
+        ContactingCreatorMailer.chargeback_not_contested(dispute.id).deliver_later
+      end
+      return
+    end
+
     if disputable.charge_processor_transaction_id.blank?
       error_message = "Missing charge processor transaction ID on #{disputable.class.name}##{disputable.id}."
       ErrorNotifier.notify("FightDisputeJob: #{error_message} (dispute_id=#{dispute.id})")

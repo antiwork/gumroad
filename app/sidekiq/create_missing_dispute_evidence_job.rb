@@ -150,7 +150,7 @@ class CreateMissingDisputeEvidenceJob
         FightDisputeJob.perform_async(dispute.id)
         ErrorNotifier.notify(
           "CreateMissingDisputeEvidenceJob: dispute #{dispute.id} was never asked for evidence and its " \
-          "deadline is too close to ask now, so dispute_evidence #{dispute_evidence.id} is being submitted " \
+          "deadline is too close to ask now, so dispute_evidence #{dispute_evidence.id} goes to FightDisputeJob " \
           "without a seller statement. Something failed when the dispute was formalized on " \
           "#{dispute.formalized_at || dispute.created_at}."
         )

@@ -31,17 +31,54 @@ describe("Dispute evidence page", type: :system, js: true) do
     end
   end
 
-  it "renders the page" do
+  context "when the disputed amount is at least the contest minimum" do
+    let(:dispute) do
+      create(:dispute_formalized, reason: Dispute::REASON_FRAUDULENT,
+                                  purchase: create(:purchase, link: create(:product, price_cents: FightDisputeJob::MINIMUM_CONTESTED_AMOUNT_CENTS)),
+                                  processor_amount_cents: FightDisputeJob::MINIMUM_CONTESTED_AMOUNT_CENTS, processor_currency: Currency::USD)
+    end
+
+    it "renders the page" do
+      visit purchase_dispute_evidence_path(evidence_token)
+
+      expect(page).to have_text("Submit additional information")
+      expect(page).to have_text(/Any additional information you can provide by .+ \(72 hours left\) will help us win on your behalf\./)
+      expect(page).to have_text("The cardholder claims they did not authorize the purchase.")
+      expect(page).to have_text("Why should you win this dispute?")
+      expect(page).not_to have_text("Why is the customer not entitled to a refund?")
+      expect(page).to have_button("Save response", disabled: true)
+
+      expect(page).to have_selector("[role=listitem] h4", text: "Receipt")
+    end
+  end
+
+  it "makes the seller's information the condition for a response when the disputed amount is below the contest minimum" do
+    dispute.update!(processor_amount_cents: 1_00, processor_currency: Currency::USD)
     visit purchase_dispute_evidence_path(evidence_token)
 
-    expect(page).to have_text("Submit additional information")
-    expect(page).to have_text(/Any additional information you can provide by .+ \(72 hours left\) will help us win on your behalf\./)
-    expect(page).to have_text("The cardholder claims they did not authorize the purchase.")
+    expect(page).to have_text(/Send us information about the sale by .+ \(72 hours left\) if you want us to respond to this dispute\./)
+    expect(page).to have_text("For a dispute this small, our payment processor's fee to respond is more than we would usually recover.")
+    expect(page).not_to have_text("so we respond only if you send us information about the sale")
+    expect(page).not_to have_text("win on your behalf")
     expect(page).to have_text("Why should you win this dispute?")
-    expect(page).not_to have_text("Why is the customer not entitled to a refund?")
-    expect(page).to have_button("Save response", disabled: true)
+    expect(page).not_to have_text("amount in dispute")
+  end
 
-    expect(page).to have_selector("[role=listitem] h4", text: "Receipt")
+  it "tells a seller who has already sent information below the contest minimum that we will respond" do
+    dispute.update!(processor_amount_cents: 1_00, processor_currency: Currency::USD)
+    dispute_evidence.update!(seller_submitted_at: Time.current)
+    visit purchase_dispute_evidence_path(evidence_token)
+
+    expect(page).to have_text(/Any additional information you can provide by .+ \(72 hours left\) will help us win on your behalf\./)
+    expect(page).to have_text("so we respond only if you send us information about the sale. You have sent us information, so we will respond.")
+    expect(page).not_to have_text("if you want us to respond to this dispute")
+  end
+
+  it "names the sale and the disputed amount apart when only part of the sale is disputed" do
+    dispute.update!(processor_amount_cents: 50, processor_currency: Currency::USD)
+    visit purchase_dispute_evidence_path(evidence_token)
+
+    expect(page).to have_text("#{product.name}. The sale was #{purchase.formatted_disputed_amount}, and the amount in dispute is $0.50.")
   end
 
   describe "reason_for_winning field" do

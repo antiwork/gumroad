@@ -37,6 +37,9 @@ type Props = {
     purchased_at: string;
     duration_left_to_submit_evidence_formatted: string;
     seller_response_due_at: string | null;
+    below_contest_minimum: boolean;
+    seller_submitted: boolean;
+    formatted_dispute_amount: string | null;
     customer_communication_file_max_size: number;
     customer_communication_files_max_count: number;
     blobs: Blobs;
@@ -132,6 +135,11 @@ export default function Show() {
   const [isUploading, setIsUploading] = React.useState(false);
   const [uploadedFiles, setUploadedFiles] = React.useState<UploadedFile[]>([]);
   const [isConfirming, setIsConfirming] = React.useState(false);
+  // Named apart: a partial or rolled-up dispute is for a different amount than the sale.
+  const disputedAmounts =
+    dispute_evidence.formatted_dispute_amount !== null
+      ? `. The sale was ${disputable.formatted_display_price}, and the amount in dispute is ${dispute_evidence.formatted_dispute_amount}.`
+      : ` for ${disputable.formatted_display_price}.`;
   const hasSavedResponse =
     savedReasonForWinning.option !== null ||
     savedCancellationRebuttal.option !== null ||
@@ -284,7 +292,7 @@ export default function Show() {
           <div className="grow">
             <p>
               A customer of yours ({dispute_evidence.customer_email}) has disputed their purchase made on {purchaseDate}{" "}
-              of the following {products.length} items for {disputable.formatted_display_price}.
+              of the following {products.length} items{disputedAmounts}
             </p>
             <br />
             <ul>
@@ -303,20 +311,50 @@ export default function Show() {
             of{" "}
             <a href={products[0]?.url} target="_blank" rel="noreferrer">
               {products[0]?.name}
-            </a>{" "}
-            for {disputable.formatted_display_price}.
+            </a>
+            {disputedAmounts}
           </p>
         )}
         <p>
           <strong>{disputeReason.message}</strong>
         </p>
-        <p>
-          <strong>
-            {sellerResponseDueAt !== null
-              ? `Any additional information you can provide by ${sellerResponseDueAt} (${dispute_evidence.duration_left_to_submit_evidence_formatted} left) will help us win on your behalf.`
-              : `Any additional information you can provide in the next ${dispute_evidence.duration_left_to_submit_evidence_formatted} will help us win on your behalf.`}
-          </strong>
-        </p>
+        {dispute_evidence.below_contest_minimum && dispute_evidence.seller_submitted ? (
+          <>
+            <p>
+              <strong>
+                {sellerResponseDueAt !== null
+                  ? `Any additional information you can provide by ${sellerResponseDueAt} (${dispute_evidence.duration_left_to_submit_evidence_formatted} left) will help us win on your behalf.`
+                  : `Any additional information you can provide in the next ${dispute_evidence.duration_left_to_submit_evidence_formatted} will help us win on your behalf.`}
+              </strong>
+            </p>
+            <p>
+              For a dispute this small, our payment processor's fee to respond is more than we would usually recover, so
+              we respond only if you send us information about the sale. You have sent us information, so we will
+              respond.
+            </p>
+          </>
+        ) : dispute_evidence.below_contest_minimum ? (
+          <>
+            <p>
+              <strong>
+                {sellerResponseDueAt !== null
+                  ? `Send us information about the sale by ${sellerResponseDueAt} (${dispute_evidence.duration_left_to_submit_evidence_formatted} left) if you want us to respond to this dispute.`
+                  : `Send us information about the sale in the next ${dispute_evidence.duration_left_to_submit_evidence_formatted} if you want us to respond to this dispute.`}
+              </strong>
+            </p>
+            <p>
+              For a dispute this small, our payment processor's fee to respond is more than we would usually recover.
+            </p>
+          </>
+        ) : (
+          <p>
+            <strong>
+              {sellerResponseDueAt !== null
+                ? `Any additional information you can provide by ${sellerResponseDueAt} (${dispute_evidence.duration_left_to_submit_evidence_formatted} left) will help us win on your behalf.`
+                : `Any additional information you can provide in the next ${dispute_evidence.duration_left_to_submit_evidence_formatted} will help us win on your behalf.`}
+            </strong>
+          </p>
+        )}
         <Alert variant="warning">
           <strong>You can keep adding to this until the deadline.</strong> Our payment processor accepts one submission
           per dispute, so we hold your response and send it at the deadline. Come back any time before then to add files

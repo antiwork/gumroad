@@ -109,6 +109,11 @@ class ContactingCreatorMailer < ApplicationMailer
   }.freeze
   private_constant :DISPUTE_REASON_COPY
 
+  SMALL_DISPUTE_REASON_COPY = "For a dispute this small, our payment processor's fee to respond is more than we would usually recover"
+  SMALL_DISPUTE_CONDITION_COPY = "so we respond only if you send us information about the sale"
+  SMALL_DISPUTE_CANCELED_COPY = "If your customer tells you they canceled the dispute, upload their message with your response: a canceled dispute is still lost unless we respond."
+  private_constant :SMALL_DISPUTE_REASON_COPY, :SMALL_DISPUTE_CONDITION_COPY, :SMALL_DISPUTE_CANCELED_COPY
+
   def chargeback_notice(dispute_id)
     dispute = Dispute.find(dispute_id)
     @disputable = dispute.disputable
@@ -118,10 +123,14 @@ class ContactingCreatorMailer < ApplicationMailer
     # The "they don't recognize Gumroad" paragraph guesses a reason of its own, so it only
     # belongs when the email names no reason, or one that reads the same way.
     @explain_unrecognized_charge = @dispute_reason_copy.nil? || dispute.reason.in?([Dispute::REASON_FRAUDULENT, Dispute::REASON_UNRECOGNIZED])
+    @disputed_amounts_copy = disputed_amounts_copy(@disputable)
     @balance_debit = chargeback_balance_debit(@disputable)
     @win_credit = chargeback_win_credit(@disputable, @balance_debit)
     # Mirrors the guard on ContactingCreatorMailer.chargeback_won in handle_event_dispute_won!.
     @won_notification = !@disputable.disputed_purchases.all?(&:refunded?)
+    # PayPal-through-Braintree disputes have no evidence form, so the copy would ask for something
+    # the seller cannot send.
+    small_dispute = @disputable.eligible_for_dispute_evidence? && FightDisputeJob.below_contest_minimum?(@disputable)
 
     dispute_evidence = dispute.dispute_evidence
     # Recomputed at delivery, not at enqueue: a notice queued with an hour left can be delivered with
@@ -132,12 +141,24 @@ class ContactingCreatorMailer < ApplicationMailer
     # so the two calls can straddle the window's end and quote "the next 0 hours" past the gate.
     hours_left = dispute_evidence&.hours_left_to_submit_evidence
     asking_for_evidence = dispute_evidence&.accepting_evidence? && hours_left&.positive?
+    seller_submitted = dispute_evidence&.seller_submitted?
+    small_ask = small_dispute && asking_for_evidence && !seller_submitted
+    if small_dispute
+      @small_dispute_reason_copy = small_dispute_reason_copy(asked: small_ask, seller_submitted:)
+      @small_dispute_canceled_copy = SMALL_DISPUTE_CANCELED_COPY if asking_for_evidence
+    end
     @dispute_evidence_content = \
       if asking_for_evidence
         due_at = format_dispute_evidence_due_at(dispute_evidence.seller_response_due_at)
+        ask = \
+          if small_ask
+            "Send us information about the sale by #{due_at} (in the next #{pluralize(hours_left, "hour")}) if you want us to respond to this dispute."
+          else
+            "Any additional information you can provide by #{due_at} (in the next #{pluralize(hours_left, "hour")}) will help us win on your behalf."
+          end
         safe_join(
           [
-            tag.p(tag.b("Any additional information you can provide by #{due_at} (in the next #{pluralize(hours_left, "hour")}) will help us win on your behalf.")),
+            tag.p(tag.b(ask)),
             tag.p(
               link_to(
                 "Submit additional information",
@@ -176,6 +197,12 @@ class ContactingCreatorMailer < ApplicationMailer
     return do_not_send unless @hours_left.positive?
 
     @seller_response_due_at_formatted = format_dispute_evidence_due_at(@dispute_evidence.seller_response_due_at)
+    @disputed_amounts_copy = disputed_amounts_copy(@disputable)
+    if FightDisputeJob.below_contest_minimum?(@disputable)
+      @small_dispute_ask = !@dispute_evidence.seller_submitted?
+      @small_dispute_reason_copy = small_dispute_reason_copy(asked: @small_dispute_ask, seller_submitted: @dispute_evidence.seller_submitted?)
+      @small_dispute_canceled_copy = SMALL_DISPUTE_CANCELED_COPY
+    end
     @subject = "Reminder: Submit dispute evidence within 24 hours"
   end
 
@@ -502,10 +529,21 @@ class ContactingCreatorMailer < ApplicationMailer
     @subject = "Your dispute response was sent without your attached file"
   end
 
+  def chargeback_not_contested(dispute_id)
+    dispute = Dispute.find(dispute_id)
+    @disputable = dispute.disputable
+    @seller = @disputable.seller
+    @disputed_amounts_copy = disputed_amounts_copy(@disputable)
+    @balance_debit = chargeback_balance_debit(@disputable)
+    @subject = "We did not respond to a small dispute"
+  end
+
   def chargeback_won(dispute_id)
     dispute = Dispute.find(dispute_id)
     @disputable = dispute.disputable
     @seller = @disputable.seller
+    @balance_debit = chargeback_balance_debit(@disputable)
+    @win_credit = chargeback_win_credit(@disputable, @balance_debit)
     @subject = "A dispute has been won"
   end
 
@@ -905,6 +943,25 @@ class ContactingCreatorMailer < ApplicationMailer
 
     def format_dispute_evidence_due_at(due_at)
       due_at.in_time_zone(@seller.timezone.presence || Time.zone).strftime("%B %-d, %Y at %-l:%M %p %Z")
+    end
+
+    # A partial or rolled-up dispute is for a different amount than the sale, and neither is what the
+    # seller's balance lost, so the two are named apart rather than as "X of Y".
+    def disputed_amounts_copy(disputable)
+      sale = disputable.formatted_disputed_amount
+      dispute_amount = disputable.formatted_processor_dispute_amount
+      dispute_amount ? ". The sale was #{sale}, and the amount in dispute is #{dispute_amount}." : " for #{sale}."
+    end
+
+    # The bold ask states the condition itself; without it the reason has to carry it.
+    def small_dispute_reason_copy(asked:, seller_submitted:)
+      if asked
+        "#{SMALL_DISPUTE_REASON_COPY}."
+      elsif seller_submitted
+        "#{SMALL_DISPUTE_REASON_COPY}, #{SMALL_DISPUTE_CONDITION_COPY}. You have sent us information, so we will respond."
+      else
+        "#{SMALL_DISPUTE_REASON_COPY}, #{SMALL_DISPUTE_CONDITION_COPY}."
+      end
     end
 
     # Reads what Purchase#decrement_balance_for_refund_or_chargeback! booked: nothing for a sale refunded

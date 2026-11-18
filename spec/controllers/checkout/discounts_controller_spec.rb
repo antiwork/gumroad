@@ -296,6 +296,16 @@ describe Checkout::DiscountsController do
       expect(response.parsed_body["error_message"]).to include("already applied automatically")
     end
 
+    it "saves an auto-applied code with no dates once the previous one has ended" do
+      seller.offer_codes.create!(code: "ended", amount_percentage: 10, universal: true, products: [], auto_apply: true,
+                                 valid_at: 2.weeks.ago, expires_at: 1.week.ago)
+
+      post :create, params: { name: "BF", code: "bf30", amount_percentage: 30, universal: true, selected_product_ids: [], auto_apply: true }, as: :json
+
+      expect(response.parsed_body["success"]).to eq(true)
+      expect(seller.offer_codes.find_by(code: "bf30").auto_apply).to eq(true)
+    end
+
     it "returns HTTP success and creates an offer code" do
       valid_at = ActiveSupport::TimeZone[seller.timezone].parse("January 1 #{Time.current.year - 1}")
       expires_at = ActiveSupport::TimeZone[seller.timezone].parse("January 1 #{Time.current.year + 1}")
