@@ -831,8 +831,8 @@ describe Charge::Disputable, :vcr do
 
           expect(seller.reload.unpaid_balance_cents).to eq initial_balance - purchase.payment_cents
           body = notice_body(purchase)
-          expect(body).to include "We have deducted the amount from your balance, and are looking into it for you."
-          expect(body).to include "If we succeed, you will automatically be re-credited the full amount."
+          expect(body).to include "We have taken what you earned from this sale back out of your balance, and are looking into it for you."
+          expect(body).to include "If we succeed, we will automatically add what we deducted back to your balance."
 
           Purchase.handle_charge_event(won_event)
           expect(seller.reload.unpaid_balance_cents).to eq initial_balance
@@ -850,8 +850,8 @@ describe Charge::Disputable, :vcr do
             body = notice_body(purchase)
             expect(body).to include "This sale was already refunded in full, so nothing has been deducted from your balance."
             expect(body).to include "winning the dispute will not change your balance."
-            expect(body).not_to include "We have deducted"
-            expect(body).not_to include "re-credited"
+            expect(body).not_to include "back out of your balance"
+            expect(body).not_to include "add what we deducted back"
             # handle_event_dispute_won! sends no won email for a sale refunded in full.
             expect(body).not_to include "another notification once we have won"
 
@@ -871,9 +871,9 @@ describe Charge::Disputable, :vcr do
             debited_cents = balance_before_dispute - seller.reload.unpaid_balance_cents
             expect(debited_cents).to be_between(1, purchase.payment_cents - 1)
             body = notice_body(purchase)
-            expect(body).to include "We have deducted the unrefunded part of that amount from your balance, and are looking into it for you."
-            expect(body).to include "If we succeed, you will automatically be re-credited the amount we deducted."
-            expect(body).not_to include "re-credited the full amount"
+            expect(body).to include "We have taken what you earned from the unrefunded part of this sale back out of your balance, and are looking into it for you."
+            expect(body).to include "If we succeed, we will automatically add what we deducted back to your balance."
+            expect(body).not_to include "what you earned from this sale"
 
             Purchase.handle_charge_event(won_event)
             expect(seller.reload.unpaid_balance_cents).to eq balance_before_dispute
@@ -888,10 +888,10 @@ describe Charge::Disputable, :vcr do
 
             body = notice_body(purchase)
             expect(body).to include "This sale was paid into your connected Stripe account, so nothing has been deducted from your Gumroad balance."
-            expect(body).to include "We fight every dispute and submit the evidence through your connected Stripe account. If we win, the amount is released back to that account."
+            expect(body).to include "We fight every dispute and submit the evidence through your connected Stripe account. If we win, the disputed amount is released back to that account."
             expect(body).not_to include "already refunded"
-            expect(body).not_to include "We have deducted"
-            expect(body).not_to include "re-credited"
+            expect(body).not_to include "back out of your balance"
+            expect(body).not_to include "add what we deducted back"
             expect(FightDisputeJob).to have_enqueued_sidekiq_job(purchase.reload.dispute.id)
 
             expect { Purchase.handle_charge_event(won_event) }.not_to change { seller.reload.unpaid_balance_cents }
@@ -910,8 +910,8 @@ describe Charge::Disputable, :vcr do
 
             expect(seller.reload.unpaid_balance_cents).to eq balance_before_dispute - purchase.payment_cents
             body = notice_body(purchase)
-            expect(body).to include "We have deducted the amount from your balance, and are looking into it for you."
-            expect(body).not_to include "re-credited"
+            expect(body).to include "We have taken what you earned from this sale back out of your balance, and are looking into it for you."
+            expect(body).not_to include "add what we deducted back"
             expect(body).not_to include "another notification once we have won"
 
             expect { Purchase.handle_charge_event(won_event) }.not_to change { seller.reload.unpaid_balance_cents }
@@ -931,7 +931,7 @@ describe Charge::Disputable, :vcr do
             body = notice_body(purchase)
             expect(body).to include "The dispute is handled in your PayPal account"
             expect(body).not_to include "deducted"
-            expect(body).not_to include "re-credited"
+            expect(body).not_to include "add what we deducted back"
           end
         end
 
@@ -962,8 +962,8 @@ describe Charge::Disputable, :vcr do
             expect(charge.purchases.reload.sort_by(&:id).map(&:purchase_chargeback_balance_id).map(&:present?)).to eq [false, true, true]
             expect(seller.reload.unpaid_balance_cents).to be < balance_before_dispute
             body = notice_body(charge)
-            expect(body).to include "We have deducted the unrefunded part of that amount from your balance, and are looking into it for you."
-            expect(body).to include "If we succeed, you will automatically be re-credited the amount we deducted."
+            expect(body).to include "We have taken what you earned from the unrefunded part of this sale back out of your balance, and are looking into it for you."
+            expect(body).to include "If we succeed, we will automatically add what we deducted back to your balance."
             expect(body).not_to include "already refunded in full"
 
             Purchase.handle_charge_event(won_event)
@@ -993,8 +993,8 @@ describe Charge::Disputable, :vcr do
 
             expect(charge.purchases.reload.map { [_1.free_purchase?, _1.purchase_chargeback_balance_id.present?] }).to contain_exactly([false, true], [true, false])
             body = notice_body(charge)
-            expect(body).to include "We have deducted the amount from your balance, and are looking into it for you."
-            expect(body).to include "If we succeed, you will automatically be re-credited the full amount."
+            expect(body).to include "We have taken what you earned from this sale back out of your balance, and are looking into it for you."
+            expect(body).to include "If we succeed, we will automatically add what we deducted back to your balance."
 
             Purchase.handle_charge_event(won_event)
             expect(seller.reload.unpaid_balance_cents).to eq balance_before_dispute
