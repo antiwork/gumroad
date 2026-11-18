@@ -722,10 +722,7 @@ describe ContactingCreatorMailer do
       end
 
       context "when the disputed amount is below the contest minimum" do
-        before do
-          allow(FightDisputeJob).to receive(:below_contest_minimum?).and_call_original
-          dispute.update!(processor_amount_cents: 1_00, processor_currency: Currency::USD)
-        end
+        before { dispute.update!(processor_amount_cents: 1_00, processor_currency: Currency::USD) }
 
         let!(:dispute_evidence) { create(:dispute_evidence, dispute:) }
 
@@ -2743,13 +2740,25 @@ describe ContactingCreatorMailer do
       expect(body).not_to include "did not send"
     end
 
-    it "says the disputed amount stays deducted when the seller balance was debited" do
+    it "says the sale's deduction stays when the seller balance was debited" do
       purchase.update!(purchase_chargeback_balance: create(:balance, user: seller))
 
       body = ContactingCreatorMailer.chargeback_not_contested(dispute.id).body.encoded
 
-      expect(body).to include "The disputed amount stays deducted from your balance."
+      expect(body).to include "The amount we deducted for this sale stays deducted from your balance."
       expect(body).not_to include "Nothing has been deducted"
+    end
+
+    # The debit is the seller's share of the whole sale, not the processor's amount named above it.
+    it "does not tie the deduction to the disputed amount when only part of a debited sale is disputed" do
+      purchase.update!(purchase_chargeback_balance: create(:balance, user: seller))
+      dispute.update!(processor_amount_cents: 50, processor_currency: Currency::USD)
+
+      body = ContactingCreatorMailer.chargeback_not_contested(dispute.id).body.encoded
+
+      expect(body).to include "The dispute is for $0.50."
+      expect(body).to include "The amount we deducted for this sale stays deducted from your balance."
+      expect(body).not_to include "disputed amount stays deducted"
     end
 
     it "says nothing was deducted when the seller balance was never debited" do
@@ -2779,8 +2788,8 @@ describe ContactingCreatorMailer do
       it "says only the unrefunded part stays deducted" do
         body = ContactingCreatorMailer.chargeback_not_contested(dispute.id).body.encoded
 
-        expect(body).to include "The unrefunded part of the disputed amount stays deducted from your balance."
-        expect(body).not_to include "The disputed amount stays deducted"
+        expect(body).to include "The unrefunded part of this sale stays deducted from your balance."
+        expect(body).not_to include "The amount we deducted for this sale stays deducted"
       end
     end
 
