@@ -732,7 +732,7 @@ describe ContactingCreatorMailer do
           body = ContactingCreatorMailer.chargeback_notice(dispute.id).body.encoded
 
           expect(body).to include "(in the next 72 hours) if you want us to respond to this dispute."
-          expect(body).to include "fee to respond is more than we would usually recover, so we respond only if you send us information about the sale. If your customer tells you they canceled the dispute, send us their message: a canceled dispute is still lost unless we respond. If we succeed, you will automatically be re-credited the full amount."
+          expect(body).to include "fee to respond is more than we would usually recover, so we respond only if you send us information about the sale. If your customer tells you they canceled the dispute, upload their message with your response: a canceled dispute is still lost unless we respond. If we succeed, you will automatically be re-credited the full amount."
           expect(body).to include "Submit additional information"
           expect(body).not_to include "We fight every dispute"
           expect(body).not_to include "win on your behalf"
@@ -747,7 +747,17 @@ describe ContactingCreatorMailer do
           expect(body).to include "if you want us to respond to this dispute."
           expect(body).not_to include "Please submit any additional information"
           expect(body).to include "You have 23 hours left."
-          expect(body).to include "fee to respond is more than we would usually recover, so we respond only if you send us information about the sale. If your customer tells you they canceled the dispute, send us their message: a canceled dispute is still lost unless we respond."
+          expect(body).to include "fee to respond is more than we would usually recover, so we respond only if you send us information about the sale. If your customer tells you they canceled the dispute, upload their message with your response: a canceled dispute is still lost unless we respond."
+        end
+
+        it "does not ask a seller who already saved a response to send one" do
+          dispute_evidence.update!(seller_contacted_at: 49.hours.ago, seller_submitted_at: Time.current)
+
+          body = ContactingCreatorMailer.chargeback_evidence_due_soon(dispute.id).body.encoded
+
+          expect(body).to include "Please submit any additional information by"
+          expect(body).not_to include "if you want us to respond to this dispute."
+          expect(body).to include "You have 23 hours left."
         end
 
         context "when the sale was paid into a Stripe Connect account" do
@@ -759,7 +769,7 @@ describe ContactingCreatorMailer do
           it "submits only the seller's information through the connected account" do
             body = ContactingCreatorMailer.chargeback_notice(dispute.id).body.encoded
 
-            expect(body).to include "so we respond only if you send us information about the sale. If your customer tells you they canceled the dispute, send us their message: a canceled dispute is still lost unless we respond. We submit your information through your connected Stripe account, and if we win, the amount is released back to that account."
+            expect(body).to include "so we respond only if you send us information about the sale. If your customer tells you they canceled the dispute, upload their message with your response: a canceled dispute is still lost unless we respond. We submit your information through your connected Stripe account, and if we win, the amount is released back to that account."
             expect(body).not_to include "We fight every dispute"
           end
         end

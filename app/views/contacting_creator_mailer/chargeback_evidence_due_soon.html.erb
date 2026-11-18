@@ -19,7 +19,7 @@
   <% end %>
   <p>
     <strong>
-      <% if @small_dispute_response_copy %>
+      <% if @small_dispute_response_copy && !@dispute_evidence.seller_submitted? %>
         Send us information about the sale by <%= @seller_response_due_at_formatted %> if you want us to respond to this dispute.
       <% else %>
         Please submit any additional information by <%= @seller_response_due_at_formatted %>.
