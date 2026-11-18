@@ -104,6 +104,16 @@ class OfferCode < ApplicationRecord
   scope :not_excluding_product, ->(product) {
     where("NOT EXISTS (SELECT 1 FROM offer_codes_excluded_products WHERE offer_codes_excluded_products.offer_code_id = offer_codes.id AND offer_codes_excluded_products.product_id = ?)", product.id)
   }
+  # Inside its validity window now, as the half-open interval [valid_at, expires_at): a code ending
+  # exactly when the next starts has handed over, so at most one auto-applied code is ever open at an
+  # instant. That is the same interval `overlapping` lets a seller schedule.
+  scope :active, -> { where("valid_at IS NULL OR valid_at <= ?", Time.current).where("expires_at IS NULL OR expires_at > ?", Time.current) }
+  # Codes whose window can be open at the same instant as [from, to). A nil bound is unbounded on
+  # that side, so it overlaps everything; windows that only touch do not overlap.
+  scope :overlapping, ->(from, to) {
+    where("offer_codes.valid_at IS NULL OR :to IS NULL OR offer_codes.valid_at < :to", to:)
+      .where("offer_codes.expires_at IS NULL OR :from IS NULL OR offer_codes.expires_at > :from", from:)
+  }
 
   # Codes may contain accented Latin characters (see the format validation above), so NFC-normalize
   # before comparing — a decomposed client submission must match its precomposed stored form. For
@@ -346,8 +356,14 @@ class OfferCode < ApplicationRecord
     end
   end
 
+  # An automatic sale is over at its expiry instant, as in `active`, so a sale starting then is the
+  # only one open at the handover. Other codes still redeem through their expiry instant.
   def inactive?
-    !!(valid_at&.future? || expires_at&.past?)
+    now = Time.current
+    return true if valid_at.present? && valid_at > now
+    return false if expires_at.nil?
+
+    auto_apply? ? expires_at <= now : expires_at < now
   end
 
   # Deleted options must retain the product restriction until the seller changes it.
@@ -780,9 +796,9 @@ class OfferCode < ApplicationRecord
       User.where(id: user_id).lock.pick(:id)
     end
 
-    # A seller has at most one shop-wide auto-applied code, and it must be a plain
-    # "all products" discount. Never clears another code silently: the seller turns
-    # the other one off first.
+    # A seller's shop-wide auto-applied codes must never be open at the same instant, and each must
+    # be a plain "all products" discount. A conflict never clears the other code silently: the seller
+    # turns it off or moves its dates first.
     def validate_auto_apply
       return unless auto_apply?
       return if deleted_at.present?
@@ -793,12 +809,17 @@ class OfferCode < ApplicationRecord
       errors.add(:base, "A discount limited to new customers cannot be applied automatically.") if new_customers_only?
       return if user_id.blank?
 
+      # Only what is left of each window can collide: an ended code never applies again, so a nil or
+      # past start must not reach back into it.
+      from = [valid_at, Time.current].compact.max
+      return if expires_at.present? && expires_at <= from
+
       # `update` assigns associations before the seller lock, fixing the REPEATABLE READ snapshot,
       # so it needs a current read. A create's first read is the seller lock; locking here too would
       # take gap locks that can deadlock two sellers' concurrent inserts.
       other = OfferCode.alive.where(user_id:, auto_apply: true)
       other = other.where.not(id:).lock if persisted?
-      if (existing = other.first)
+      if (existing = other.overlapping(from, expires_at).first)
         errors.add(:base, "Another discount (#{existing.code}) is already applied automatically. Turn it off first.")
       end
     end

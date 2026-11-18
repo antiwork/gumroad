@@ -819,6 +819,117 @@ describe OfferCode do
       expect(first.reload.auto_apply).to be(true)
     end
 
+    it "allows a second auto-applied code whose window does not overlap the first" do
+      universal_code(auto_apply: true, valid_at: 1.week.from_now, expires_at: 2.weeks.from_now).save!
+
+      expect(universal_code(auto_apply: true, valid_at: Time.current, expires_at: 3.days.from_now)).to be_valid
+    end
+
+    it "rejects a second auto-applied code whose window overlaps the first" do
+      universal_code(auto_apply: true, valid_at: Time.current, expires_at: 2.weeks.from_now).save!
+
+      overlapping = universal_code(auto_apply: true, valid_at: 1.week.from_now, expires_at: 3.weeks.from_now)
+      expect(overlapping).not_to be_valid
+      expect(overlapping.errors.full_messages.first).to include("is already applied automatically")
+    end
+
+    it "allows a new auto-applied code once the previous one has ended" do
+      universal_code(auto_apply: true, valid_at: 2.weeks.ago, expires_at: 1.week.ago).save!
+
+      expect(universal_code(auto_apply: true, valid_at: Time.current, expires_at: 3.days.from_now)).to be_valid
+    end
+
+    it "allows an auto-applied code with no start date once the previous one has ended" do
+      universal_code(auto_apply: true, valid_at: 2.weeks.ago, expires_at: 1.week.ago).save!
+
+      expect(universal_code(auto_apply: true)).to be_valid
+    end
+
+    it "lets the seller edit an ended auto-applied code while another one is running" do
+      ended = universal_code(auto_apply: true, valid_at: 2.weeks.ago, expires_at: 1.week.ago)
+      ended.save!
+      universal_code(auto_apply: true).save!
+
+      expect(ended.update(sale_label: "Last week")).to be(true)
+    end
+
+    it "rejects an edit that moves an auto-applied code onto another one's window" do
+      universal_code(auto_apply: true, valid_at: Time.current, expires_at: 3.days.from_now).save!
+      scheduled = universal_code(auto_apply: true, valid_at: 1.week.from_now, expires_at: 2.weeks.from_now)
+      scheduled.save!
+
+      expect(scheduled.update(valid_at: Time.current, expires_at: 3.weeks.from_now)).to be(false)
+      expect(scheduled.errors.full_messages.first).to include("is already applied automatically")
+    end
+
+    it "rejects a second auto-applied code while an open-ended one is running" do
+      universal_code(auto_apply: true, valid_at: Time.current).save!
+
+      expect(universal_code(auto_apply: true, valid_at: 1.week.from_now, expires_at: 2.weeks.from_now)).not_to be_valid
+    end
+
+    it "allows a second auto-applied code that starts exactly when the first one ends" do
+      boundary = 1.week.from_now.change(usec: 0)
+      universal_code(auto_apply: true, valid_at: 3.days.ago.change(usec: 0), expires_at: boundary).save!
+
+      expect(universal_code(auto_apply: true, valid_at: boundary, expires_at: 2.weeks.from_now)).to be_valid
+    end
+
+    it "hands the shop-wide sale over at a shared boundary, with one code open at a time" do
+      boundary = 1.week.from_now.change(usec: 0)
+      ending = universal_code(auto_apply: true, valid_at: 3.days.ago.change(usec: 0), expires_at: boundary)
+      ending.save!
+      starting = universal_code(auto_apply: true, valid_at: boundary, expires_at: 2.weeks.from_now)
+      starting.save!
+
+      travel_to(boundary - 1.second) do
+        Current.reset
+        expect(seller.reload.auto_apply_offer_code).to eq(ending)
+      end
+
+      travel_to(boundary) do
+        Current.reset
+        expect(seller.reload.auto_apply_offer_code).to eq(starting)
+        expect(OfferCode.active.where(user_id: seller.id, auto_apply: true).pluck(:id)).to eq([starting.id])
+      end
+    end
+
+    it "closes the ending sale for a product default and checkout at a shared boundary" do
+      boundary = 1.week.from_now.change(usec: 0)
+      ending = universal_code(auto_apply: true, amount_percentage: 20, valid_at: Time.current, expires_at: boundary)
+      ending.save!
+      starting = universal_code(auto_apply: true, valid_at: boundary, expires_at: 2.weeks.from_now)
+      starting.save!
+      @product.update!(default_offer_code_id: ending.id)
+
+      { boundary - 1.second => [ending, 1600], boundary => [starting, 1400] }.each do |now, (live, price_cents)|
+        travel_to(now) do
+          Current.reset
+          expect(User.includes(:auto_apply_offer_code).find(seller.id).auto_apply_offer_code).to eq(live)
+          expect(@product.reload.discounted_price_cents(2000)).to eq(price_cents)
+          expect([ending, starting].reject(&:inactive?)).to eq([live])
+        end
+      end
+    end
+
+    it "resolves the auto-applied code that is open now" do
+      scheduled = universal_code(auto_apply: true, valid_at: 1.week.from_now, expires_at: 2.weeks.from_now)
+      scheduled.save!
+      live = universal_code(auto_apply: true, valid_at: Time.current, expires_at: 3.days.from_now)
+      live.save!
+
+      Current.reset
+      expect(seller.reload.auto_apply_offer_code).to eq(live)
+      expect(User.includes(:auto_apply_offer_code).find(seller.id).auto_apply_offer_code).to eq(live)
+    end
+
+    it "resolves no auto-applied code before its window opens" do
+      universal_code(auto_apply: true, valid_at: 1.week.from_now, expires_at: 2.weeks.from_now).save!
+
+      Current.reset
+      expect(seller.reload.auto_apply_offer_code).to be_nil
+    end
+
     it "lets another seller auto apply their own code" do
       universal_code(auto_apply: true).save!
       other = create(:user)
@@ -1199,6 +1310,14 @@ describe OfferCode do
   end
 
   describe "#inactive?" do
+    context "when a manually applied offer code reaches its expiry instant" do
+      let(:offer_code) { create(:offer_code, valid_at: 1.day.ago, expires_at: 1.week.from_now.change(usec: 0)) }
+
+      it "returns false" do
+        travel_to(offer_code.expires_at) { expect(offer_code.inactive?).to eq(false) }
+      end
+    end
+
     context "when the offer code has no valid or expiriration date" do
       let(:offer_code) { create(:offer_code) }
 
