@@ -9065,6 +9065,61 @@ describe StripeMerchantAccountManager, :vcr do
       end
     end
 
+    describe "Stripe reports the just-created account as deleted" do
+      let(:deleted_error) { Stripe::InvalidRequestError.new("The account 'acct_first' has been deleted, so we can't complete this action.", nil) }
+      let(:first_account) { Stripe::Account.construct_from(id: "acct_first", object: "account") }
+      let(:second_account) do
+        Stripe::Account.construct_from(
+          id: "acct_second", object: "account",
+          external_accounts: { object: "list", data: [{ id: "ba_second", object: "bank_account", fingerprint: "fp_second" }] }
+        )
+      end
+
+      before do
+        create(:user_compliance_info_business, user:)
+        create(:ach_account_stripe_succeed, user:)
+        create(:tos_agreement, user:)
+        allow(ErrorNotifier).to receive(:notify)
+      end
+
+      it "opens one fresh account with a new idempotency key and succeeds" do
+        keys = []
+        allow(Stripe::Account).to receive(:create) do |_params, opts|
+          keys << opts[:idempotency_key]
+          keys.size == 1 ? first_account : second_account
+        end
+        allow(Stripe::Account).to receive(:create_person) do |id, _params|
+          raise deleted_error if id == "acct_first"
+        end
+
+        merchant_account = subject.create_account(user, passphrase: "1234")
+
+        expect(merchant_account.charge_processor_merchant_id).to eq("acct_second")
+        expect(merchant_account.charge_processor_alive_at).to be_present
+        expect(keys.uniq.size).to eq(2)
+        expect(user.merchant_accounts.alive.count).to eq(1)
+      end
+
+      it "surfaces the rejection when the replacement account is deleted too" do
+        allow(Stripe::Account).to receive(:create).and_return(first_account, second_account)
+        allow(Stripe::Account).to receive(:create_person).and_raise(deleted_error)
+        allow(Stripe::Account).to receive(:delete)
+
+        expect { subject.create_account(user, passphrase: "1234") }.to raise_error(Stripe::InvalidRequestError)
+        expect(Stripe::Account).to have_received(:create).twice
+        expect(user.merchant_accounts.alive.count).to eq(0)
+      end
+
+      it "does not retry other create_person rejections" do
+        allow(Stripe::Account).to receive(:create).and_return(first_account)
+        allow(Stripe::Account).to receive(:create_person).and_raise(Stripe::InvalidRequestError.new("bad dob", "dob"))
+        allow(Stripe::Account).to receive(:delete)
+
+        expect { subject.create_account(user, passphrase: "1234") }.to raise_error(Stripe::InvalidRequestError)
+        expect(Stripe::Account).to have_received(:create).once
+      end
+    end
+
     describe "user doesn't have compliance info" do
       it "raises a user not ready error" do
         expect { subject.create_account(user, passphrase: "1234") }.to raise_error(MerchantRegistrationUserNotReadyError)

@@ -286,21 +286,35 @@ module StripeMerchantAccountManager
         raise Stripe::APIError.new("Uncertain Stripe account creation could not be reconciled") unless persist_account_creation_attempt!(user, idempotency_key)
       end
 
-      stripe_account, recovered_account = create_or_recover_stripe_account(user, account_params, idempotency_key)
-      recovered_external_account = nil
-      if recovered_account && bank_account && !bank_account.is_a?(CardBankAccount)
-        stripe_account, recovered_external_account = align_recovered_account_bank(bank_account, stripe_account, passphrase:)
-      elsif recovered_account
-        remove_recovered_bank_destinations!(stripe_account)
-      end
+      replaced_deleted_account = false
+      begin
+        stripe_account, recovered_account = create_or_recover_stripe_account(user, account_params, idempotency_key)
+        recovered_external_account = nil
+        if recovered_account && bank_account && !bank_account.is_a?(CardBankAccount)
+          stripe_account, recovered_external_account = align_recovered_account_bank(bank_account, stripe_account, passphrase:)
+        elsif recovered_account
+          remove_recovered_bank_destinations!(stripe_account)
+        end
 
-      merchant_account.charge_processor_merchant_id = stripe_account.id
-      merchant_account.save!
+        merchant_account.charge_processor_merchant_id = stripe_account.id
+        merchant_account.save!
 
-      if user_compliance_info.is_business?
-        person_params = person_hash(user_compliance_info, passphrase)
-        person_params.deep_merge!(relationship: { representative: true, owner: true, title: user_compliance_info.job_title.presence || DEFAULT_RELATIONSHIP_TITLE, percent_ownership: 100 })
-        Stripe::Account.create_person(stripe_account.id, force_utf8_encoding(person_params))
+        if user_compliance_info.is_business?
+          person_params = person_hash(user_compliance_info, passphrase)
+          person_params.deep_merge!(relationship: { representative: true, owner: true, title: user_compliance_info.job_title.presence || DEFAULT_RELATIONSHIP_TITLE, percent_ownership: 100 })
+          Stripe::Account.create_person(stripe_account.id, force_utf8_encoding(person_params))
+        end
+      rescue Stripe::InvalidRequestError => e
+        raise if replaced_deleted_account || !account_deleted_error?(e)
+
+        # Stripe reports the account it just returned as deleted. Replaying its idempotency key
+        # would return that same account, so open one fresh account before surfacing a rejection.
+        replaced_deleted_account = true
+        idempotency_key = SecureRandom.uuid
+        raise Stripe::APIError.new("Uncertain Stripe account creation could not be reconciled") unless remember_account_creation_idempotency_key(user, idempotency_key)
+
+        merchant_account.update!(charge_processor_merchant_id: nil)
+        retry
       end
 
       # An under-18 seller can't be verified alone, so the guardian goes on as a second Person.
@@ -2911,6 +2925,11 @@ module StripeMerchantAccountManager
     end
     merchant_account.mark_deleted!
     deleted_on_stripe
+  end
+
+  private_class_method
+  def self.account_deleted_error?(error)
+    error.message.to_s.match?(/account .* has been deleted/i)
   end
 
   private_class_method
