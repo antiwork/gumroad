@@ -18,6 +18,7 @@ class Variant < BaseVariant
   before_create :set_position
   after_save :set_customizable_price
   after_save :sync_product_customizable_price
+  after_commit :check_watched_price_points, if: :saved_change_to_price_difference_cents?
 
   delegate :link, to: :variant_category
   delegate :user, to: :link
@@ -86,6 +87,10 @@ class Variant < BaseVariant
   end
 
   private
+    def check_watched_price_points
+      CheckWatchedPricePointsJob.enqueue_for(variant_category&.link&.user_id)
+    end
+
     def set_position
       return if self.position_in_category.present?
       return unless variant_category

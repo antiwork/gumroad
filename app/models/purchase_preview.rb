@@ -7,7 +7,7 @@ class PurchasePreview
                 :formatted_total_display_price_per_unit, :shipping_cents,
                 :displayed_price_currency_type, :url_redirect, :displayed_price_cents,
                 :support_email, :charged_amount_cents, :external_id_for_invoice,
-                :unbundled_purchases, :successful_purchases, :orderable
+                :unbundled_purchases, :successful_purchases, :orderable, :purchase_refund_policy
 
   validates :link, presence: true
   validates :seller, presence: true

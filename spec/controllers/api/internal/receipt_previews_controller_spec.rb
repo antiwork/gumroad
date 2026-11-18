@@ -90,6 +90,39 @@ describe Api::Internal::ReceiptPreviewsController do
       expect(response).to be_successful
     end
 
+    describe "refund policy" do
+      it "renders the product refund policy title and fine print" do
+        seller.update!(refund_policy_enabled: false)
+        product.update!(product_refund_policy_enabled: true)
+        policy = create(:product_refund_policy, product:, max_refund_period_in_days: 14, fine_print: "Widerrufsbelehrung text")
+
+        get :show, params: { product_id: product.unique_permalink }
+
+        html = response.parsed_body["html"]
+        expect(html).to include(policy.title)
+        expect(html).to include("Widerrufsbelehrung text")
+      end
+
+      it "renders the account-level policy when it is enabled" do
+        seller.update!(refund_policy_enabled: true)
+        seller.refund_policy.update!(fine_print: "Account-wide fine print")
+
+        get :show, params: { product_id: product.unique_permalink }
+
+        expect(response.parsed_body["html"]).to include("Account-wide fine print")
+      end
+
+      it "omits the policy when the product policy is switched off" do
+        seller.update!(refund_policy_enabled: false)
+        product.update!(product_refund_policy_enabled: false)
+        create(:product_refund_policy, product:, max_refund_period_in_days: 14, fine_print: "Hidden fine print")
+
+        get :show, params: { product_id: product.unique_permalink }
+
+        expect(response.parsed_body["html"]).not_to include("Hidden fine print")
+      end
+    end
+
     it "renders the custom receipt text and button label sent as strings" do
       get :show, params: { product_id: product.unique_permalink, custom_receipt_text: "Thanks for your order!", custom_view_content_button_text: "Open it" }
 
