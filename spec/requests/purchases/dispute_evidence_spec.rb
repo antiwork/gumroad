@@ -64,6 +64,16 @@ describe("Dispute evidence page", type: :system, js: true) do
     expect(page).not_to have_text("amount in dispute")
   end
 
+  it "tells a seller who has already sent information below the contest minimum that we will respond" do
+    dispute.update!(processor_amount_cents: 1_00, processor_currency: Currency::USD)
+    dispute_evidence.update!(seller_submitted_at: Time.current)
+    visit purchase_dispute_evidence_path(evidence_token)
+
+    expect(page).to have_text(/Any additional information you can provide by .+ \(72 hours left\) will help us win on your behalf\./)
+    expect(page).to have_text("so we respond only if you send us information about the sale. You have sent us information, so we will respond.")
+    expect(page).not_to have_text("if you want us to respond to this dispute")
+  end
+
   it "names the sale and the disputed amount apart when only part of the sale is disputed" do
     dispute.update!(processor_amount_cents: 50, processor_currency: Currency::USD)
     visit purchase_dispute_evidence_path(evidence_token)

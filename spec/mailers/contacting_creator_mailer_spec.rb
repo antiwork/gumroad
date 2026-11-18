@@ -863,7 +863,7 @@ describe ContactingCreatorMailer do
         end
       end
 
-      # A dispute above the minimum can still be partial, and its amount was otherwise never shown.
+      # A dispute above the minimum can still be partial.
       context "when part of a sale above the minimum is disputed" do
         let(:purchase) { create(:purchase, link: create(:product, user: seller, price_cents: 40_00), email: "buyer@example.com") }
 
@@ -2728,13 +2728,38 @@ describe ContactingCreatorMailer do
       let!(:dispute) { create(:dispute, purchase:) }
 
       it "has the correct text" do
+        purchase.update!(purchase_chargeback_balance: create(:balance, user: seller))
         mail = ContactingCreatorMailer.chargeback_won(dispute.id)
 
         expect(mail.subject).to eq "A dispute has been won"
         expect(mail.body.encoded).to include "We have won a dispute against #{purchase.email}'s purchase of " \
-          "#{purchase.link.name} for #{purchase.formatted_disputed_amount} on your behalf. Your account has been credited the full amount."
+          "#{purchase.link.name} for #{purchase.formatted_disputed_amount} on your behalf. We have added what we deducted back to your balance."
+        expect(mail.body.encoded).not_to include "credited the full amount"
         expect(mail.body.encoded).to include purchase.link.name
         expect(mail.body.encoded).to include purchase.formatted_display_price
+      end
+
+      it "promises no credit when nothing was deducted from the balance" do
+        mail = ContactingCreatorMailer.chargeback_won(dispute.id)
+
+        expect(mail.body.encoded).to include "#{purchase.formatted_disputed_amount} on your behalf."
+        expect(mail.body.encoded).not_to include "released back"
+        expect(mail.body.encoded).not_to include "back to your balance"
+        expect(mail.body.encoded).not_to include "credited"
+      end
+
+      context "when the sale was paid into a Stripe Connect account" do
+        let!(:purchase) do
+          create(:purchase, seller:, link: create(:product, user: seller),
+                            merchant_account: create(:merchant_account_stripe_connect, user: seller))
+        end
+
+        it "says the disputed amount went back to the connected account, not the Gumroad balance" do
+          mail = ContactingCreatorMailer.chargeback_won(dispute.id)
+
+          expect(mail.body.encoded).to include "on your behalf. The disputed amount has been released back to your connected Stripe account."
+          expect(mail.body.encoded).not_to include "back to your balance"
+        end
       end
     end
 
@@ -2754,7 +2779,8 @@ describe ContactingCreatorMailer do
 
         expect(mail.subject).to eq "A dispute has been won"
         expect(mail.body.encoded).to include "We have won a dispute against #{charge.customer_email}'s purchase of " \
-          "the following items for #{charge.formatted_disputed_amount} on your behalf. Your account has been credited the full amount."
+          "the following items for #{charge.formatted_disputed_amount} on your behalf."
+        expect(mail.body.encoded).not_to include "credited the full amount"
         charge.disputed_purchases.each do |p|
           expect(mail.body.encoded).to include p.link.name
           expect(mail.body.encoded).to include p.formatted_display_price

@@ -542,6 +542,8 @@ class ContactingCreatorMailer < ApplicationMailer
     dispute = Dispute.find(dispute_id)
     @disputable = dispute.disputable
     @seller = @disputable.seller
+    @balance_debit = chargeback_balance_debit(@disputable)
+    @win_credit = chargeback_win_credit(@disputable, @balance_debit)
     @subject = "A dispute has been won"
   end
 

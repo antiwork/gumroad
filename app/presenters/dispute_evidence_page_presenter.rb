@@ -36,6 +36,7 @@ class DisputeEvidencePagePresenter
         duration_left_to_submit_evidence_formatted:,
         seller_response_due_at: dispute_evidence.seller_response_due_at&.iso8601,
         below_contest_minimum: FightDisputeJob.below_contest_minimum?(dispute_evidence.disputable),
+        seller_submitted: dispute_evidence.seller_submitted?,
         formatted_dispute_amount: dispute_evidence.disputable.formatted_processor_dispute_amount,
         customer_communication_file_max_size: dispute_evidence.customer_communication_file_max_size,
         customer_communication_files_max_count: DisputeEvidence::MAX_CUSTOMER_COMMUNICATION_FILES,

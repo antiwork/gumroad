@@ -38,6 +38,7 @@ type Props = {
     duration_left_to_submit_evidence_formatted: string;
     seller_response_due_at: string | null;
     below_contest_minimum: boolean;
+    seller_submitted: boolean;
     formatted_dispute_amount: string | null;
     customer_communication_file_max_size: number;
     customer_communication_files_max_count: number;
@@ -317,7 +318,22 @@ export default function Show() {
         <p>
           <strong>{disputeReason.message}</strong>
         </p>
-        {dispute_evidence.below_contest_minimum ? (
+        {dispute_evidence.below_contest_minimum && dispute_evidence.seller_submitted ? (
+          <>
+            <p>
+              <strong>
+                {sellerResponseDueAt !== null
+                  ? `Any additional information you can provide by ${sellerResponseDueAt} (${dispute_evidence.duration_left_to_submit_evidence_formatted} left) will help us win on your behalf.`
+                  : `Any additional information you can provide in the next ${dispute_evidence.duration_left_to_submit_evidence_formatted} will help us win on your behalf.`}
+              </strong>
+            </p>
+            <p>
+              For a dispute this small, our payment processor's fee to respond is more than we would usually recover, so
+              we respond only if you send us information about the sale. You have sent us information, so we will
+              respond.
+            </p>
+          </>
+        ) : dispute_evidence.below_contest_minimum ? (
           <>
             <p>
               <strong>

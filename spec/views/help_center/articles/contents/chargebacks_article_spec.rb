@@ -35,7 +35,7 @@ describe "Chargebacks help article" do
 
   it "states what a chargeback costs the seller as booked" do
     expect(text).not_to include("covering both the refunded amount and any payment processing fees")
-    expect(text).to include("we take what you earned from the sale back out of your Gumroad balance. You don't pay a chargeback fee.")
+    expect(text).to include("we take what you earned from the sale back out of your Gumroad balance, and you don't pay a chargeback fee on it.")
   end
 
   it "mentions the email sent for a lost dispute on a product without a refund policy" do
