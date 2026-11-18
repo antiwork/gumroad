@@ -283,6 +283,25 @@ describe PublicController, type: :controller, inertia: true do
       end
     end
 
+    context "with a combined-charge invoice_id (CH- prefixed)" do
+      let(:charge) { create(:charge) }
+      let(:purchase) { create(:purchase, price_cents: 100, fee_cents: 30, charge:) }
+
+      before { charge.purchases << purchase }
+
+      it "resends the receipt for each successful purchase of the charge" do
+        get(:paypal_charge_data, params: { invoice_id: "#{Charge::COMBINED_CHARGE_PREFIX}#{charge.external_id}" })
+        expect(response.parsed_body["success"]).to be(true)
+        expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(purchase.id, true)
+      end
+
+      it "returns false for an unknown charge" do
+        get(:paypal_charge_data, params: { invoice_id: "#{Charge::COMBINED_CHARGE_PREFIX}nope" })
+        expect(response.parsed_body["success"]).to be(false)
+        expect(SendPurchaseReceiptJob.jobs.size).to eq(0)
+      end
+    end
+
     context "with a valid invoice_id value" do
       let(:purchase) { create(:purchase, price_cents: 100, fee_cents: 30) }
       let(:params) { { invoice_id: purchase.external_id } }
