@@ -14,7 +14,9 @@ describe "Chargebacks help article" do
 
   it "does not promise a response to every dispute once the deadline passes" do
     expect(text).to include("we will auto-submit on your behalf, except for a dispute under #{minimum} that you haven't sent us information about")
+    expect(text).to include("the deadline above moves to the end of that shorter window so a response still reaches the card provider in time.")
     expect(text).to include("so the dispute is still contested, unless it is under #{minimum}.")
+    expect(text).to include("For a dispute under #{minimum} that you haven't sent us information about, we don't respond and the dispute ends here")
     expect(text).to include("If we didn't respond to it because it was under #{minimum}, we emailed you at the time.")
   end
 end
