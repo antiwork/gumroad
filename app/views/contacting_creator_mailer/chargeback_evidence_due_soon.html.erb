@@ -1,9 +1,7 @@
 <%= header_section(@subject) %>
 <div>
   <p>
-    A customer of yours (<%= @disputable.customer_email %>) has disputed their purchase of
-    <%= @disputable.multiple_purchases? ? "the following items" : @disputable.purchase_for_dispute_evidence.link.name %>
-    for <%= @disputable.formatted_disputed_amount %>.
+    A customer of yours (<%= @disputable.customer_email %>) has disputed their purchase of <%= @disputable.multiple_purchases? ? "the following items" : @disputable.purchase_for_dispute_evidence.link.name %><%= @disputed_amounts_copy %>
   </p>
   <% if @disputable.multiple_purchases? %>
     <% @disputable.disputed_purchases.each do |purchase| %>
@@ -19,10 +17,22 @@
   <% end %>
   <p>
     <strong>
-      Please submit any additional information by <%= @seller_response_due_at_formatted %>.
+      <% if @small_dispute_ask %>
+        Send us information about the sale by <%= @seller_response_due_at_formatted %> if you want us to respond to this dispute.
+      <% else %>
+        Please submit any additional information by <%= @seller_response_due_at_formatted %>.
+      <% end %>
       You have <%= pluralize(@hours_left, "hour") %> left.
     </strong>
   </p>
+  <% if @small_dispute_reason_copy %>
+    <p>
+      <%= @small_dispute_reason_copy %>
+    </p>
+    <p>
+      <%= @small_dispute_canceled_copy %>
+    </p>
+  <% end %>
   <p>
     We send your response and all supporting files to our payment processor at the deadline, not when you save, so you can keep adding to it until then.
   </p>
