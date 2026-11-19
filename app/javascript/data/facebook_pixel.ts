@@ -50,6 +50,9 @@ export function trackProductEvent(config: AnalyticsConfig, data: FacebookProduct
     fbq("trackSingle", config.facebookPixelId, FacebookEvents[data.action], {
       content_ids: [data.permalink],
       content_type: "product",
+      ...(data.action === "iwantthis" && data.value !== undefined && data.currency
+        ? { value: data.value, currency: data.currency }
+        : {}),
     });
   }
 }

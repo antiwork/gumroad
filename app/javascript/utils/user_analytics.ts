@@ -17,7 +17,14 @@ export const ProductEventsTitles = {
 
 type ViewedEvent = { action: "viewed"; permalink: string; product_name: string };
 
-type IWantThisEvent = { action: "iwantthis"; permalink: string; product_name: string };
+// `value` is in the main currency unit; absent where the caller has no selected price.
+type IWantThisEvent = {
+  action: "iwantthis";
+  permalink: string;
+  product_name: string;
+  value?: number;
+  currency?: string;
+};
 
 type PurchasedEvent = {
   action: "purchased";
