@@ -30,8 +30,13 @@ module Purchase::Reviews
   end
 
   def alive_original_product_review
+    # as_json reads this twice per sale (product_rating and the web-CSV review column) and
+    # the review hangs off the original subscription purchase, so without the memo each
+    # page pays the association walk twice per sale.
+    return @alive_original_product_review if @alive_original_product_review
+
     review = original_product_review
-    review if review&.alive?
+    @alive_original_product_review = review if review&.alive?
   end
 
   def post_review(rating:, message: nil, anonymous: :unchanged, video_options: {})

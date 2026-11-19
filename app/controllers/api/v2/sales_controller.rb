@@ -27,7 +27,6 @@ class Api::V2::SalesController < Api::V2::BaseController
   DEFAULT_SALES_QUERY_TIMEOUT_SECONDS = 15
   SALES_API_PRELOADS = [
     :preorder,
-    :subscription,
     :tip,
     :utm_link,
     :purchaser,
@@ -38,7 +37,15 @@ class Api::V2::SalesController < Api::V2::BaseController
     :shipment,
     :product_review,
     :offer_code,
-    { link: [:user, :variant_categories_alive, :product_review_stat] },
+    # Per-sale Purchase#as_json (v2) reads nothing else covers: the license, the merchant
+    # account behind web_csv_payment_processor, the price behind subscription_duration, and
+    # the subscription's own original purchase, payment option and review — the
+    # :product_review preload above reaches only the review on this sale.
+    :license,
+    :merchant_account,
+    :price,
+    { subscription: [{ last_payment_option: :price }, :original_purchase, { true_original_purchase: :product_review }] },
+    { link: [:user, :variant_categories_alive, :alive_variants, :product_review_stat] },
     { upsell_purchase: [:upsell, :selected_product, { upsell_variant: :selected_variant }] },
     # buyer_presentment fields (v2): presentment row + its charge_presentment (fx_rate)
     # and refunds (in-memory presentment refunded sum) — avoids per-sale queries.
