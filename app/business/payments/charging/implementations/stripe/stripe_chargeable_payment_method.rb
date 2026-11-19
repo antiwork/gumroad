@@ -129,6 +129,13 @@ class StripeChargeablePaymentMethod
     @merchant_account&.is_a_stripe_connect_account? ? @payment_method_on_connect_account : @payment_method
   end
 
+  # Only for charges that will never save the card, and before #prepare!. Stripe treats a platform
+  # PaymentMethod cloned without a Customer as single use, so a later #reusable_token! (save) or a
+  # second clone of the same PM is rejected.
+  def skip_platform_customer_on_clone!
+    @skip_platform_customer_on_clone = true
+  end
+
   def reusable_token!(user)
     if @customer_id.blank?
       with_stripe_error_handler do
@@ -170,7 +177,8 @@ class StripeChargeablePaymentMethod
       return unless @merchant_account&.is_a_stripe_connect_account?
 
       with_stripe_error_handler do
-        @payment_method_on_connect_account = Stripe::PaymentMethod.create({ customer: reusable_token!(nil), payment_method: @payment_method_id },
+        customer_id = @skip_platform_customer_on_clone ? @customer_id : reusable_token!(nil)
+        @payment_method_on_connect_account = Stripe::PaymentMethod.create({ customer: customer_id, payment_method: @payment_method_id }.compact,
                                                                           { stripe_account: @merchant_account.charge_processor_merchant_id })
 
         @payment_method_id_on_connect_account = @payment_method_on_connect_account.id

@@ -422,8 +422,8 @@ describe CreateMissingDisputeEvidenceJob do
         expect(FightDisputeJob.jobs.map { _1["args"] }).to include([dispute.id])
       end
 
-      it "reports that it is submitting without a seller statement" do
-        expect(ErrorNotifier).to receive(:notify).with(/deadline is too close to ask now/)
+      it "reports that it is handing the evidence on without a seller statement" do
+        expect(ErrorNotifier).to receive(:notify).with(/deadline is too close to ask now.*goes to FightDisputeJob without a seller statement/)
 
         described_class.new.perform
       end

@@ -24,6 +24,11 @@ class Chargeable
     @chargeables.values.first.prepare!
   end
 
+  def skip_platform_customer_on_clone!
+    chargeable = get_chargeable_for(StripeChargeProcessor.charge_processor_id)
+    chargeable.skip_platform_customer_on_clone! if chargeable.respond_to?(:skip_platform_customer_on_clone!)
+  end
+
   def prepare_with_trusted_setup_intent!
     chargeable = @chargeables.values.first
     if chargeable.respond_to?(:prepare_with_trusted_setup_intent!)

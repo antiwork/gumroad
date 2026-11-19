@@ -176,6 +176,72 @@ describe BankCodeDirectoryCheck do
       end
     end
 
+    context "with an Argentine CBU" do
+      let(:cbu) { "4530001512345678901233" }
+      let(:bank_account) { build(:argentina_bank_account, user:, account_number: cbu) }
+
+      def invalid_account_number
+        stripe_rejection(code: "account_number_invalid", param: "bank_account[account_number]",
+                         message: "Invalid account number")
+      end
+
+      it "probes the account number alone and passes a bank Stripe resolves" do
+        resolvable = "0070001612345678901233"
+        expect(Stripe::Token).to receive(:create).with(
+          { bank_account: { country: "AR", currency: "ars", account_number: resolvable } },
+          hash_including(:client)
+        ).and_return(double)
+
+        expect(described_class.rejection_for(build(:argentina_bank_account, user:, account_number: resolvable))).to be_nil
+      end
+
+      it "names the bank when Stripe refuses a CBU whose check digits pass" do
+        allow(Stripe::Token).to receive(:create).and_raise(invalid_account_number)
+
+        rejection = described_class.rejection_for(bank_account)
+
+        expect(rejection.message).to eq(
+          "Our payment partner doesn't support the bank this account number belongs to " \
+          "(bank code 453), so it can't be used for payouts. " \
+          "Please enter an account at a different bank."
+        )
+        expect(rejection.field).to eq(:account_number)
+      end
+
+      it "names the entity code the refused CBU starts with" do
+        other_bank = build(:argentina_bank_account, user:, account_number: "4050001412345678901233")
+        allow(Stripe::Token).to receive(:create).and_raise(invalid_account_number)
+
+        rejection = described_class.rejection_for(other_bank)
+
+        expect(rejection.message).to include("(bank code 405)")
+      end
+
+      it "fails open when the CBU's check digits fail, since that is a typo" do
+        typo = build(:argentina_bank_account, user:, account_number: "4530001512345678901234")
+        allow(Stripe::Token).to receive(:create).and_raise(invalid_account_number)
+        allow(Rails.logger).to receive(:warn)
+
+        expect(described_class.rejection_for(typo)).to be_nil
+        expect(Rails.logger).to have_received(:warn).with(/failed open/)
+      end
+
+      it "fails open when the first check digit fails" do
+        typo = build(:argentina_bank_account, user:, account_number: "4530002512345678901233")
+        allow(Stripe::Token).to receive(:create).and_raise(invalid_account_number)
+        allow(Rails.logger).to receive(:warn)
+
+        expect(described_class.rejection_for(typo)).to be_nil
+      end
+
+      it "skips the probe when the same CBU is already attached at Stripe" do
+        previous = create(:argentina_bank_account, user:, account_number: cbu, stripe_bank_account_id: "ba_123")
+        expect(Stripe::Token).not_to receive(:create)
+
+        expect(described_class.rejection_for(bank_account, previous_bank_account: previous)).to be_nil
+      end
+    end
+
     context "with a UK sort code" do
       let(:bank_account) { build(:uk_bank_account, user:, sort_code: "60-84-64") }
 

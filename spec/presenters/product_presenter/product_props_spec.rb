@@ -495,6 +495,18 @@ describe ProductPresenter::ProductProps do
         expect(result[:sale_label]).to eq("Black Friday")
       end
 
+      it "prices with the sale that is open now when a scheduled one is also set" do
+        sale.update!(valid_at: 1.week.from_now, expires_at: 2.weeks.from_now)
+        seller.offer_codes.create!(code: "LIVE30", amount_percentage: 30, universal: true, products: [], auto_apply: true,
+                                   sale_label: "Live now", valid_at: Time.current, expires_at: 3.days.from_now)
+        Current.reset
+
+        result = props
+
+        expect(result[:discount_code]).to include(valid: true, code: "LIVE30")
+        expect(result[:sale_label]).to eq("Live now")
+      end
+
       it "returns no label when a different, better url code won" do
         better = create(:percentage_offer_code, products: [product], code: "BIG50", amount_percentage: 50)
         result = props(discount_code: better.code)

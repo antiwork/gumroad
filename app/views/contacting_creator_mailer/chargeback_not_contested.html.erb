@@ -1,0 +1,31 @@
+<%= header_section(@subject) %>
+<div>
+  <p>
+    We did not respond to the dispute on <%= @disputable.customer_email %>'s purchase of <%= @disputable.multiple_purchases? ? "the following items" : @disputable.purchase_for_dispute_evidence.link.name %><%= @disputed_amounts_copy %>
+  </p>
+  <% if @disputable.multiple_purchases? %>
+    <% @disputable.disputed_purchases.each do |purchase| %>
+      <p>
+        <%= link_to purchase.link.name, purchase.link.long_url %>
+      </p>
+    <% end %>
+  <% end %>
+  <p>
+    The dispute will be lost.
+    <% case @balance_debit %>
+    <% when :full %>
+      What you earned from this sale stays deducted from your balance.
+    <% when :partial %>
+      What you earned from the unrefunded part of this sale stays deducted from your balance.
+    <% when :refunded %>
+      This sale was already refunded in full, so nothing has been deducted from your balance.
+    <% when :stripe_connect %>
+      This sale was paid into your connected Stripe account, so nothing has been deducted from your Gumroad balance.
+    <% else %>
+      Nothing has been deducted from your balance.
+    <% end %>
+  </p>
+  <p>
+    We had no information about the sale from you, and for a dispute this small, our payment processor's fee to respond is more than we would usually recover.
+  </p>
+</div>

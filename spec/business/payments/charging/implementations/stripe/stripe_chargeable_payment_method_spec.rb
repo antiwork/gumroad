@@ -197,6 +197,62 @@ describe StripeChargeablePaymentMethod, :vcr do
       expect(chargeable.stripe_charge_params[:payment_method]).not_to eq(stripe_payment_method_id)
     end
 
+    context "when the platform customer is skipped for a one-off charge" do
+      let(:seller) { create(:user, check_merchant_account_is_linked: true) }
+      let(:merchant_account) { create(:merchant_account_stripe_connect, user: seller) }
+      let(:product) { create(:product, user: seller) }
+      let(:connected_payment_method) do
+        OpenStruct.new(id: "pm_connected_456", card: { last4: "4242", brand: "visa", fingerprint: "fp_456", country: "US" })
+      end
+
+      def platform_payment_method(customer:)
+        OpenStruct.new(id: "pm_platform_123", customer:, card: { last4: "4242", brand: "visa", fingerprint: "fp_123", country: "US" },
+                       billing_details: { address: { postal_code: "94107" } })
+      end
+
+      let(:direct_chargeable) do
+        StripeChargeablePaymentMethod.new("pm_platform_123", zip_code: "94107", product_permalink: product.unique_permalink).tap do |c|
+          c.skip_platform_customer_on_clone!
+        end
+      end
+
+      before { merchant_account }
+
+      it "clones the payment method without creating a platform customer" do
+        allow(Stripe::PaymentMethod).to receive(:retrieve).with("pm_platform_123").and_return(platform_payment_method(customer: nil))
+        expect(Stripe::Customer).not_to receive(:create)
+        expect(Stripe::PaymentMethod).to receive(:create).with(
+          { payment_method: "pm_platform_123" },
+          { stripe_account: merchant_account.charge_processor_merchant_id }
+        ).and_return(connected_payment_method)
+
+        direct_chargeable.prepare!
+
+        expect(direct_chargeable.stripe_charge_params).to eq(payment_method: "pm_connected_456")
+        expect(direct_chargeable.fingerprint).to eq("fp_456")
+      end
+
+      it "still passes the customer a payment method is already attached to" do
+        allow(Stripe::PaymentMethod).to receive(:retrieve).with("pm_platform_123").and_return(platform_payment_method(customer: "cus_attached"))
+        expect(Stripe::Customer).not_to receive(:create)
+        expect(Stripe::PaymentMethod).to receive(:create).with(
+          { customer: "cus_attached", payment_method: "pm_platform_123" },
+          { stripe_account: merchant_account.charge_processor_merchant_id }
+        ).and_return(connected_payment_method)
+
+        direct_chargeable.prepare!
+      end
+
+      it "creates the platform customer on demand if the card is saved afterwards" do
+        allow(Stripe::PaymentMethod).to receive(:retrieve).with("pm_platform_123").and_return(platform_payment_method(customer: nil))
+        allow(Stripe::PaymentMethod).to receive(:create).and_return(connected_payment_method)
+        direct_chargeable.prepare!
+
+        expect(Stripe::Customer).to receive(:create).with(hash_including(payment_method: "pm_platform_123")).and_return(OpenStruct.new(id: "cus_late"))
+        expect(direct_chargeable.reusable_token!(user)).to eq("cus_late")
+      end
+    end
+
     it "uses the connected-account copy for direct charges with platform payment methods" do
       seller = create(:user, check_merchant_account_is_linked: true)
       merchant_account = create(:merchant_account_stripe_connect, user: seller)

@@ -3175,6 +3175,88 @@ describe Order::ChargeService, :vcr do
         merchant_account:
       )
     end
+
+    describe "skipping the platform customer for a one-off card checkout" do
+      let(:chargeable) { instance_double(Chargeable) }
+      let(:params) do
+        {
+          line_items: [{ uid: "unique-id-0", permalink: product_1.unique_permalink, perceived_price_cents: 10_00, quantity: 1 }]
+        }.merge(common_order_params_without_payment)
+      end
+
+      before do
+        Feature.activate_user(described_class::SKIP_PLATFORM_CUSTOMER_FEATURE, seller_1)
+        allow(CardParamsHelper).to receive(:build_chargeable).and_return(chargeable)
+        allow(chargeable).to receive(:skip_platform_customer_on_clone!)
+        # Stops the checkout before any Stripe request.
+        allow(chargeable).to receive(:prepare!).and_raise(ChargeProcessorUnavailableError)
+      end
+
+      def charge(buyer:)
+        order, = Order::CreateService.new(params:, buyer:).perform
+        Order::ChargeService.new(order:, params:).perform
+      end
+
+      it "marks the chargeable before preparing it for a logged-in buyer" do
+        charge(buyer: create(:user))
+
+        expect(chargeable).to have_received(:skip_platform_customer_on_clone!).ordered
+        expect(chargeable).to have_received(:prepare!).ordered
+      end
+
+      it "keeps the platform customer for a logged-out buyer who can sign up from the receipt" do
+        charge(buyer: nil)
+
+        expect(chargeable).to have_received(:prepare!)
+        expect(chargeable).not_to have_received(:skip_platform_customer_on_clone!)
+      end
+
+      it "skips the platform customer for a logged-out buyer whose email already has an account" do
+        create(:user, email: common_order_params_without_payment[:email])
+
+        charge(buyer: nil)
+
+        expect(chargeable).to have_received(:skip_platform_customer_on_clone!)
+      end
+
+      context "when the cart has a second line" do
+        let(:params) do
+          {
+            line_items: [
+              { uid: "unique-id-0", permalink: product_1.unique_permalink, perceived_price_cents: 10_00, quantity: 1 },
+              { uid: "unique-id-1", permalink: second_product.unique_permalink, perceived_price_cents: second_product.price_cents, quantity: 1 }
+            ]
+          }.merge(common_order_params_without_payment)
+        end
+
+        context "that is refused as a duplicate" do
+          let(:second_product) { product_2 }
+
+          before do
+            create(:purchase, link: product_2, email: common_order_params_without_payment[:email], ip_address: common_order_params_without_payment[:ip_address])
+          end
+
+          it "keeps the platform customer so the buy-again retry can reuse the payment method" do
+            order, purchase_responses = Order::CreateService.new(params:, buyer: create(:user)).perform
+            Order::ChargeService.new(order:, params:).perform
+
+            expect(purchase_responses["unique-id-1"][:error_code]).to eq(PurchaseErrorCode::DUPLICATE_PURCHASE_CONFIRMATION_REQUIRED)
+            expect(chargeable).to have_received(:prepare!)
+            expect(chargeable).not_to have_received(:skip_platform_customer_on_clone!)
+          end
+        end
+
+        context "that is free" do
+          let(:second_product) { free_product_1 }
+
+          it "skips the platform customer" do
+            charge(buyer: create(:user))
+
+            expect(chargeable).to have_received(:skip_platform_customer_on_clone!)
+          end
+        end
+      end
+    end
   end
 
   describe "#ensure_all_purchases_processed" do
@@ -4083,6 +4165,82 @@ describe Order::ChargeService, :vcr do
       let(:params) { order_params(billing_agreement_id: "B-12345678910", visual: "buyer@example.com", card_country: "RS") }
 
       include_examples "fails the whole seller group without calling PayPal"
+    end
+  end
+
+  describe "#one_off_card_checkout?" do
+    let(:seller) { create(:user, :eligible_for_service_products) }
+    let(:order) { create(:order) }
+    let(:service) { described_class.new(order:, params: {}) }
+    let(:product) { create(:product, user: seller) }
+    let(:membership) { create(:membership_product, user: seller) }
+
+    def one_off?(*purchases) = service.send(:one_off_card_checkout?, purchases)
+
+    context "when the flag is on for the seller" do
+      before { Feature.activate_user(described_class::SKIP_PLATFORM_CUSTOMER_FEATURE, seller) }
+
+      it "is true for a plain purchase" do
+        expect(one_off?(build(:purchase, link: product))).to be(true)
+      end
+
+      it "is false when the card is saved" do
+        expect(one_off?(build(:purchase, link: product, save_card: true))).to be(false)
+      end
+
+      it "is false for recurring billing" do
+        expect(one_off?(build(:purchase, link: membership))).to be(false)
+      end
+
+      it "is false for a free trial or a preorder authorization" do
+        expect(one_off?(build(:purchase, link: product, is_preorder_authorization: true))).to be(false)
+        expect(one_off?(build(:free_trial_membership_purchase, link: membership))).to be(false)
+      end
+
+      # Unlike installments, Purchase::CreateService does not force save_card for a commission
+      # deposit, yet its completion charge reuses the card.
+      it "is false for a commission deposit without save_card" do
+        expect(one_off?(build(:purchase, link: create(:commission_product, user: seller), save_card: false))).to be(false)
+      end
+
+      it "is false when any purchase in the group needs the card kept" do
+        expect(one_off?(build(:purchase, link: product), build(:purchase, link: product, save_card: true))).to be(false)
+      end
+
+      context "when the buyer is logged out" do
+        before { order.update!(purchaser: nil) }
+
+        it "is false when the receipt will offer to create an account and save the card" do
+          expect(one_off?(build(:purchase, link: product, email: "new-buyer@example.com"))).to be(false)
+        end
+
+        it "is true when the email already belongs to an account" do
+          create(:user, email: "existing-buyer@example.com")
+
+          expect(one_off?(build(:purchase, link: product, email: "existing-buyer@example.com"))).to be(true)
+        end
+      end
+    end
+
+    it "is false for a cart with more than one seller" do
+      Feature.activate_user(described_class::SKIP_PLATFORM_CUSTOMER_FEATURE, seller)
+      mine = create(:purchase, link: product, seller:)
+      theirs = create(:purchase, link: create(:product))
+      order.purchases << [mine, theirs]
+
+      expect(one_off?(mine)).to be(false)
+    end
+
+    it "is true for a single-seller cart" do
+      Feature.activate_user(described_class::SKIP_PLATFORM_CUSTOMER_FEATURE, seller)
+      mine = create(:purchase, link: product, seller:)
+      order.purchases << mine
+
+      expect(one_off?(mine)).to be(true)
+    end
+
+    it "is false when the flag is off" do
+      expect(one_off?(build(:purchase, link: product))).to be(false)
     end
   end
 end

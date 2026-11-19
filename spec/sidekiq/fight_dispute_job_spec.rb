@@ -5,6 +5,73 @@ require "spec_helper"
 describe FightDisputeJob do
   include_context "without the weekend window extension"
 
+  describe ".below_contest_minimum?" do
+    let(:purchase) { create(:purchase, total_transaction_cents: 20_00) }
+    let(:dispute) { create(:dispute_formalized, purchase:) }
+
+    def record_processor_amount(cents, currency = Currency::USD)
+      dispute.update!(processor_amount_cents: cents, processor_currency: currency)
+      purchase.reload
+    end
+
+    it "reads the processor's disputed amount when only part of the sale is disputed" do
+      record_processor_amount(10_00)
+
+      expect(described_class.below_contest_minimum?(purchase)).to be(true)
+    end
+
+    it "contests a dispute the bank rolled up from several charges, even against a small sale" do
+      purchase.update!(total_transaction_cents: 10_00)
+      record_processor_amount(30_00)
+
+      expect(described_class.below_contest_minimum?(purchase)).to be(false)
+    end
+
+    it "contests a dispute whose amount was never recorded" do
+      purchase.update!(total_transaction_cents: 1_00)
+      purchase.reload
+
+      expect(described_class.below_contest_minimum?(purchase)).to be(false)
+    end
+
+    context "when the buyer paid in their own currency" do
+      before do
+        purchase.update!(total_transaction_cents: 10_00)
+        create(:purchase_presentment, purchase:, presentment_currency: Currency::CAD, presentment_price_cents: 13_50,
+                                      presentment_gumroad_tax_cents: 0, presentment_total_cents: 13_50)
+      end
+
+      it "converts at the sale's own recorded rate" do
+        # 18.90 CAD is 14 USD here, though its CAD cents alone clear the minimum.
+        record_processor_amount(18_90, Currency::CAD)
+        expect(described_class.below_contest_minimum?(purchase)).to be(true)
+
+        record_processor_amount(20_25, Currency::CAD)
+        expect(described_class.below_contest_minimum?(purchase)).to be(false)
+      end
+
+      it "contests a dispute in a currency the sale has no rate for" do
+        record_processor_amount(1_00, Currency::EUR)
+
+        expect(described_class.below_contest_minimum?(purchase)).to be(false)
+      end
+    end
+
+    context "for a combined charge" do
+      let(:charge) { create(:charge, amount_cents: 10_00) }
+      let(:dispute) { create(:dispute_formalized_on_charge, charge:) }
+
+      it "converts at the charge's own recorded rate" do
+        create(:charge_presentment, charge:, presentment_currency: Currency::EUR, presentment_total_cents: 9_25)
+        # 14.80 EUR is 16 USD here, though its EUR cents alone fall below the minimum.
+        dispute.update!(processor_amount_cents: 14_80, processor_currency: Currency::EUR)
+        charge.reload
+
+        expect(described_class.below_contest_minimum?(charge)).to be(false)
+      end
+    end
+  end
+
   describe "#perform" do
     let(:dispute_evidence) { create(:dispute_evidence) }
     let(:dispute) { dispute_evidence.dispute }
@@ -159,6 +226,72 @@ describe FightDisputeJob do
             it_behaves_like "submitted dispute evidence"
           end
         end
+      end
+    end
+
+    context "when the disputed amount is below the contest minimum" do
+      before do
+        dispute_evidence.update_as_not_seller_contacted!
+        dispute.update!(processor_amount_cents: 14_99, processor_currency: Currency::USD)
+      end
+
+      it "does not submit evidence, resolves as not contested and tells the seller" do
+        expect_any_instance_of(Purchase).not_to receive(:fight_chargeback)
+
+        expect do
+          described_class.new.perform(dispute.id)
+        end.to have_enqueued_mail(ContactingCreatorMailer, :chargeback_not_contested).with(dispute.id)
+
+        expect(dispute_evidence.reload.resolution).to eq(DisputeEvidence::RESOLUTION_NOT_CONTESTED)
+      end
+
+      it "leaves the evidence unresolved when the notification cannot be enqueued, so the retry still tells the seller" do
+        attempts = 0
+        allow(ContactingCreatorMailer).to receive(:chargeback_not_contested).and_wrap_original do |original, *args|
+          attempts += 1
+          raise Redis::CannotConnectError if attempts == 1
+          original.call(*args)
+        end
+
+        expect { described_class.new.perform(dispute.id) }.to raise_error(Redis::CannotConnectError)
+        expect(dispute_evidence.reload).not_to be_resolved
+
+        expect do
+          described_class.new.perform(dispute.id)
+        end.to have_enqueued_mail(ContactingCreatorMailer, :chargeback_not_contested).with(dispute.id)
+        expect(dispute_evidence.reload.resolution).to eq(DisputeEvidence::RESOLUTION_NOT_CONTESTED)
+      end
+
+      it "tells the seller once when resolving fails and the job retries" do
+        attempts = 0
+        allow_any_instance_of(DisputeEvidence).to receive(:update_as_resolved!).and_wrap_original do |original, *args, **kwargs|
+          attempts += 1
+          raise ActiveRecord::Deadlocked if attempts == 1
+          original.call(*args, **kwargs)
+        end
+
+        expect do
+          expect { described_class.new.perform(dispute.id) }.to raise_error(ActiveRecord::Deadlocked)
+          expect(dispute_evidence.reload).not_to be_resolved
+          described_class.new.perform(dispute.id)
+        end.to have_enqueued_mail(ContactingCreatorMailer, :chargeback_not_contested).with(dispute.id).exactly(:once)
+        expect(dispute_evidence.reload.resolution).to eq(DisputeEvidence::RESOLUTION_NOT_CONTESTED)
+      end
+
+      it "submits when the seller saved their own evidence" do
+        dispute_evidence.update_as_seller_submitted!
+        expect_any_instance_of(Purchase).to receive(:fight_chargeback)
+
+        described_class.new.perform(dispute.id)
+
+        expect(dispute_evidence.reload.resolution).to eq(DisputeEvidence::RESOLUTION_SUBMITTED)
+      end
+
+      it "submits at exactly the minimum" do
+        dispute.update!(processor_amount_cents: 15_00)
+        expect_any_instance_of(Purchase).to receive(:fight_chargeback)
+
+        described_class.new.perform(dispute.id)
       end
     end
 

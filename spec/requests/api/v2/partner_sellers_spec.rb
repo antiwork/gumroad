@@ -53,6 +53,36 @@ describe "Partner API sellers", type: :request do
     expect(response.parsed_body["message"]).to eq("Your Gumroad account is already linked to a different Example App account.")
   end
 
+  it "lets another Gumroad account take over a partner user ID whose link was revoked or whose account was closed" do
+    revoked_seller = create(:user)
+    link_seller(create("doorkeeper/access_token", application: partner_application, resource_owner_id: revoked_seller.id, scopes: "partner_api"), external_user_id: "ext-revoked")
+    partner_application.revoke_access_for(revoked_seller)
+    closed_seller = create(:user)
+    closed_link = create(:partner_seller, oauth_application: partner_application, user: closed_seller, external_user_id: "ext-closed", migrated_at: 1.day.ago)
+    closed_seller.update_columns(deleted_at: Time.current)
+    second_seller = create(:user)
+
+    link_seller(seller_token, external_user_id: "ext-revoked")
+    expect(response).to have_http_status(:created)
+    link_seller(create("doorkeeper/access_token", application: partner_application, resource_owner_id: second_seller.id, scopes: "partner_api"), external_user_id: "ext-closed")
+    expect(response).to have_http_status(:created)
+
+    expect(partner_application.partner_sellers.find_by(external_user_id: "ext-revoked")).to have_attributes(user: seller, deleted_at: nil)
+    expect(closed_link.reload).to have_attributes(user: second_seller, deleted_at: nil, migrated_at: nil)
+    expect(partner_application.partner_sellers.count).to eq(2)
+  end
+
+  it "keeps a partner user ID linked to a suspended account" do
+    suspended_seller = create(:user)
+    create(:partner_seller, oauth_application: partner_application, user: suspended_seller, external_user_id: "ext-1")
+    suspended_seller.update!(user_risk_state: "suspended_for_fraud")
+
+    link_seller(seller_token)
+
+    expect(response).to have_http_status(:conflict)
+    expect(partner_application.partner_sellers.sole.user).to eq(suspended_seller)
+  end
+
   it "rejects a partner user ID that is not valid" do
     link_seller(seller_token, external_user_id: " ")
     expect(response).to have_http_status(:bad_request)

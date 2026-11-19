@@ -52,7 +52,7 @@ class DisputeEvidence < ApplicationRecord
   MAX_CUSTOMER_COMMUNICATION_FILES = 10
   ALLOWED_FILE_CONTENT_TYPES = %w[image/jpeg image/png application/pdf].freeze
 
-  RESOLUTIONS = %w(unknown submitted rejected).freeze
+  RESOLUTIONS = %w(unknown submitted rejected not_contested).freeze
   RESOLUTIONS.each do |resolution|
     self.const_set("RESOLUTION_#{resolution.upcase}", resolution)
   end

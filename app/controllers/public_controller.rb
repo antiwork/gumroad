@@ -73,13 +73,21 @@ class PublicController < ApplicationController
   def paypal_charge_data
     return render json: { success: false } if params[:invoice_id].nil?
 
-    purchase = Purchase.find_by_external_id(params[:invoice_id])
-    if purchase.nil?
-      render json: { success: false }
+    invoice_id = params[:invoice_id].to_s
+    if invoice_id.start_with?(Charge::COMBINED_CHARGE_PREFIX)
+      charge = Charge.find_by_external_id(invoice_id.delete_prefix(Charge::COMBINED_CHARGE_PREFIX))
+      purchases = charge ? charge.successful_purchases.to_a : []
+      return render json: { success: false } if purchases.empty?
+
+      # The charge receipt is already marked sent, so resend each purchase's own receipt.
+      purchases.each { |purchase| SendPurchaseReceiptJob.perform_async(purchase.id, true) }
     else
+      purchase = Purchase.find_by_external_id(invoice_id)
+      return render json: { success: false } if purchase.nil?
+
       SendPurchaseReceiptJob.perform_async(purchase.id)
-      render json: { success: true }
     end
+    render json: { success: true }
   end
 
   def license_key_lookup

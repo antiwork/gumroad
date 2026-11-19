@@ -28,7 +28,7 @@ class Api::V2::Partner::SellersController < Api::V2::BaseController
     end
     return render json: { success: false, message: "The seller revoked access for this application." }, status: :unauthorized if partner_seller.nil?
 
-    render json: { success: true, external_user_id: partner_seller.external_user_id }, status: partner_seller.previously_new_record? ? :created : :ok
+    render json: { success: true, external_user_id: partner_seller.external_user_id }, status: partner_seller.previously_new_record? || partner_seller.saved_change_to_user_id? ? :created : :ok
   rescue PartnerSeller::LinkConflict => e
     render json: { success: false, message: e.message }, status: :conflict
   end

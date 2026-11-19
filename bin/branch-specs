@@ -57,6 +57,14 @@ CHECKOUT_DASHBOARD_SPECS = %w[
   spec/requests/select_buttons_spec.rb
 ].freeze
 
+# The partner API controllers sit in api/v2/partner/, but their request specs sit next to that
+# directory (api/v2/partner*_spec.rb), so the path rule never finds them.
+PARTNER_API_SPECS = %w[
+  spec/requests/api/v2/partner_spec.rb
+  spec/requests/api/v2/partner_sellers_spec.rb
+  spec/requests/api/v2/partner_migrations_spec.rb
+].freeze
+
 # Unauthenticated charge/license lookup surfaces (PublicController).
 PUBLIC_LOOKUP_SPECS = %w[
   spec/controllers/public_controller_spec.rb
@@ -128,6 +136,7 @@ FANOUT = {
   %r{\Aapp/services/charge/} => CHECKOUT_FLOW_SPECS,
   %r{\Aapp/controllers/orders_controller\.rb\z} => CHECKOUT_FLOW_SPECS,
   %r{\Aapp/controllers/stripe/} => CHECKOUT_FLOW_SPECS,
+  %r{\Aapp/controllers/api/v2/partner/} => PARTNER_API_SPECS,
   %r{\Aspec/support/checkout_helpers\.rb\z} => CHECKOUT_FLOW_SPECS,
   %r{\Aspec/support/stripe_.*\.rb\z} => CHECKOUT_FLOW_SPECS,
   # #7101 gap: the unauthenticated charge/license lookup forms and their data
