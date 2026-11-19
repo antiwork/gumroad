@@ -183,6 +183,7 @@ class Purchase::CreateService < Purchase::BaseService
 
       validate_bundle_products
 
+      purchase.wallet_payment = params[:wallet_type].present?
       purchase.prepare_for_charge!(locked_rate: locked_listed_rate)
 
       purchase.build_purchase_wallet_type(wallet_type: params[:wallet_type]) if params[:wallet_type].present?

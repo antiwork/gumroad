@@ -33,6 +33,35 @@ describe Purchase do
       expect(purchase.send(:tax_location_valid?)).to eq(true)
     end
 
+    context "when paid with a wallet that recorded no card country" do
+      it "accepts a taxable wallet country that differs from a taxable IP country" do
+        purchase = purchase_for(country: "France", ip_country: "Portugal")
+        purchase.wallet_payment = true
+
+        expect(purchase.send(:tax_location_valid?)).to eq(true)
+      end
+
+      it "still rejects the same mismatch without a wallet" do
+        purchase = purchase_for(country: "France", ip_country: "Portugal")
+
+        expect(purchase.send(:tax_location_valid?)).to eq(false)
+      end
+
+      it "still rejects a non-taxable wallet country that differs from a taxable IP country" do
+        purchase = purchase_for(country: "Morocco", ip_country: "Portugal")
+        purchase.wallet_payment = true
+
+        expect(purchase.send(:tax_location_valid?)).to eq(false)
+      end
+
+      it "still rejects when a card country was recorded and does not match" do
+        purchase = purchase_for(country: "France", ip_country: "Portugal", card_country: "ES")
+        purchase.wallet_payment = true
+
+        expect(purchase.send(:tax_location_valid?)).to eq(false)
+      end
+    end
+
     it "accepts a selected country that matches the IP country" do
       purchase = purchase_for(country: "Germany", ip_country: "Germany")
 
