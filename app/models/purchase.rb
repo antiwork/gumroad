@@ -685,7 +685,7 @@ class Purchase < ApplicationRecord
             :flag_query_mode => :bit_operator,
             check_for_column: false
 
-  attr_accessor :chargeable, :card_data_handling_error, :save_card, :price_range, :friend_actions,
+  attr_accessor :wallet_payment, :chargeable, :card_data_handling_error, :save_card, :price_range, :friend_actions,
                 :discount_code, :purchaser_plugins, :is_automatic_charge, :sales_tax_country_code_election, :business_vat_id,
                 :save_shipping_address, :flow_of_funds, :prorated_discount_price_cents,
                 :original_variant_attributes, :original_price, :is_updated_original_subscription_purchase,
@@ -6577,6 +6577,10 @@ class Purchase < ApplicationRecord
 
       # Country matched
       return true if country_code.in?(ip_and_card_locations)
+
+      # A wallet overwrites the buyer's country with its billing country and records no card country,
+      # leaving nothing the buyer could change. Tax is still collected for both taxable countries.
+      return true if wallet_payment && card_country.nil? && country_code.in?(taxable_countries) && ip_country_code.in?(taxable_countries)
 
       self.error_code = PurchaseErrorCode::TAX_VALIDATION_FAILED
       errors.add :base, "We couldn't confirm the country you selected. It needs to match where you're connecting from or where your card was issued. If you're using a VPN, turn it off and try again."
