@@ -180,9 +180,95 @@ describe Api::V2::SalesController do
         )
         expect(query_counts.fetch("users", 0)).to be <= 9
         expect(query_counts.fetch("links", 0)).to be <= 3
-        expect(query_counts.fetch("base_variants", 0)).to be <= 2
+        # 2 for the variants themselves, 1 for the link alive_variants preload the licensed-sale
+        # serialization reads instead of probing per sale.
+        expect(query_counts.fetch("base_variants", 0)).to be <= 3
         expect(query_counts.fetch("variant_categories", 0)).to be <= 2
         expect(query_counts.fetch("product_review_stats", 0)).to be <= 1
+      end
+
+      it "serializes a page of licensed sales without per-sale license, merchant account or variant lookups" do
+        stub_const("Api::V2::SalesController::RESULTS_PER_PAGE", 2)
+        stripe_connect = create(:merchant_account_stripe_connect, user: @seller)
+
+        # One more than the page holds, so the overflow row the index reads to decide
+        # `has_next_page` is a licensed sale too — otherwise the shared fixtures' free-trial
+        # membership sale is preloaded with the page and its subscription adds its own lookups.
+        3.times do |index|
+          product = create(:product, user: @seller, is_licensed: true, name: "Licensed #{index}")
+          purchase = create(:purchase, purchaser: create(:user), link: product, seller: @seller)
+          purchase.update!(merchant_account: stripe_connect)
+          create(:license, purchase:, link: product)
+          create(:product_review, purchase:, link: product, rating: 5, message: "Review #{index}")
+        end
+
+        query_counts = Hash.new(0)
+        variant_exists_probes = []
+        callback = lambda do |_name, _start, _finish, _id, payload|
+          sql = payload[:sql].to_s
+          table = sql[/FROM [`](\w+)[`]/, 1]
+          query_counts[table] += 1 if table
+          variant_exists_probes << sql if sql.include?("SELECT 1 AS one FROM `base_variants`")
+        end
+
+        ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+          get :index, params: @params
+        end
+
+        expect(response).to be_successful
+        expect(response.parsed_body["sales"].size).to eq(Api::V2::SalesController::RESULTS_PER_PAGE)
+        response.parsed_body["sales"].each do |sale_json|
+          expect(sale_json).to include(
+            "payment_processor" => "stripe_connect",
+            "product_rating" => 5
+          )
+          expect(sale_json["license_key"]).to be_present
+          expect(sale_json["review"]).to match(/\AReview \d+\z/)
+        end
+
+        # One batched query each — a per-sale lookup would scale with the page size.
+        expect(query_counts.fetch("licenses", 0)).to eq(1)
+        expect(query_counts.fetch("merchant_accounts", 0)).to eq(1)
+        expect(query_counts.fetch("product_reviews", 0)).to eq(1)
+        # license_json reaches the license through has_product_level_rich_content?, which reads
+        # link.alive_variants per sale unless that is preloaded.
+        expect(variant_exists_probes).to be_empty
+      end
+
+      it "serializes a page of subscription sales without walking each subscription per sale" do
+        stub_const("Api::V2::SalesController::RESULTS_PER_PAGE", 2)
+
+        purchases = 2.times.map do |index|
+          product = create(:membership_product, user: @seller, name: "Membership #{index}")
+          purchase = create(:membership_purchase, link: product, seller: @seller)
+          create(:product_review, purchase: purchase.true_original_purchase, link: product, rating: 4, message: "Membership #{index}")
+          purchase
+        end
+
+        query_counts = Hash.new(0)
+        callback = lambda do |_name, _start, _finish, _id, payload|
+          table = payload[:sql].to_s[/FROM [`](\w+)[`]/, 1]
+          query_counts[table] += 1 if table
+        end
+
+        ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+          get :index, params: @params
+        end
+
+        expect(response).to be_successful
+        purchases.each_with_index do |purchase, index|
+          expect(response.parsed_body["sales"].find { _1["id"] == purchase.external_id }).to include(
+            "product_rating" => 4,
+            "review" => "Membership #{index}"
+          )
+        end
+
+        # alive_original_product_review and subscription_duration walk the subscription's original
+        # purchase, its review and its payment option; each is one batched query when preloaded and
+        # one per sale when it is not.
+        expect(query_counts.fetch("product_reviews", 0)).to eq(2)
+        expect(query_counts.fetch("payment_options", 0)).to eq(1)
+        expect(query_counts.fetch("purchases", 0)).to be <= 4
       end
 
       it "includes web CSV parity fields in the response" do
