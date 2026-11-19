@@ -255,7 +255,13 @@ class LinksController < ApplicationController
           end
         end
       end
-      format.json { render json: ProductPresenter::PublicApiProps.new(product: @product, seller_custom_domain_url:).props }
+      format.json do
+        # display_price depends on the visitor's IP and ?currency=, so no cache may share it.
+        response.cache_control.replace(private: true, no_store: true)
+        render json: ProductPresenter::PublicApiProps.new(
+          product: @product, seller_custom_domain_url:, ip: request.remote_ip, preferred_currency: buyer_currency_preference(request)
+        ).props
+      end
       format.any { e404 }
     end
   end

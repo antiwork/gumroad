@@ -242,4 +242,59 @@ describe ProductPresenter::PublicApiProps do
       end
     end
   end
+
+  describe "display_price" do
+    let(:seller) { create(:user, disable_buyer_local_currency: false) }
+    let(:french_ip) { "2.2.2.2" }
+
+    before do
+      allow(Feature).to receive(:active?).and_call_original
+      allow(Feature).to receive(:active?).with(:buyer_local_currency, seller).and_return(true)
+      allow(Feature).to receive(:active?).with(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller).and_return(false)
+      allow(Feature).to receive(:active?).with(Checkout::BuyerCurrencyEligibility::SUBSCRIPTION_FEATURE_NAME, seller).and_return(false)
+      allow(GeoIp).to receive(:lookup).with(french_ip).and_return(
+        GeoIp::Result.new(country_name: "FR", country_code: "FR", region_name: nil, city_name: nil, postal_code: nil, latitude: nil, longitude: nil)
+      )
+      allow_any_instance_of(Pages::ProductPrices).to receive(:buyer_local_currency_rate).and_return(BigDecimal("0.8"))
+    end
+
+    def display_price(**kwargs)
+      described_class.new(product:, **kwargs).props[:display_price]
+    end
+
+    it "is null when no visitor is given" do
+      expect(display_price).to be_nil
+    end
+
+    it "converts into the visitor's currency and leaves the existing price fields untouched" do
+      product.update!(price_cents: 1400)
+      props = described_class.new(product:, ip: french_ip).props
+
+      expect(props[:display_price]).to eq(price: "€11.20", price_cents: 1120, currency_code: "eur", localized: true)
+      expect(props.slice(:price_cents, :currency_code, :price_formatted)).to eq(price_cents: 1400, currency_code: "usd", price_formatted: "$14")
+    end
+
+    it "honours an explicit currency over the IP" do
+      allow(GeoIp).to receive(:lookup).with("8.8.8.8").and_return(nil)
+      expect(display_price(ip: "8.8.8.8", preferred_currency: "eur")).to include(currency_code: "eur", localized: true)
+    end
+
+    it "falls back to the product's own currency when the visitor's cannot be used" do
+      expect(display_price(ip: "8.8.8.8")).to include(currency_code: "usd", localized: false)
+    end
+
+    it "applies the default discount and reports the original price" do
+      product.update!(price_cents: 1000)
+      product.update!(default_offer_code: create(:offer_code, user: seller, products: [product], amount_cents: 200))
+
+      expect(display_price(ip: french_ip)).to include(price_cents: 640, original_price_cents: 800, localized: true)
+    end
+
+    it "keeps the recurrence wording on a membership" do
+      membership = create(:membership_product, user: seller, price_cents: 500)
+      props = described_class.new(product: membership, ip: french_ip).props
+
+      expect(props[:display_price][:price]).to eq("€4 a month")
+    end
+  end
 end

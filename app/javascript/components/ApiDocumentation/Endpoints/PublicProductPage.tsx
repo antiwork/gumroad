@@ -43,6 +43,12 @@ export const GetPublicProductPage = () => (
         { name: "price_cents", type: "number", description: "The product's price in cents" },
         { name: "currency_code", type: "string", description: "The product's currency code" },
         { name: "price_formatted", type: "string", description: "The human-formatted price" },
+        {
+          name: "display_price",
+          type: "object",
+          description:
+            "What this visitor would see on the product page: discount applied and converted to the visitor's currency (from their IP, or ?currency=) when checkout can charge in it. Keys: price, price_cents, currency_code, localized, plus original_price and original_price_cents when discounted, and options for products with variants. Tax is not included; it is calculated at checkout from the buyer's billing country. Call it from the visitor's browser: a server-side call returns your server's currency. Responses are never cached.",
+        },
         { name: "is_pay_what_you_want", type: "boolean", description: "Whether the buyer can name their price" },
         {
           name: "suggested_price_cents",
