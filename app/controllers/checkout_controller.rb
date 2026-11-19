@@ -28,6 +28,7 @@ class CheckoutController < ApplicationController
       # that refresh doesn't recompute country lists and wishlists as well.
       checkout_payment: -> { checkout_presenter.checkout_payment_props(params: checkout_params, cart: cart_presenter.cart) },
       recommended_products: InertiaRails.optional { recommended_products },
+      recommendations_above_payment_form: -> { RecommendedProducts::CheckoutExperiment.phone_placement_treatment?(cookies[:_gumroad_guid]) },
       stripe_fonts_css_source: SellerProfile.seller_fonts_css_source,
       checkout_style: -> { sole_seller_checkout_style(rendered_products) },
     }
@@ -257,8 +258,11 @@ class CheckoutController < ApplicationController
         recommendation_type: params[:recommendation_type],
       }
 
+      record_recommendations_exposure
+
       Timeout.timeout(RECOMMENDED_PRODUCTS_TIMEOUT_SECONDS) do
-        RecommendedProducts::CheckoutService.fetch_for_cart(**args, prefer_paid_products: true).map do |product_info|
+        prefer_paid_products = !RecommendedProducts::CheckoutExperiment.co_purchase_ordering_treatment?(cookies[:_gumroad_guid])
+        RecommendedProducts::CheckoutService.fetch_for_cart(**args, prefer_paid_products:).map do |product_info|
           ProductPresenter.card_for_web(
             product: product_info.product,
             request:,
@@ -272,6 +276,17 @@ class CheckoutController < ApplicationController
     rescue Timeout::Error
       Rails.logger.warn("[CheckoutController] Recommended products timed out after #{RECOMMENDED_PRODUCTS_TIMEOUT_SECONDS}s")
       []
+    end
+
+    # The denominator for the experiments' conversion rate. The row reloads on every cart edit, so
+    # count a buyer once per window.
+    def record_recommendations_exposure
+      return unless RecommendedProducts::CheckoutExperiment.any_active?
+
+      guid = cookies[:_gumroad_guid]
+      return if guid.blank? || !Rails.cache.write("checkout_recommendations_view:#{guid}", true, expires_in: 30.minutes, unless_exist: true)
+
+      create_user_event_without_raising(Event::NAME_CHECKOUT_RECOMMENDATIONS_VIEW)
     end
 
     def checkout_params

@@ -99,6 +99,7 @@ import { useRunOnce } from "$app/components/useRunOnce";
 type CheckoutIndexPageProps = {
   cart: CartState | null;
   recommended_products?: CardProduct[]; // InertiaRails.optional prop, loaded after determining screen size
+  recommendations_above_payment_form?: boolean;
   // Optional because partial reloads can omit a prop that full renders always include.
   checkout_style?: CheckoutStyle | null;
   stripe_fonts_css_source: string;
@@ -1199,6 +1200,7 @@ const CheckoutIndexPage = () => {
             cart={cartForm.data.cart}
             updateCart={(updated) => cartForm.setData((prev) => ({ cart: { ...prev.cart, ...updated } }))}
             recommendedProducts={props.recommended_products ?? null}
+            recommendationsAbovePaymentForm={props.recommendations_above_payment_form ?? false}
             soldOutArrival={props.sold_out_arrival ?? null}
             ownedInCart={props.owned_in_cart ?? []}
           />
