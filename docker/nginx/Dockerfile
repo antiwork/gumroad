@@ -1,6 +1,6 @@
 # consul-template is one static binary, so fetch it in a throwaway stage rather
 # than keeping a downloader in the runtime image.
-FROM nginx:1.30.4-alpine AS consul-template
+FROM nginx:1.30.7-alpine AS consul-template
 
 ARG CONSUL_TEMPLATE_VERSION=0.19.4
 
@@ -8,7 +8,7 @@ RUN curl -fsSL https://releases.hashicorp.com/consul-template/${CONSUL_TEMPLATE_
   | tar -xz -C /usr/bin consul-template
 
 # Alpine rather than Debian: same nginx build and modules, less than half the size.
-FROM nginx:1.30.4-alpine
+FROM nginx:1.30.7-alpine
 
 COPY --from=consul-template /usr/bin/consul-template /usr/bin/consul-template
 COPY public /public
