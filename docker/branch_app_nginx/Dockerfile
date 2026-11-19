@@ -1,4 +1,6 @@
-FROM openresty/openresty:alpine-fat
+# Pinned, not a floating tag: the image is tagged with the last commit touching this
+# directory and CI skips the build when that tag exists, so a floating tag never refreshes.
+FROM openresty/openresty:1.31.8.1-alpine-fat
 
 
 RUN luarocks install luasocket
