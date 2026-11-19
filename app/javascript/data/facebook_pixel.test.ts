@@ -59,4 +59,21 @@ describe("trackProductEvent", () => {
       ["trackSingle", "1234567890", "InitiateCheckout", { content_ids: ["demo"], content_type: "product" }],
     ]);
   });
+
+  it("sends value and currency with InitiateCheckout when the event carries a price", () => {
+    trackProductEvent(config, {
+      action: "iwantthis",
+      permalink: "demo",
+      product_name: "Demo",
+      value: 26,
+      currency: "USD",
+    });
+
+    expect(fbq).toHaveBeenCalledExactlyOnceWith("trackSingle", "1234567890", "InitiateCheckout", {
+      content_ids: ["demo"],
+      content_type: "product",
+      value: 26,
+      currency: "USD",
+    });
+  });
 });

@@ -3,6 +3,7 @@ import * as React from "react";
 import { trackUserProductAction } from "$app/data/user_action_event";
 import type { Discount } from "$app/parsers/checkout";
 import { CustomButtonTextOption } from "$app/parsers/product";
+import { CurrencyCode, getIsSingleUnitCurrency } from "$app/utils/currency";
 import { formatInstallmentPaymentSchedule } from "$app/utils/price";
 import { assertResponseError } from "$app/utils/request";
 import { trackProductEvent } from "$app/utils/user_analytics";
@@ -39,16 +40,26 @@ export const trackCtaClick = ({
   sellerId,
   permalink,
   name,
+  priceCents,
+  currencyCode,
 }: {
   sellerId: string | undefined;
   permalink: string;
   name: string;
+  priceCents?: number;
+  currencyCode?: CurrencyCode;
 }) => {
   if (sellerId)
     trackProductEvent(sellerId, {
       permalink,
       action: "iwantthis",
       product_name: name,
+      ...(priceCents !== undefined && currencyCode
+        ? {
+            value: priceCents / (getIsSingleUnitCurrency(currencyCode) ? 1 : 100),
+            currency: currencyCode.toUpperCase(),
+          }
+        : {}),
     });
   trackUserProductAction({
     name: "i_want_this",
@@ -122,11 +133,8 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
     const [referrer, setReferrer] = React.useState("");
     useRunOnce(() => setReferrer(document.referrer));
 
-    const { selectedOption, priceCents, pppDiscounted, discountedPriceCents, maxQuantity } = applySelection(
-      product,
-      discountCode?.valid ? discountCode.discount : null,
-      selection,
-    );
+    const { selectedOption, priceCents, pppDiscounted, discountedPriceCents, discountedTotalCents, maxQuantity } =
+      applySelection(product, discountCode?.valid ? discountCode.discount : null, selection);
 
     const url = new URL(Routes.checkout_url());
 
@@ -187,6 +195,11 @@ export const CtaButton = React.forwardRef<HTMLAnchorElement, Props>(
           sellerId: product.seller?.id,
           name: product.name,
           permalink: product.permalink,
+          priceCents:
+            (product.pwyw || selectedOption?.is_pwyw) && selection.price.value != null
+              ? selection.price.value * selection.quantity
+              : discountedTotalCents,
+          currencyCode: product.currency_code,
         });
       },
       // Resolves a Safari rendering bug that makes the button too tall
