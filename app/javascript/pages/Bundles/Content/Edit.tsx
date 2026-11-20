@@ -76,35 +76,11 @@ export default function BundlesContentEdit() {
     products: bundle.products,
   });
 
-  const lastProcessedResultsRef = React.useRef<string>("");
-  React.useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get("all") === "true" && results.length > 0) {
-      const resultsKey = results
-        .map((p) => p.id)
-        .sort()
-        .join(",");
-      if (lastProcessedResultsRef.current !== resultsKey) {
-        lastProcessedResultsRef.current = resultsKey;
-        const currentProductIds = new Set(form.data.products.map((p) => p.id));
-        const newProductIds = new Set(results.map((p) => p.id));
-        const areEqual =
-          currentProductIds.size === newProductIds.size && [...currentProductIds].every((id) => newProductIds.has(id));
-        if (!areEqual) {
-          form.setData("products", results);
-        }
-      }
-    } else if (urlParams.get("all") !== "true") {
-      lastProcessedResultsRef.current = "";
-    }
-  }, [results, form.data.products, form]);
-
   const searchProducts = React.useCallback(
-    (options: { query?: string; page?: number; all?: boolean; reset?: string[]; preserveUrl?: boolean }) => {
-      const data: { query?: string | undefined; page?: number; all?: boolean } = {};
+    (options: { query?: string; page?: number; reset?: string[]; preserveUrl?: boolean }) => {
+      const data: { query?: string | undefined; page?: number } = {};
       if (options.query !== undefined) data.query = options.query || undefined;
       if (options.page !== undefined) data.page = options.page;
-      if (options.all !== undefined) data.all = options.all;
 
       router.reload({
         data,
@@ -132,7 +108,24 @@ export default function BundlesContentEdit() {
   };
 
   const loadAll = () => {
-    searchProducts({ query, all: true, reset: ["search_data"] });
+    debouncedSearch.cancel();
+    router.reload({
+      data: { query: query || undefined, all: true },
+      only: ["search_data"],
+      reset: ["search_data"],
+      preserveUrl: true,
+      onStart: () => setIsSearchLoading(true),
+      onFinish: () => setIsSearchLoading(false),
+      onSuccess: ({ props }) => {
+        const matches = cast<ContentPageProps>(props).search_data?.products;
+        if (!matches?.length) return;
+        form.setData((data) => {
+          const selectedById = new Map(data.products.map((product) => [product.id, product]));
+          if (selectedById.size === matches.length && matches.every(({ id }) => selectedById.has(id))) return data;
+          return { ...data, products: matches.map((product) => selectedById.get(product.id) ?? product) };
+        });
+      },
+    });
   };
 
   const formRef = React.useRef<HTMLFormElement>(null);
