@@ -54,10 +54,22 @@ module ProductsHelper
     sentence
   end
 
+  # Who owns the host this request came in on. It's the same answer for every product link built
+  # during the request, but resolving it costs a DB lookup plus a public-suffix parse, and a
+  # storefront page builds hundreds of product links (gp#4844). Resolve it once per request.
+  def request_domain_user(request)
+    return user_by_domain(request.host) unless request.respond_to?(:env)
+
+    cache = (request.env["gumroad.request_domain_user"] ||= {})
+    return cache[request.host] if cache.key?(request.host)
+
+    cache[request.host] = user_by_domain(request.host)
+  end
+
   def url_for_product_page(product, request:, recommended_by: nil, recommender_model_name: nil, layout: nil, affiliate_id: nil, query: nil, offer_code: nil)
     options = {}
     options[:code] = offer_code if offer_code.present?
-    if request.present? && user_by_domain(request.host) == product.user
+    if request.present? && request_domain_user(request) == product.user
       options.merge!(host: request.host_with_port, protocol: request.protocol)
       options[:recommended_by] = recommended_by if recommended_by.present?
       options[:recommender_model_name] = recommender_model_name if recommender_model_name.present?
