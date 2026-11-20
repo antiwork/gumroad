@@ -259,7 +259,7 @@ class ProfileSectionsPresenter
           cached_props[:search_results][:total] -= filtered_count
         end
         cached_props[:search_results][:products] = products.map do |product|
-          ProductPresenter.card_for_web(product:, request:, recommended_by: params[:recommended_by], target: Product::Layout::PROFILE, show_seller: false, compute_description: false, compute_inventory: false)
+          card_for_profile(product:, request:, recommended_by: params[:recommended_by])
         end
       when "SellerProfilePostsSection"
         if editing
@@ -287,6 +287,18 @@ class ProfileSectionsPresenter
           .sort_by { |wishlist| cached_props[:shown_wishlists].index(wishlist[:id]) }
       end
       cached_props
+    end
+
+    # A storefront with dozens of products sections lists the same products in many of them. The
+    # card only depends on the product and the recommender (everything else is fixed for the
+    # profile target), so build each product's card once per presenter instead of once per section
+    # it appears in (gp#4844: 65 sections cost 1.9M allocations per product page view).
+    # Each section gets its own copy so a caller mutating one section's cards can't leak into another.
+    def card_for_profile(product:, request:, recommended_by:)
+      @profile_cards ||= {}
+      card = @profile_cards[[product.id, recommended_by]] ||=
+        ProductPresenter.card_for_web(product:, request:, recommended_by:, target: Product::Layout::PROFILE, show_seller: false, compute_description: false, compute_inventory: false)
+      card.deep_dup
     end
 
     # Mirrors the section's ES query so we only shrink the total when the search counted the
