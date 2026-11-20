@@ -49,6 +49,22 @@ describe Api::Mobile::DevicesController do
         expect(created_device.app_version).to eq "1.0.0"
       end
 
+      it "treats a registration that loses the unique index to a concurrent one as success" do
+        attempts = 0
+        allow_any_instance_of(Device).to receive(:save).and_wrap_original do |original|
+          attempts += 1
+          raise ActiveRecord::RecordNotUnique if attempts == 1
+          original.call
+        end
+
+        expect do
+          post :create, params: { mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN, access_token: token.token, device: { token: "abc", device_type: "ios", app_type: Device::APP_TYPES[:creator], app_version: "1.0.0" } }
+        end.to change { Device.count }.by(1)
+
+        expect(response).to have_http_status(:created)
+        expect(response.parsed_body).to eq({ success: true }.as_json)
+      end
+
       it "deletes existing device token if already present" do
         expect do
           post :create, params: { mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN, access_token: token.token, device: { token: "abc", device_type: "ios", app_type: Device::APP_TYPES[:creator], app_version: "1.0.0" } }
