@@ -72,6 +72,14 @@ describe Product::AsJson, :vcr do
       expect(json["custom_summary"]).to eq ""
     end
 
+    it "returns the receipt text saved in the product editor" do
+      @product.update!(custom_receipt_text: "Thanks for your order!", custom_view_content_button_text: "Open it")
+      json = @product.as_json(api_scopes: ["view_public"])
+
+      expect(json["custom_receipt_text"]).to eq "Thanks for your order!"
+      expect(json["custom_view_content_button_text"]).to eq "Open it"
+    end
+
     it "returns the correct values for custom_fields" do
       json = @product.as_json(api_scopes: ["view_public"])
       expect(json["custom_fields"]).to eq []

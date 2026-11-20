@@ -295,6 +295,8 @@ export const GetProducts = () => (
   "products": [{
     "custom_permalink": null,
     "custom_receipt": null,
+    "custom_receipt_text": null,
+    "custom_view_content_button_text": null,
     "custom_summary": "You'll get one PSD file.",
     "custom_fields": [],
     "customizable_price": null,
@@ -376,6 +378,8 @@ export const GetProduct = () => (
   "product": {
     "custom_permalink": null,
     "custom_receipt": null,
+    "custom_receipt_text": null,
+    "custom_view_content_button_text": null,
     "custom_summary": "You'll get one PSD file.",
     "custom_html": null,
     "custom_fields": [],
@@ -598,7 +602,18 @@ export const UpdateProduct = () => (
         description="(optional) numeric category ID; alias for category, cannot be sent with category"
       />
       <ApiParameter name="tags" description="(optional) array of tag strings; full replacement" />
-      <ApiParameter name="custom_receipt" description="(optional)" />
+      <ApiParameter
+        name="custom_receipt"
+        description="(optional, deprecated) legacy receipt text field, no longer shown on receipts; use custom_receipt_text"
+      />
+      <ApiParameter
+        name="custom_receipt_text"
+        description="(optional) message shown on the buyer's receipt, up to 500 characters; an empty string clears it"
+      />
+      <ApiParameter
+        name="custom_view_content_button_text"
+        description="(optional) text on the receipt's button that opens the product, up to 26 characters; an empty string clears it"
+      />
       <ApiParameter name="custom_summary" description="(optional)" />
       <ApiParameter
         name="refund_period"
@@ -700,6 +715,8 @@ export const EnableProduct = () => (
   "product": {
     "custom_permalink": null,
     "custom_receipt": null,
+    "custom_receipt_text": null,
+    "custom_view_content_button_text": null,
     "custom_summary": "You'll get one PSD file.",
     "custom_fields": [],
     "customizable_price": null,
@@ -778,6 +795,8 @@ export const DisableProduct = () => (
   "product": {
     "custom_permalink": null,
     "custom_receipt": null,
+    "custom_receipt_text": null,
+    "custom_view_content_button_text": null,
     "custom_summary": "You'll get one PSD file.",
     "custom_fields": [],
     "customizable_price": null,

@@ -98,7 +98,18 @@ const PRODUCT_VARIANT_FIELDS: FieldDefinition[] = [
 
 const SHARED_PRODUCT_FIELDS: FieldDefinition[] = [
   { name: "custom_permalink", type: "string | null", description: "Custom URL slug for the product" },
-  { name: "custom_receipt", type: "string | null", description: "Custom receipt text" },
+  {
+    name: "custom_receipt",
+    type: "string | null",
+    description:
+      "Deprecated legacy receipt text field. Receipt text saved in the product editor is returned in custom_receipt_text instead",
+  },
+  { name: "custom_receipt_text", type: "string | null", description: "Message shown on the buyer's receipt" },
+  {
+    name: "custom_view_content_button_text",
+    type: "string | null",
+    description: "Text on the receipt's button that opens the product",
+  },
   { name: "custom_summary", type: "string | null", description: "Custom summary shown to buyers" },
   { name: "custom_html", type: "string | null", description: "Custom landing page HTML for the product" },
   {

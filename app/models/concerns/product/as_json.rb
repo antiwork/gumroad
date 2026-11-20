@@ -104,6 +104,10 @@ module Product::AsJson
         "deleted" => deleted_at.present?,
         "custom_fields" => custom_field_descriptors.as_json,
         "custom_summary" => custom_summary,
+        # `custom_receipt` above is the legacy column; the product editor and the receipt render
+        # these two json_data attributes, so the API has to report them as well.
+        "custom_receipt_text" => custom_receipt_text,
+        "custom_view_content_button_text" => custom_view_content_button_text,
         "is_tiered_membership" => is_tiered_membership?,
         "recurrences" => is_tiered_membership? ? membership_buy_recurrences : nil,
         "covers" => display_asset_previews.as_json,
