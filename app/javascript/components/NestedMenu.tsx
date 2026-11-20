@@ -70,7 +70,7 @@ export const NestedMenu = ({
       selectedItem,
       topLevelMenuItems,
       onSelectItem: (menuItem, e) => {
-        if (menuItem.href && (e.ctrlKey || e.shiftKey)) return;
+        if (menuItem.href && (e.metaKey || e.ctrlKey || e.shiftKey)) return;
         e.preventDefault();
         onSelectItem?.(menuItem, e);
       },
@@ -257,6 +257,7 @@ const MenubarItem = ({
         aria-controls={hasChildren ? uid : undefined}
         {...extraAriaAttrs}
         onClick={(e) => {
+          if (menuItem.href && (e.metaKey || e.ctrlKey || e.shiftKey)) return;
           if (hasChildren) {
             if (isOnTouchDevice) e.preventDefault();
             else onSelectItem?.(menuItem, e);
@@ -406,7 +407,7 @@ const ItemsList = ({
           href={displayedItem.parent?.href ?? "#"}
           className="justify-start"
           onClick={(e) => {
-            if (e.ctrlKey || e.shiftKey) return;
+            if (e.metaKey || e.ctrlKey || e.shiftKey) return;
             showItem(displayedItem.parent ?? initialMenuItem);
             e.preventDefault();
           }}
@@ -426,7 +427,7 @@ const ItemsList = ({
           href={item.href}
           onClick={(e) => {
             if (item.children.length) {
-              if (e.ctrlKey || e.shiftKey) return;
+              if (e.metaKey || e.ctrlKey || e.shiftKey) return;
               e.preventDefault();
               showItem(item);
             } else return onSelectItem?.(item, e);
