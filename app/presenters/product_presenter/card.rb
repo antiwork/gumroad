@@ -33,7 +33,7 @@ class ProductPresenter::Card
     base_price_cents = product.display_price_cents(for_default_duration: true)
     price_cents = product.discounted_price_cents(base_price_cents)
     original_price_cents = price_cents < base_price_cents ? base_price_cents : nil
-    buyer_currency_display = request.present? ? buyer_currency_display_props(product:, price_cents:, ip: request.remote_ip, preferred_currency: buyer_currency_preference(request)) : nil
+    buyer_currency_display = request.present? ? buyer_currency_display_props(product:, price_cents:, ip: request.remote_ip, preferred_currency: buyer_currency_preference(request), creator_opted_in: creator_opted_in_buyer_local_currency?(request)) : nil
 
     props = {
       id: product.external_id,
@@ -84,6 +84,18 @@ class ProductPresenter::Card
   end
 
   private
+    # A storefront page builds hundreds of cards for one seller. Whether that seller opted in to
+    # buyer-local currency is the same for all of them, but each check is a Flipper (Redis) read,
+    # so look it up once per seller per request (gp#4844).
+    def creator_opted_in_buyer_local_currency?(request)
+      seller = product.user
+      opted_in = -> { !seller.disable_buyer_local_currency? && Feature.active?(:buyer_local_currency, seller) }
+      return opted_in.call unless request.respond_to?(:env)
+
+      memo = (request.env["gumroad.buyer_local_currency_opt_in"] ||= {})
+      memo.fetch(seller.id) { memo[seller.id] = opted_in.call }
+    end
+
     # Drops punctuation before the omission so a cut after a sentence period does not end in "....".
     def truncate_description(text, max_length)
       return text if text.length <= max_length

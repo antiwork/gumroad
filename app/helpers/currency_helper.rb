@@ -190,10 +190,9 @@ module CurrencyHelper
     to_rate / from_rate
   end
 
-  def buyer_currency_display_props(product:, price_cents:, ip:, preferred_currency: nil)
+  def buyer_currency_display_props(product:, price_cents:, ip:, preferred_currency: nil, creator_opted_in: nil)
     product_currency = product.price_currency_type.to_s.downcase
-    creator_opted_in = !product.user.disable_buyer_local_currency? &&
-      Feature.active?(:buyer_local_currency, product.user)
+    creator_opted_in = !product.user.disable_buyer_local_currency? && Feature.active?(:buyer_local_currency, product.user) if creator_opted_in.nil?
 
     default_props = {
       product_id: product.external_id,
