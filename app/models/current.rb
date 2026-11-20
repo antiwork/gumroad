@@ -12,5 +12,8 @@ class Current < ActiveSupport::CurrentAttributes
   # so a listing page resolves it once per seller instead of once per product.
   # analytics_pagination_deadline is the monotonic instant the analytics endpoints' composite
   # walks must stop by; it is request-scoped so the two walks in one referral request share one.
-  attribute :admin_actor, :admin_token, :buyer_currency_merchant_accounts, :default_offer_code_uses_left, :auto_apply_offer_codes, :analytics_pagination_deadline
+  # request_lookups memoizes pure per-request lookups (buyer IP => currency, currency => USD rate,
+  # seller feature flags) that a storefront page would otherwise repeat for each of its hundreds
+  # of product cards (gp#4844). See CurrencyHelper#request_lookup.
+  attribute :request_lookups, :admin_actor, :admin_token, :buyer_currency_merchant_accounts, :default_offer_code_uses_left, :auto_apply_offer_codes, :analytics_pagination_deadline
 end
