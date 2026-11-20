@@ -294,9 +294,9 @@ export const GetProducts = () => (
   "success": true,
   "products": [{
     "custom_permalink": null,
-    "custom_receipt": null,
-    "custom_receipt_text": null,
-    "custom_view_content_button_text": null,
+    "custom_receipt": null, # Deprecated, use custom_receipt_text
+    "custom_receipt_text": "Thanks for your order!",
+    "custom_view_content_button_text": "Open it",
     "custom_summary": "You'll get one PSD file.",
     "custom_fields": [],
     "customizable_price": null,
@@ -377,9 +377,9 @@ export const GetProduct = () => (
   "success": true,
   "product": {
     "custom_permalink": null,
-    "custom_receipt": null,
-    "custom_receipt_text": null,
-    "custom_view_content_button_text": null,
+    "custom_receipt": null, # Deprecated, use custom_receipt_text
+    "custom_receipt_text": "Thanks for your order!",
+    "custom_view_content_button_text": "Open it",
     "custom_summary": "You'll get one PSD file.",
     "custom_html": null,
     "custom_fields": [],
@@ -714,9 +714,9 @@ export const EnableProduct = () => (
   "success": true,
   "product": {
     "custom_permalink": null,
-    "custom_receipt": null,
-    "custom_receipt_text": null,
-    "custom_view_content_button_text": null,
+    "custom_receipt": null, # Deprecated, use custom_receipt_text
+    "custom_receipt_text": "Thanks for your order!",
+    "custom_view_content_button_text": "Open it",
     "custom_summary": "You'll get one PSD file.",
     "custom_fields": [],
     "customizable_price": null,
@@ -794,9 +794,9 @@ export const DisableProduct = () => (
   "success": true,
   "product": {
     "custom_permalink": null,
-    "custom_receipt": null,
-    "custom_receipt_text": null,
-    "custom_view_content_button_text": null,
+    "custom_receipt": null, # Deprecated, use custom_receipt_text
+    "custom_receipt_text": "Thanks for your order!",
+    "custom_view_content_button_text": "Open it",
     "custom_summary": "You'll get one PSD file.",
     "custom_fields": [],
     "customizable_price": null,
