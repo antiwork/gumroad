@@ -7,6 +7,7 @@ export const usePersistentExternalScript = (src: string) => {
     const script = document.createElement("script");
     script.src = src;
     script.async = true;
+    script.addEventListener("error", () => script.remove(), { once: true });
     document.body.appendChild(script);
 
     // Deliberately not cleaning up the script here as our scripts are not designed to be
