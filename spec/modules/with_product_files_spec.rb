@@ -346,6 +346,45 @@ describe WithProductFiles do
         end.not_to change { product.product_files.alive.count }
       end
 
+      it "stores the Unicode normalization form of the key that is in storage" do
+        # "música.pdf" with the "ú" precomposed (NFC) in the editor's payload vs decomposed (NFD,
+        # what macOS uploads produce) in storage
+        submitted_key = "attachments/unicode/original/m\u00FAsica.pdf"
+        stored_key = submitted_key.unicode_normalize(:nfd)
+        product = create(:product)
+
+        # Real S3 compares keys byte-for-byte, but the local test S3 normalizes Unicode keys and
+        # would find the object under either form — stub the boundary to reproduce production.
+        bucket = double(:bucket)
+        allow(Aws::S3::Resource).to receive(:new).and_return(double(:resource, bucket:))
+        allow(bucket).to receive(:object).with(submitted_key).and_return(double(:s3_object, exists?: false))
+        allow(S3KeyUnicodeNormalization).to receive(:existing_variant).with(submitted_key).and_return(stored_key)
+
+        product.save_files!(
+          [{ external_id: SecureRandom.uuid, url: "#{S3_BASE_URL}#{submitted_key}", size: 123, display_name: "Música" }],
+          delete_missing: false
+        )
+
+        expect(product.product_files.alive.sole.s3_key).to eq(stored_key)
+      end
+
+      it "stores the submitted URL as sent when its key is the one in storage" do
+        submitted_key = "attachments/unicode/original/gu\u00EDa.pdf"
+        product = create(:product)
+
+        bucket = double(:bucket)
+        allow(Aws::S3::Resource).to receive(:new).and_return(double(:resource, bucket:))
+        allow(bucket).to receive(:object).with(submitted_key).and_return(double(:s3_object, exists?: true))
+        expect(S3KeyUnicodeNormalization).not_to receive(:existing_variant)
+
+        product.save_files!(
+          [{ external_id: SecureRandom.uuid, url: "#{S3_BASE_URL}#{submitted_key}", size: 123, display_name: "Guía" }],
+          delete_missing: false
+        )
+
+        expect(product.product_files.alive.sole.s3_key).to eq(submitted_key)
+      end
+
       it "dedupes files with different urls when their S3 ETag and size match" do
         product = create(:product)
         original_url = "#{S3_BASE_URL}attachments/fingerprint/original/guide.pdf"
