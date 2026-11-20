@@ -1,2 +1,1 @@
-export const isElementWithin = (target: HTMLElement, els: (HTMLElement | null)[]) =>
-  els.some((el) => el?.contains(target));
+export const isElementWithin = (target: Element, els: (HTMLElement | null)[]) => els.some((el) => el?.contains(target));
