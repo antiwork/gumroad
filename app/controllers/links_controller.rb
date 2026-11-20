@@ -425,7 +425,7 @@ class LinksController < ApplicationController
   end
 
   def edit
-    fetch_product_by_unique_permalink
+    fetch_product_for_edit
     authorize @product
 
     return redirect_to edit_bundle_product_path(@product.external_id) if @product.is_bundle?
@@ -1467,6 +1467,19 @@ class LinksController < ApplicationController
 
       sql = waiting_rows.first.to_h["SQL_TEXT"].to_s
       sql.match?(/\blinks\b/i) && sql.match?(/=\s*#{@product.id}\b/)
+    end
+
+    # The editor posts saves to the unique permalink it was booted with, and the save resolves
+    # that through the visible-only Link.fetch. An unscoped lookup here would boot the editor
+    # on a soft-deleted sibling whose unique_permalink equals the live product's custom slug.
+    def fetch_product_for_edit
+      permalink = params[:id]
+      e404 if permalink.blank?
+
+      @product = Link.fetch(permalink, user: current_seller) ||
+                 Link.fetch_leniently(permalink, user: current_seller) ||
+                 Link.fetch(permalink) ||
+                 e404
     end
 
     def check_banned
