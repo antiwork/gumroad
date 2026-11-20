@@ -14,6 +14,12 @@ export const useDropbox = (apiKey: string | null) => {
         script.setAttribute("data-app-key", apiKey);
         script.async = true;
         script.onload = () => resolve();
+        // A load that fails leaves this id in the DOM, which is what the guard above matches, so
+        // the tag has to come back off or no later mount can request the script again.
+        script.onerror = () => {
+          script.remove();
+          loadPromise = null;
+        };
         document.body.appendChild(script);
       });
     }
