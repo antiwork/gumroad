@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -7,6 +7,28 @@ import { Select } from "$app/components/Select";
 
 const option = { id: "one", label: "One" };
 afterEach(cleanup);
+
+describe("Select option state", () => {
+  it.each([
+    { platform: "Linux x86_64", selected: "true", unselected: "false" },
+    { platform: "MacIntel", selected: null, unselected: null },
+  ])("preserves the library's option state on $platform", ({ platform, selected, unselected }) => {
+    const navigatorPlatform = vi.spyOn(window.navigator, "platform", "get").mockReturnValue(platform);
+    try {
+      render(<Select isMulti={false} value={option} options={[option, { id: "two", label: "Two" }]} />);
+      fireEvent.focus(screen.getByRole("combobox"));
+
+      const combobox = screen.getByRole("combobox");
+      const listbox = screen.getByRole("listbox");
+      expect(combobox.getAttribute("aria-controls")).toBe(listbox.id);
+      const options = within(listbox).getAllByRole("option");
+      expect(options.map((item) => item.textContent)).toEqual(["One", "Two"]);
+      expect(options.map((item) => item.getAttribute("aria-selected"))).toEqual([selected, unselected]);
+    } finally {
+      navigatorPlatform.mockRestore();
+    }
+  });
+});
 
 describe("Select action buttons", () => {
   it.each([false, true])("keeps isMulti=%s actions out of a form's default submit buttons", (isMulti) => {
