@@ -15,7 +15,7 @@ export const useOnOutsideClick = (
       if ("current" in elOrRef) return elOrRef.current;
       return elOrRef;
     });
-    if (!(evt.target instanceof HTMLElement)) return;
+    if (!(evt.target instanceof Element)) return;
     if (!isElementWithin(evt.target, els)) {
       callback();
     }
