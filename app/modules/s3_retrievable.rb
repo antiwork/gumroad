@@ -22,11 +22,20 @@ module S3Retrievable
     extname = File.extname(s3_url)
     basename = Digest::MD5.hexdigest(File.basename(s3_url, extname))
     tempfile = Tempfile.new([basename, extname], encoding:)
-    self.s3_object.download_file(tempfile.path)
+    begin
+      s3_object.download_file(tempfile.path)
+    rescue Aws::S3::Errors::NotFound => e
+      # S3 compares keys byte-for-byte, so a row whose key is in the other Unicode normalization
+      # form than the object (NFC in our data, NFD from a macOS upload) misses. A URL-only caller
+      # can heal that itself; a caller that must read the bytes — stamping — has no way out.
+      normalized_key = S3KeyUnicodeNormalization.existing_variant(s3_key)
+      raise e.exception("Key = #{s3_key} -- #{self.class.name}.id = #{id}") if normalized_key.nil?
+
+      File.truncate(tempfile.path, 0) # a failed download can leave a partial object behind
+      Aws::S3::Resource.new.bucket(S3_BUCKET).object(normalized_key).download_file(tempfile.path)
+    end
     tempfile.rewind
     yield tempfile
-  rescue Aws::S3::Errors::NotFound => e
-    raise e.exception("Key = #{s3_key} -- #{self.class.name}.id = #{id}")
   ensure
     tempfile&.close!
   end

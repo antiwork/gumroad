@@ -70,6 +70,47 @@ describe "S3Retrievable" do
         record.download_original { }
       end.to raise_error(Aws::S3::Errors::NotFound, /Key = attachments\/missing.txt .* #{model.name}.id = #{record.id}/)
     end
+
+    it "downloads the other Unicode normalization form of the key when the stored one is missing" do
+      # "música.pdf" with the "ú" precomposed (NFC) in the row vs decomposed (NFD) in storage
+      nfc_key = "attachments/m\u00FAsica.pdf"
+      nfd_key = nfc_key.unicode_normalize(:nfd)
+      record = model.create!(url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{nfc_key}")
+
+      # Real S3 compares keys byte-for-byte, but the local test S3 normalizes Unicode keys and
+      # would find the object under either form — stub the boundary to reproduce production.
+      missing_object = double(:s3_object)
+      allow(missing_object).to receive(:download_file).and_raise(Aws::S3::Errors::NotFound.new(nil, "missing"))
+      allow(record).to receive(:s3_object).and_return(missing_object)
+      allow(S3KeyUnicodeNormalization).to receive(:existing_variant).with(nfc_key).and_return(nfd_key)
+
+      existing_object = double(:s3_object)
+      expect(existing_object).to receive(:download_file).with(kind_of(String))
+      bucket = double(:bucket)
+      allow(bucket).to receive(:object).with(nfd_key).and_return(existing_object)
+      allow(Aws::S3::Resource).to receive(:new).and_return(double(:resource, bucket:))
+
+      yielded = false
+      record.download_original do |original_file|
+        yielded = true
+        expect(original_file).to be_kind_of(Tempfile)
+      end
+      expect(yielded).to eq(true)
+    end
+
+    it "raises when no form of the key exists in storage" do
+      nfc_key = "attachments/m\u00FAsica.pdf"
+      record = model.create!(url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{nfc_key}")
+
+      missing_object = double(:s3_object)
+      allow(missing_object).to receive(:download_file).and_raise(Aws::S3::Errors::NotFound.new(nil, "missing"))
+      allow(record).to receive(:s3_object).and_return(missing_object)
+      allow(S3KeyUnicodeNormalization).to receive(:existing_variant).and_return(nil)
+
+      expect do
+        record.download_original { }
+      end.to raise_error(Aws::S3::Errors::NotFound, /Key = #{Regexp.escape(nfc_key)} .* #{model.name}.id = #{record.id}/)
+    end
   end
 
   describe "#s3_filename" do

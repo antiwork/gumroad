@@ -67,6 +67,11 @@ module WithProductFiles
     files_params.each do |file_params|
       next unless file_params[:url].present?
 
+      # The client sends the storage URL, so it can name the object in the other Unicode
+      # normalization form than S3 holds it under; storing that key verbatim points the row at an
+      # object that does not exist, which stamping cannot recover from (see S3Retrievable).
+      file_params[:url] = storage_url_with_existing_key(file_params[:url])
+
       begin
         # Both keys are client identifiers, never writable attributes: delete both
         # unconditionally, or a surviving :id reaches update! as `id = client.to_i`
@@ -267,6 +272,24 @@ module WithProductFiles
   end
 
   private
+    # A submitted URL whose key is not in storage but whose other Unicode normalization form is:
+    # keep the form that exists, so a differently-encoded filename cannot leave the row pointing
+    # at nothing. Plain-ASCII keys have no variants, so they cost no storage lookup.
+    def storage_url_with_existing_key(url)
+      return url unless url.start_with?(S3_BASE_URL)
+
+      s3_key = url.delete_prefix(S3_BASE_URL)
+      return url if S3KeyUnicodeNormalization.variants(s3_key).empty?
+      return url if Aws::S3::Resource.new.bucket(S3_BUCKET).object(s3_key).exists?
+
+      normalized_key = S3KeyUnicodeNormalization.existing_variant(s3_key)
+      normalized_key ? S3_BASE_URL + normalized_key : url
+    rescue Aws::Errors::ServiceError, Seahorse::Client::NetworkingError => e
+      # Unreachable storage is not evidence the key is wrong; save what the client sent.
+      Rails.logger.warn("WithProductFiles#storage_url_with_existing_key could not check #{s3_key}: #{e.class} => #{e.message}")
+      url
+    end
+
     def create_archive!(files_to_archive, folder_id = nil)
       product_files_archive = product_files_archives.new(folder_id:)
       product_files_archive.product_files = files_to_archive
