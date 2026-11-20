@@ -373,6 +373,25 @@ describe("Bundle edit page", type: :system, js: true) do
       expect(page).to have_alert(text: "Bundles must have at least one product.")
     end
 
+    it "keeps selected products when the seller searches after selecting all" do
+      visit edit_bundle_content_path(bundle.external_id)
+      check "All products", unchecked: true
+      within "[aria-label='Bundle products']" do
+        expect(page).to have_section("Product 0")
+        expect(page).to have_section("Versioned product")
+      end
+
+      fill_in "Search products", with: "Versioned product"
+      within "[aria-label='Product selector']" do
+        expect(page).to have_section("Versioned product")
+        expect(page).not_to have_section("Product 0")
+      end
+      within "[aria-label='Bundle products']" do
+        expect(page).to have_section("Product 0")
+        expect(page).to have_section("Versioned product")
+      end
+    end
+
     context "when the bundle has no products" do
       let(:empty_bundle) { create(:product, :unpublished, user: seller, is_bundle: true) }
 
