@@ -106,7 +106,7 @@ export const ComboBox = <Option extends unknown>({
         "aria-expanded": open,
         "aria-controls": uid,
         inert: disabled,
-        "aria-activedescendant": focusedOptionIndex ? `${uid}-${focusedOptionIndex}` : undefined,
+        "aria-activedescendant": open && focusedOptionIndex !== null ? `${uid}-${focusedOptionIndex}` : undefined,
         ...(editable
           ? {
               onFocus: () => toggle(true),
@@ -120,7 +120,8 @@ export const ComboBox = <Option extends unknown>({
             }),
       })}
       <div className={classNames(!open && "hidden")} onMouseDown={(e) => e.preventDefault()}>
-        <datalist
+        <div
+          role="listbox"
           id={uid}
           onMouseOut={() => setFocusedOptionIndex(null)}
           aria-multiselectable={multiple}
@@ -151,7 +152,7 @@ export const ComboBox = <Option extends unknown>({
               )}
             </React.Fragment>
           ))}
-        </datalist>
+        </div>
       </div>
     </div>
   );
