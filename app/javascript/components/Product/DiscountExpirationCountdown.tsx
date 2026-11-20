@@ -36,7 +36,7 @@ export const DiscountExpirationCountdown = ({
       onExpiration();
       return;
     }
-    const countdown = new Countdown(secondsUntilExpiration, setSecondsUntilExpiration, onExpiration);
+    const countdown = new Countdown(secondsUntilExpiration, setSecondsUntilExpiration, onExpiration, expiresAt);
     return () => countdown.abort();
     // Mount-once, matching the previous useRunOnce contract: secondsUntilExpiration and
     // onExpiration are read from the first render only, so the interval is never rebuilt.
