@@ -124,7 +124,7 @@ module CurrencyHelper
   end
 
   def buyer_currency_for_ip(ip)
-    buyer_currency_for_country(GeoIp.lookup(ip)&.country_code)
+    request_lookup(:buyer_currency_for_ip, ip) { buyer_currency_for_country(GeoIp.lookup(ip)&.country_code) }
   rescue StandardError
     nil
   end
@@ -190,10 +190,9 @@ module CurrencyHelper
     to_rate / from_rate
   end
 
-  def buyer_currency_display_props(product:, price_cents:, ip:, preferred_currency: nil)
+  def buyer_currency_display_props(product:, price_cents:, ip:, preferred_currency: nil, creator_opted_in: nil)
     product_currency = product.price_currency_type.to_s.downcase
-    creator_opted_in = !product.user.disable_buyer_local_currency? &&
-      Feature.active?(:buyer_local_currency, product.user)
+    creator_opted_in = !product.user.disable_buyer_local_currency? && Feature.active?(:buyer_local_currency, product.user) if creator_opted_in.nil?
 
     default_props = {
       product_id: product.external_id,
@@ -279,7 +278,7 @@ module CurrencyHelper
   # only once the seller can actually charge in the buyer's currency, which is where a shown
   # local price becomes a promise.
   def buyer_currency_settleable?(seller:, buyer_currency:, product:, product_currency:)
-    return true unless Feature.active?(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+    return true unless seller_feature_active?(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
     # A buyer whose own currency is USD is the one case where converting a non-USD-priced
     # product is safe, because USD is what the charge uses anyway: a plain card charge is
     # created in USD and the listed price is converted with the same cached rate this display
@@ -497,11 +496,28 @@ module CurrencyHelper
   def cached_usd_rate(currency_type)
     return BigDecimal("1") if currency_type.to_s.casecmp?(Currency::USD)
 
-    cached = currency_namespace.get(currency_type.to_s.upcase)
-    return if cached.blank?
+    request_lookup(:cached_usd_rate, currency_type.to_s.downcase) do
+      cached = currency_namespace.get(currency_type.to_s.upcase)
+      next if cached.blank?
 
-    rate = cached.to_d
-    rate if rate.positive?
+      rate = cached.to_d
+      rate if rate.positive?
+    end
+  end
+
+  # Remembers a lookup for the rest of the request (Current is reset between requests). The
+  # buyer-currency display runs once per product card, and a storefront page has hundreds of
+  # cards that all ask the same questions: which currency is this IP, what is that currency's
+  # rate, is this flag on for this seller. Each is a GeoIP, Redis or memcached read.
+  def request_lookup(*key)
+    store = (Current.request_lookups ||= {})
+    return store[key] if store.key?(key)
+
+    store[key] = yield
+  end
+
+  def seller_feature_active?(feature_name, seller)
+    request_lookup(:seller_feature, feature_name, seller.id) { Feature.active?(feature_name, seller) }
   end
 
   def subunit_to_unit(currency_type)
