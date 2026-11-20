@@ -230,6 +230,63 @@ describe ProductPresenter do
     end
   end
 
+  describe "product page cost with many profile sections (gp#4844)" do
+    let(:request) { ActionDispatch::TestRequest.create }
+    let(:visitor_pundit_user) { SellerContext.logged_out }
+
+    def build_page_props(section_count:)
+      # A fresh seller per call, so each measurement starts from exactly `section_count` sections.
+      seller = create(:user, product_page_storefront_enabled: true)
+      shown_products = create_list(:product, 4, user: seller)
+      page_product = create(:product, user: seller)
+      product_ids = shown_products.map(&:id)
+      allow_any_instance_of(ProfileSectionsPresenter).to receive(:section_search_results)
+        .and_wrap_original { |_original, *| { total: product_ids.size, filetypes_data: [], tags_data: [], products: product_ids.dup } }
+      create_list(:seller_profile_products_section, section_count, seller:, shown_products: shown_products.map(&:id))
+      Rails.cache.clear
+      props = nil
+      card_builds = 0
+      allow(ProductPresenter).to receive(:card_for_web).and_wrap_original { |original, **kwargs| card_builds += 1; original.call(**kwargs) }
+      queries = 0
+      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |_name, _start, _finish, _id, payload|
+        queries += 1 unless payload[:name] == "SCHEMA" || payload[:cached]
+      end
+      allocations_before = GC.stat(:total_allocated_objects)
+      begin
+        props = described_class.new(product: page_product.reload, request:, pundit_user: visitor_pundit_user).product_page_props(seller_custom_domain_url: nil)
+      ensure
+        ActiveSupport::Notifications.unsubscribe(subscriber)
+      end
+      { props:, shown_products:, card_builds:, queries:, allocations: GC.stat(:total_allocated_objects) - allocations_before }
+    end
+
+    it "builds each product card once however many sections list it, and keeps the rendered sections unchanged" do
+      few = build_page_props(section_count: 3)
+      many = build_page_props(section_count: 30)
+
+      expect(few[:props][:sections].size).to eq(3)
+      expect(many[:props][:sections].size).to eq(30)
+      expect(many[:card_builds]).to eq(many[:shown_products].size)
+      expect(many[:card_builds]).to eq(few[:card_builds])
+
+      cards = many[:props][:sections].map { |section| section[:search_results][:products] }
+      expect(cards.uniq.size).to eq(1)
+      expect(cards.first.map { _1[:id] }).to match_array(many[:shown_products].map(&:external_id))
+      # Sections must not share card objects, so one section's props can't be changed through another's.
+      expect(cards.first.first).not_to equal(cards.second.first)
+    end
+
+    it "does not grow queries or allocations in proportion to the section count" do
+      build_page_props(section_count: 3) # warm class-level caches
+      few = build_page_props(section_count: 3)
+      many = build_page_props(section_count: 30)
+
+      # 10x the sections. The per-section part is the section row's own props, never a card build.
+      expect(many[:queries]).to be <= few[:queries] + 30
+      expect(many[:allocations]).to be < few[:allocations] * 4
+    end
+  end
+
   describe "product page storefront catalog" do
     let(:request) { ActionDispatch::TestRequest.create }
     let(:seller) { create(:user, product_page_storefront_enabled: true) }
