@@ -1530,6 +1530,34 @@ describe Api::V2::LinksController do
         expect(@product.reload.json_data["custom_summary"]).to eq("A custom summary")
       end
 
+      it "stores the receipt text and the receipt button text in json_data" do
+        put @action, params: @params.merge(custom_receipt_text: "Thanks for your order!", custom_view_content_button_text: "Open it")
+
+        expect(response.parsed_body["success"]).to be(true)
+        expect(@product.reload.custom_receipt_text).to eq("Thanks for your order!")
+        expect(@product.custom_view_content_button_text).to eq("Open it")
+        expect(response.parsed_body["product"]["custom_receipt_text"]).to eq("Thanks for your order!")
+        expect(response.parsed_body["product"]["custom_view_content_button_text"]).to eq("Open it")
+      end
+
+      it "clears the receipt text with an empty string" do
+        @product.update!(custom_receipt_text: "Thanks!")
+
+        put @action, params: @params.merge(custom_receipt_text: "")
+
+        expect(response.parsed_body["success"]).to be(true)
+        expect(@product.reload.custom_receipt_text).to be_nil
+      end
+
+      it "ignores a receipt text that is not a string" do
+        @product.update!(custom_receipt_text: "Thanks!")
+
+        put @action, params: @params.merge(custom_receipt_text: ["x"])
+
+        expect(response.parsed_body["success"]).to be(true)
+        expect(@product.reload.custom_receipt_text).to eq("Thanks!")
+      end
+
       it "sets tags" do
         put @action, params: @params.merge(tags: ["ruby", "rails"])
         expect(response.parsed_body["success"]).to be(true)

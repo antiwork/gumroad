@@ -501,6 +501,15 @@ class Api::V2::LinksController < Api::V2::BaseController
           @product.json_data["custom_summary"] = params[:custom_summary]
         end
 
+        # The receipt render reads these two off the product, so a non-string (a JSON array or
+        # object) is dropped here rather than persisted and raised on when the mailer renders it.
+        if params.key?(:custom_receipt_text) && params[:custom_receipt_text].is_a?(String)
+          @product.json_data["custom_receipt_text"] = params[:custom_receipt_text]
+        end
+        if params.key?(:custom_view_content_button_text) && params[:custom_view_content_button_text].is_a?(String)
+          @product.json_data["custom_view_content_button_text"] = params[:custom_view_content_button_text]
+        end
+
         apply_product_refund_policy! if params.key?(:refund_period) || params.key?(:refund_fine_print)
 
         if params.key?(:custom_html)
