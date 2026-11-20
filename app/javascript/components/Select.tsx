@@ -271,7 +271,7 @@ const MIN_MENU_HEIGHT = 140;
 
 const MenuList = <IsMulti extends boolean>(props: MenuListProps<Option, IsMulti>) => {
   const menuListId = React.useContext(CustomPropsContext).menuListId;
-  const listRef = React.useRef<HTMLDataListElement | null>(null);
+  const listRef = React.useRef<HTMLDivElement | null>(null);
   const [maxHeight, setMaxHeight] = React.useState(props.maxHeight);
 
   // The menu is absolutely positioned below the control with a fixed max height, so on short
@@ -304,17 +304,18 @@ const MenuList = <IsMulti extends boolean>(props: MenuListProps<Option, IsMulti>
   }, [props.maxHeight, props.children]);
 
   const setRefs = React.useCallback(
-    (node: HTMLDataListElement | null) => {
+    (node: HTMLDivElement | null) => {
       listRef.current = node;
-      // react-select types innerRef as a div ref, but our menu is a <datalist>.
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
-      (props.innerRef as unknown as ((instance: HTMLDataListElement | null) => void) | undefined)?.(node);
+      // react-select supplies a callback for its MenuList override.
+      if (typeof props.innerRef === "function") props.innerRef(node);
     },
     [props.innerRef],
   );
 
   return (
-    <datalist
+    <div
+      role="listbox"
+      aria-multiselectable={props.isMulti || undefined}
       ref={setRefs}
       style={{ maxHeight }}
       id={menuListId ?? undefined}
@@ -323,7 +324,7 @@ const MenuList = <IsMulti extends boolean>(props: MenuListProps<Option, IsMulti>
       )}
     >
       {props.children}
-    </datalist>
+    </div>
   );
 };
 
@@ -383,6 +384,7 @@ const Option = <IsMulti extends boolean>(props: OptionProps<Option, IsMulti>) =>
       onMouseOver={innerProps.onMouseOver}
       tabIndex={innerProps.tabIndex}
       role="option"
+      aria-selected={innerProps["aria-selected"]}
       aria-disabled={props.isDisabled}
     >
       {customProps.customOption?.({ id: props.label, label: props.label }) ?? props.children}
