@@ -264,6 +264,7 @@ export const Checkout = ({
   cart,
   updateCart,
   recommendedProducts,
+  recommendationsAbovePaymentForm = false,
   soldOutArrival,
   ownedInCart = [],
 }: {
@@ -271,6 +272,9 @@ export const Checkout = ({
   cart: CartState;
   updateCart: (updated: Partial<CartState>) => void;
   recommendedProducts?: CardProduct[] | null;
+  // Experiment arm: on phones the row sits above the payment form, in a slot that holds its height
+  // while the products load so the form does not move.
+  recommendationsAbovePaymentForm?: boolean;
   // Set when a legacy /checkout link named a tier that is closed or sold out, so nothing was added.
   soldOutArrival?: { message: string; url: string } | null;
   // Filtered against the live cart, so removing a line clears its warning.
@@ -658,7 +662,12 @@ export const Checkout = ({
   // form spans both grid rows and they sit under the cart.
   const recommendations =
     recommendedProducts && recommendedProducts.length > 0 ? (
-      <section className="flex flex-col gap-4 @[64rem]:col-start-1 @[64rem]:-mt-2">
+      <section
+        className={classNames(
+          "flex flex-col gap-4 @[64rem]:col-start-1 @[64rem]:-mt-2",
+          recommendationsAbovePaymentForm && "order-2 @[64rem]:order-none",
+        )}
+      >
         <h2>
           {recommendedProductsHeading(recommendedProducts, cart.items.length === 1 ? "this item" : "these items")}
         </h2>
@@ -669,6 +678,10 @@ export const Checkout = ({
           ))}
         </ProductCardGrid>
       </section>
+    ) : null;
+  const recommendationsPlaceholder =
+    recommendationsAbovePaymentForm && recommendedProducts == null ? (
+      <div className="order-2 min-h-96 @[64rem]:hidden" aria-hidden data-testid="recommendations-placeholder" />
     ) : null;
 
   return (
@@ -715,7 +728,7 @@ export const Checkout = ({
               recommendations && "@[64rem]:grid-rows-[auto_1fr]",
             )}
           >
-            <div className="grid gap-6">
+            <div className={classNames("grid gap-6", recommendationsAbovePaymentForm && "order-1 @[64rem]:order-none")}>
               <CartItemList>
                 {cart.items.map((item, index) => (
                   <CartItemComponent
@@ -971,12 +984,21 @@ export const Checkout = ({
               </CartItemList>
             </div>
             <PayRecapContext.Provider value={payRecap}>
-              <PaymentForm className={classNames(recommendations && "@[64rem]:row-span-2")} />
+              <PaymentForm
+                className={classNames(
+                  recommendations && "@[64rem]:row-span-2",
+                  recommendationsAbovePaymentForm && "order-3 @[64rem]:order-none",
+                )}
+              />
             </PayRecapContext.Provider>
-            <NavigationButton className="@[64rem]:hidden" href={cart.returnUrl ?? discoverUrl}>
+            <NavigationButton
+              className={classNames("@[64rem]:hidden", recommendationsAbovePaymentForm && "order-4")}
+              href={cart.returnUrl ?? discoverUrl}
+            >
               Continue shopping
             </NavigationButton>
             {recommendations}
+            {recommendationsPlaceholder}
           </div>
         </div>
       ) : (

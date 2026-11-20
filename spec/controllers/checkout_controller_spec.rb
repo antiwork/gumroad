@@ -715,6 +715,68 @@ describe CheckoutController, type: :controller, inertia: true do
         expect(inertia.props.deep_symbolize_keys[:recommended_products]).to eq([])
       end
 
+      describe "recommendation experiments" do
+        let(:experiment) { RecommendedProducts::CheckoutExperiment }
+        let(:fetch_params) { { cart_product_ids: [cart_product.external_id], on_discover_page: "false", limit: "5" } }
+
+        def guid_in_arm(treatment:, &block)
+          (1..500).map { "guid-#{_1}" }.find { block.call(_1) == treatment }
+        end
+
+        before { allow(RecommendedProducts::CheckoutService).to receive(:fetch_for_cart).and_return([]) }
+
+        it "keeps paid-first ordering and records no exposure while both flags are off" do
+          expect(RecommendedProducts::CheckoutService).to receive(:fetch_for_cart).with(hash_including(prefer_paid_products: true))
+
+          expect { get :show, params: fetch_params, session: { recommender_model_name: } }.not_to change(Event, :count)
+        end
+
+        context "with the ordering flag on" do
+          before { Feature.activate(experiment::ORDERING) }
+
+          it "uses co-purchase ordering for a treatment buyer" do
+            cookies[:_gumroad_guid] = guid_in_arm(treatment: true) { experiment.co_purchase_ordering_treatment?(_1) }
+
+            expect(RecommendedProducts::CheckoutService).to receive(:fetch_for_cart).with(hash_including(prefer_paid_products: false))
+
+            get :show, params: fetch_params, session: { recommender_model_name: }
+          end
+
+          it "keeps paid-first ordering for a control buyer" do
+            cookies[:_gumroad_guid] = guid_in_arm(treatment: false) { experiment.co_purchase_ordering_treatment?(_1) }
+
+            expect(RecommendedProducts::CheckoutService).to receive(:fetch_for_cart).with(hash_including(prefer_paid_products: true))
+
+            get :show, params: fetch_params, session: { recommender_model_name: }
+          end
+
+          it "records one exposure per buyer per window" do
+            cookies[:_gumroad_guid] = "exposure-guid"
+
+            expect do
+              2.times { get :show, params: fetch_params, session: { recommender_model_name: } }
+            end.to change { Event.where(event_name: Event::NAME_CHECKOUT_RECOMMENDATIONS_VIEW, browser_guid: "exposure-guid").count }.by(1)
+          end
+        end
+
+        context "with the phone placement flag on" do
+          before do
+            Feature.activate(experiment::PHONE_PLACEMENT)
+            request.headers["X-Inertia-Partial-Data"] = "recommendations_above_payment_form"
+          end
+
+          [true, false].each do |treatment|
+            it "sends recommendations_above_payment_form=#{treatment} to a #{treatment ? "treatment" : "control"} buyer" do
+              cookies[:_gumroad_guid] = guid_in_arm(treatment:) { experiment.phone_placement_treatment?(_1) }
+
+              get :show, params: fetch_params
+
+              expect(inertia.props.deep_symbolize_keys[:recommendations_above_payment_form]).to be(treatment)
+            end
+          end
+        end
+      end
+
       it "treats hash-form cart_product_ids as empty instead of raising" do
         expect(RecommendedProducts::CheckoutService).to receive(:fetch_for_cart).with(
           purchaser:,

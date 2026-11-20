@@ -11,6 +11,7 @@ class Event < ApplicationRecord
     add_product_mobile_app
     audience_callout_dismissal
     chargeback
+    checkout_recommendations_view
     delete_product_mobile_app
     edit_product_mobile_app
     first_purchase_on_profile_visit
