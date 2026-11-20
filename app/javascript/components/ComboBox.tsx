@@ -56,13 +56,17 @@ export const ComboBox = <Option extends unknown>({
 
   const moveCursor = (from: number, by: number) => {
     let i = from;
-    do {
-      i = (from + by) % options.length;
-      if (!itemRefs[i]?.inert) {
+    let remaining = options.length;
+    while (remaining > 0) {
+      remaining--;
+      i = (i + by + options.length) % options.length;
+      const item = itemRefs[i];
+      if (item && !item.inert) {
         setFocusedOptionIndex(i);
-        break;
+        return;
       }
-    } while (i !== from);
+    }
+    setFocusedOptionIndex(null);
   };
 
   useGlobalEventListener("keyup", (e) => {
