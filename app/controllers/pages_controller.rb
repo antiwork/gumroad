@@ -43,7 +43,7 @@ class PagesController < Sellers::BaseController
     authorize :page
 
     render inertia: "Pages/Edit", props: {
-      page: { slug: nil, title: "", content: "", custom_html: false, seo_title: "", seo_description: "",
+      page: { slug: nil, title: "", content: "", custom_html: false, seo_title: "", seo_description: "", share_image_url: nil,
               default_seo_title: current_seller.name_or_username, default_seo_description: nil },
       is_profile: false,
       is_new: true,
@@ -88,6 +88,7 @@ class PagesController < Sellers::BaseController
           custom_html: current_seller.custom_html.present?,
           seo_title: current_seller.seller_profile.seo_title.to_s,
           seo_description: current_seller.seller_profile.seo_description.to_s,
+          share_image_url: current_seller.seller_profile.share_image_url,
           default_seo_title: current_seller.name_or_username,
           default_seo_description: profile_meta_description(current_seller),
         },
@@ -127,14 +128,31 @@ class PagesController < Sellers::BaseController
         current_seller.save!
         return redirect_to edit_page_path("profile"), notice: "Custom page removed — your profile is back on the default template.", status: :see_other
       end
-      return redirect_to pages_path if seo_params.empty?
+      # The share image is changed the same way as the search fields: a blank
+      # `share_image_signed_blob_id` removes it, so the editor's Remove button
+      # and an API `null` reach the same path. An absent key leaves it alone.
+      return redirect_to pages_path if seo_params.empty? && !params.key?(:share_image_signed_blob_id)
 
       # Same lock as profile settings, so a first profile save can't create a
       # second row for the seller.
       seller_profile = nil
+      share_image_removed = false
       saved = current_seller.with_locked_seller_profile do |profile|
         seller_profile = profile
-        profile.update(seo_params)
+        case (share_image = share_image_request(profile))
+        when :removed then share_image_removed = true
+        when String
+          profile.errors.add(:base, share_image)
+          raise ActiveRecord::Rollback
+        end
+        profile.assign_attributes(seo_params)
+        next false unless profile.save
+
+        # Purging destroys a row, so it waits for the rest of the request to be
+        # valid — a rejected search title must not drop the image the seller
+        # still has.
+        profile.share_image.purge if share_image_removed
+        true
       end
       return redirect_to edit_page_path("profile"), notice: "Changes saved!", status: :see_other if saved
 
@@ -264,6 +282,8 @@ class PagesController < Sellers::BaseController
         custom_html: page.custom_html.present?,
         seo_title: page.seo_title.to_s,
         seo_description: page.seo_description.to_s,
+        # A slugged page has no storefront share image; only the profile does.
+        share_image_url: nil,
         # What the page shows when the seller leaves a field blank. The editor
         # recomputes the title default from seller_name while the title changes.
         default_seo_title: Pages::DocumentTitle.for(page_title: page.title, seller_name: current_seller.name_or_username),
@@ -273,6 +293,23 @@ class PagesController < Sellers::BaseController
 
     def seo_params
       params.permit(:seo_title, :seo_description).to_h.symbolize_keys
+    end
+
+    # What the request asks for the storefront share image: nil when it does not
+    # touch it, :removed for a removal, a blob attachment to add one, and a
+    # message when the signed blob id cannot be used, so a tampered or expired
+    # one comes back as a form error instead of a 500.
+    def share_image_request(profile)
+      return nil unless params.key?(:share_image_signed_blob_id)
+
+      signed_blob_id = params[:share_image_signed_blob_id]
+      return :removed if signed_blob_id.blank?
+
+      blob = signed_blob_id.is_a?(String) ? ActiveStorage::Blob.find_signed(signed_blob_id) : nil
+      return "That image upload could not be found or has expired. Please choose the file again." if blob.nil?
+
+      profile.share_image.attach(blob)
+      nil
     end
 
     def page_errors(page)

@@ -23,6 +23,52 @@ describe SellerProfile do
     end
   end
 
+  describe "share image" do
+    let(:seller_profile) { create(:user).seller_profile }
+
+    def attach_share_image(fixture: "smilie.png", content_type: "image/png")
+      seller_profile.share_image.attach(
+        io: File.open(Rails.root.join("spec", "support", "fixtures", fixture)),
+        filename: fixture,
+        content_type:
+      )
+    end
+
+    it "resolves no URL until the seller uploads one" do
+      expect(seller_profile.share_image_url).to be_nil
+    end
+
+    it "resolves the uploaded image's URL" do
+      attach_share_image
+      seller_profile.save!
+
+      expect(seller_profile.share_image_url).to eq(seller_profile.share_image.url)
+    end
+
+    it "rejects a file that is not a JPG or PNG" do
+      attach_share_image(fixture: "test.pdf", content_type: "application/pdf")
+
+      expect(seller_profile).not_to be_valid
+      expect(seller_profile.errors[:base]).to include(a_string_matching(/JPG or PNG/))
+    end
+
+    it "rejects an image over the size limit" do
+      # Nothing is uploaded for this one: the size check reads the byte count
+      # off the blob, so an identified blob is enough to exercise it.
+      blob = ActiveStorage::Blob.create!(
+        filename: "huge.png",
+        byte_size: described_class::MAXIMUM_SHARE_IMAGE_FILE_SIZE + 1,
+        checksum: Digest::MD5.base64digest("pixels"),
+        content_type: "image/png",
+        identified: true
+      )
+      seller_profile.share_image.attach(blob)
+
+      expect(seller_profile).not_to be_valid
+      expect(seller_profile.errors[:base]).to include(a_string_matching(/smaller than/))
+    end
+  end
+
   describe "#custom_styles" do
     subject { create(:seller_profile, highlight_color: "#009a49", font: "Roboto Mono", background_color: "#000000") }
 

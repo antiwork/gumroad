@@ -10,6 +10,17 @@ describe PagesController, type: :controller, inertia: true do
 
   include_context "with user signed in as admin for seller"
 
+  # Attach the seller's storefront share image the way a save does, from a
+  # direct-uploaded blob.
+  def attach_share_image(profile)
+    profile.share_image.attach(
+      io: File.open(Rails.root.join("spec", "support", "fixtures", "smilie.png")),
+      filename: "smilie.png",
+      content_type: "image/png"
+    )
+    profile.save!
+  end
+
   it_behaves_like "authorize called for controller", PagePolicy do
     let(:record) { :page }
     let(:request_params) { { slug: "about" } }
@@ -117,10 +128,12 @@ describe PagesController, type: :controller, inertia: true do
     it "passes the home page's search fields from the seller profile" do
       seller.update!(bio: "I make prints.")
       seller.seller_profile.update!(seo_title: "Prints by Jane")
+      attach_share_image(seller.seller_profile)
 
       get :edit, params: { slug: "profile" }
 
       expect(inertia.props[:page]).to include(seo_title: "Prints by Jane", seo_description: "",
+                                              share_image_url: seller.seller_profile.share_image_url,
                                               default_seo_title: seller.name_or_username, default_seo_description: "I make prints.")
     end
 
@@ -201,6 +214,56 @@ describe PagesController, type: :controller, inertia: true do
       patch :update, params: { slug: "profile", seo_title: "a" * (Page::MAX_SEO_TITLE_LENGTH + 1) }
 
       expect(SellerProfile.where(seller:).pluck(:seo_title)).to all(be_nil)
+      expect(response).to redirect_to(edit_page_path("profile"))
+    end
+
+    it "attaches the storefront share image from an uploaded blob" do
+      blob = ActiveStorage::Blob.create_and_upload!(
+        io: File.open(Rails.root.join("spec", "support", "fixtures", "smilie.png")),
+        filename: "smilie.png",
+        content_type: "image/png"
+      )
+
+      patch :update, params: { slug: "profile", share_image_signed_blob_id: blob.signed_id }
+
+      expect(seller.seller_profile.reload.share_image).to be_attached
+      expect(response).to redirect_to(edit_page_path("profile"))
+    end
+
+    it "removes the share image when the value is blank" do
+      attach_share_image(seller.seller_profile)
+
+      patch :update, params: { slug: "profile", share_image_signed_blob_id: "" }
+
+      expect(seller.reload.seller_profile.share_image).to_not be_attached
+      expect(response).to redirect_to(edit_page_path("profile"))
+    end
+
+    it "leaves the share image alone when the field is not submitted" do
+      attach_share_image(seller.seller_profile)
+
+      patch :update, params: { slug: "profile", seo_title: "Prints by Jane" }
+
+      expect(seller.seller_profile.reload.share_image).to be_attached
+    end
+
+    it "reports an unusable signed blob id instead of saving it" do
+      patch :update, params: { slug: "profile", share_image_signed_blob_id: "not-a-signed-blob" }
+
+      expect(seller.reload.seller_profile.share_image).to_not be_attached
+      expect(response).to redirect_to(edit_page_path("profile"))
+    end
+
+    it "rejects a share image that is not a JPG or PNG" do
+      blob = ActiveStorage::Blob.create_and_upload!(
+        io: File.open(Rails.root.join("spec", "support", "fixtures", "test.pdf")),
+        filename: "test.pdf",
+        content_type: "application/pdf"
+      )
+
+      patch :update, params: { slug: "profile", share_image_signed_blob_id: blob.signed_id }
+
+      expect(seller.reload.seller_profile.share_image).to_not be_attached
       expect(response).to redirect_to(edit_page_path("profile"))
     end
 

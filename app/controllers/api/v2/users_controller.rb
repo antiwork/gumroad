@@ -44,9 +44,12 @@ class Api::V2::UsersController < Api::V2::BaseController
     SEO_PARAMS.each do |key|
       return render_response(false, message: "#{key} must be a string.") if params.key?(key) && !params[key].nil? && !params[key].is_a?(String)
     end
+    if params.key?(:share_image_signed_blob_id) && !params[:share_image_signed_blob_id].nil? && !params[:share_image_signed_blob_id].is_a?(String)
+      return render_response(false, message: "share_image_signed_blob_id must be a string.")
+    end
 
     seo_params = params.permit(*SEO_PARAMS)
-    return update_with_seo_fields(user, seo_params) if seo_params.present?
+    return update_with_seo_fields(user, seo_params) if seo_params.present? || params.key?(:share_image_signed_blob_id)
 
     if user.update(permitted_update_params)
       success_with_object(:user, user)
@@ -288,13 +291,33 @@ class Api::V2::UsersController < Api::V2::BaseController
     # validated first so a rejected value leaves the name and bio unsaved.
     def update_with_seo_fields(user, seo_params)
       failed = nil
+      blob_error = nil
+      share_image_removal = false
       user.with_locked_seller_profile do |seller_profile|
         seller_profile.assign_attributes(seo_params)
+        # A blank value removes the image; an absent key leaves it alone, so a
+        # request that only sets the title never drops an existing image.
+        if params.key?(:share_image_signed_blob_id)
+          signed_blob_id = params[:share_image_signed_blob_id]
+          if signed_blob_id.blank?
+            share_image_removal = seller_profile.share_image.attached?
+          elsif (blob = ActiveStorage::Blob.find_signed(signed_blob_id))
+            seller_profile.share_image.attach(blob)
+          else
+            blob_error = "The signed_blob_id is invalid or expired."
+            raise ActiveRecord::Rollback
+          end
+        end
         next failed = seller_profile unless seller_profile.valid?
         next failed = user unless user.update(permitted_update_params)
 
+        # Purging destroys a row, so it waits for the rest of the request to be
+        # valid.
+        seller_profile.share_image.purge if share_image_removal
         seller_profile.save!
       end
+      return render_response(false, message: blob_error) if blob_error
+
       failed ? error_with_object(:user, failed) : success_with_object(:user, user)
     end
 

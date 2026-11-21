@@ -64,6 +64,20 @@ describe User::AsJson do
         end
         expect(user.as_json(api_scopes: ["edit_products"])).not_to have_key("seo_title")
       end
+
+      it "returns the storefront share image URL, nil until one is uploaded" do
+        expect(user.as_json(api_scopes: ["view_profile"])["share_image_url"]).to be_nil
+
+        user.seller_profile.share_image.attach(
+          io: File.open(Rails.root.join("spec", "support", "fixtures", "smilie.png")),
+          filename: "smilie.png",
+          content_type: "image/png"
+        )
+        user.seller_profile.save!
+
+        expect(user.as_json(api_scopes: ["view_profile"])["share_image_url"]).to eq(user.seller_profile.share_image_url)
+        expect(user.as_json(api_scopes: ["edit_products"])).not_to have_key("share_image_url")
+      end
     end
 
     describe "returned keys" do
@@ -110,7 +124,7 @@ describe User::AsJson do
             let(:options) { { api_scopes: [api_scope], internal_use: true } }
 
             if api_scope == "view_profile"
-              it { expect(returned_keys).to contain_exactly(*(common_keys + (api_scope_keys + %w[display_name seo_title seo_description]) + internal_use_keys)) }
+              it { expect(returned_keys).to contain_exactly(*(common_keys + (api_scope_keys + %w[display_name seo_title seo_description share_image_url]) + internal_use_keys)) }
             else
               it { expect(returned_keys).to contain_exactly(*(common_keys + api_scope_keys + internal_use_keys)) }
             end
@@ -120,7 +134,7 @@ describe User::AsJson do
             let(:options) { { api_scopes: [api_scope] } }
 
             if api_scope == "view_profile"
-              it { expect(returned_keys).to contain_exactly(*(common_keys + (api_scope_keys + %w[display_name seo_title seo_description]))) }
+              it { expect(returned_keys).to contain_exactly(*(common_keys + (api_scope_keys + %w[display_name seo_title seo_description share_image_url]))) }
             else
               it { expect(returned_keys).to contain_exactly(*(common_keys + api_scope_keys)) }
             end

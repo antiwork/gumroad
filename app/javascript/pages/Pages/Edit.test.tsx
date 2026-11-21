@@ -72,6 +72,7 @@ const renderEditor = (readOnly = false) => {
       custom_html: false,
       seo_title: "",
       seo_description: "",
+      share_image_url: null,
       default_seo_title: "About — Seller",
       default_seo_description: null,
     },

@@ -164,6 +164,64 @@ describe Api::V2::UsersController do
         expect(@user.seller_profile.seo_title).to eq("Old title")
       end
 
+      it "attaches a storefront share image uploaded as a blob" do
+        blob = ActiveStorage::Blob.create_and_upload!(
+          io: File.open(Rails.root.join("spec", "support", "fixtures", "smilie.png")),
+          filename: "smilie.png",
+          content_type: "image/png"
+        )
+
+        put @action, params: { access_token: @token.token, share_image_signed_blob_id: blob.signed_id }
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(@user.reload.seller_profile.share_image).to be_attached
+        expect(response.parsed_body["user"]["share_image_url"]).to eq(@user.seller_profile.share_image_url)
+      end
+
+      it "removes the share image sent as null" do
+        @user.seller_profile.share_image.attach(
+          io: File.open(Rails.root.join("spec", "support", "fixtures", "smilie.png")),
+          filename: "smilie.png",
+          content_type: "image/png"
+        )
+        @user.seller_profile.save!
+
+        put @action, params: { access_token: @token.token, share_image_signed_blob_id: nil }, as: :json
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(@user.reload.seller_profile.share_image).to_not be_attached
+      end
+
+      it "leaves the share image alone when the request does not mention it" do
+        @user.seller_profile.share_image.attach(
+          io: File.open(Rails.root.join("spec", "support", "fixtures", "smilie.png")),
+          filename: "smilie.png",
+          content_type: "image/png"
+        )
+        @user.seller_profile.save!
+
+        put @action, params: { access_token: @token.token, seo_title: "Hand-lettered posters" }
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(@user.reload.seller_profile.share_image).to be_attached
+      end
+
+      it "rejects an unusable signed blob id without saving the request" do
+        put @action, params: { access_token: @token.token, name: "Jane Seller", share_image_signed_blob_id: "not-a-signed-blob" }
+
+        expect(response.parsed_body).to eq("success" => false, "message" => "The signed_blob_id is invalid or expired.")
+        expect(@user.reload.name).to_not eq("Jane Seller")
+        expect(@user.reload.seller_profile.share_image).to_not be_attached
+      end
+
+      it "rejects a non-string share_image_signed_blob_id without saving the request" do
+        put @action, params: @params.merge(share_image_signed_blob_id: { "text" => "x" }), as: :json
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body).to eq("success" => false, "message" => "share_image_signed_blob_id must be a string.")
+        expect(@user.reload.name).to_not eq("Jane Seller")
+      end
+
       %w[seo_title seo_description].each do |key|
         { "a hash" => { "text" => "x" }, "an array" => ["x"], "a number" => 1, "a boolean" => true }.each do |kind, value|
           it "rejects #{kind} as #{key} without saving the name, bio, or SEO fields" do

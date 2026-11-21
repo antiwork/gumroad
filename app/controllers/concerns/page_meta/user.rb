@@ -55,7 +55,9 @@ module PageMeta::User
 
       # Only the generated preview reads as "Subscribe to ..."; with an uploaded
       # avatar, or no image at all, the title carries the seller's name instead.
-      if user.name.present? && !card&.subscribe_preview?
+      # A seller-set share image keeps the page's own title: it replaces the
+      # image, not the copy Search and sharing owns.
+      if user.name.present? && (card.nil? || card.avatar?)
         set_meta_tag(property: "og:title", content: user.name)
       end
 
