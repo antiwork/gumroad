@@ -32,7 +32,7 @@ export const GetUser = () => (
     "email": "johnsmith@gumroad.com", # available with the 'view_sales' scope
     "url": "https://gumroad.com/sailorjohn", # only if username is set
     "profile_picture_url": "https://assets.gumroad.com/user/abc/avatar",
-    "share_image_url": null # available with the 'view_profile' scope
+    "share_image_url": null # available with the 'view_profile', 'edit_profile' or 'account' scope
   }
 }`}
     </CodeSnippet>
