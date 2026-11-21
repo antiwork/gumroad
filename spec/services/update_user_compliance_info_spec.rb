@@ -2395,3 +2395,66 @@ describe UpdateUserComplianceInfo, "Stripe failure before the first provider wri
     end
   end
 end
+
+describe UpdateUserComplianceInfo do
+  describe "#process" do
+    let(:user) { create(:user) }
+
+    describe "clear_individual_tax_id" do
+      let(:rep_country) { "India" }
+      let!(:compliance_info) do
+        create(:user_compliance_info_business, user:, country: rep_country, individual_tax_id: "123456789", business_tax_id: "123456789")
+      end
+      let(:params) { ActionController::Parameters.new(clear_individual_tax_id: true) }
+      let(:pw) { GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD") }
+
+      it "writes a new revision without the personal tax ID, keeps the business EIN and still syncs to Stripe" do
+        expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info) do |new_info|
+          expect(new_info.individual_tax_id.present?).to be false
+        end
+
+        expect(described_class.new(compliance_params: params, user:).process).to eq(success: true)
+
+        current = user.reload.alive_user_compliance_info
+        expect(current.id).not_to eq(compliance_info.id)
+        expect(compliance_info.reload).to be_deleted
+        expect(current.individual_tax_id.present?).to be false
+        expect(current.business_tax_id.decrypt(pw)).to eq("123456789")
+      end
+
+      it "is a no-op when no personal tax ID is stored" do
+        compliance_info.update_columns(individual_tax_id: nil)
+        expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
+
+        expect do
+          expect(described_class.new(compliance_params: params, user:).process).to eq(success: true)
+        end.not_to change { UserComplianceInfo.count }
+      end
+
+      it "rejects a clear for a US representative of a US business" do
+        compliance_info.dup_and_save! { |info| info.country = "United States" }
+        expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
+
+        result = described_class.new(compliance_params: params, user:).process
+
+        expect(result).to eq(success: false, error_message: described_class::CLEAR_PERSONAL_TAX_ID_ERROR)
+        expect(user.reload.alive_user_compliance_info.individual_tax_id.decrypt(pw)).to eq("123456789")
+      end
+
+      context "when the legal entity is not in the US" do
+        let!(:compliance_info) do
+          create(:user_compliance_info_business, user:, country: "India", business_country: "Canada", individual_tax_id: "123456789", business_tax_id: "123456789")
+        end
+
+        it "rejects the clear and leaves the stored ID" do
+          expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
+
+          result = described_class.new(compliance_params: params, user:).process
+
+          expect(result[:success]).to be false
+          expect(user.reload.alive_user_compliance_info.id).to eq(compliance_info.id)
+        end
+      end
+    end
+  end
+end

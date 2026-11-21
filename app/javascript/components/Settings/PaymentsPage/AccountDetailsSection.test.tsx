@@ -904,3 +904,26 @@ describe("AccountDetailsSection address length", () => {
     }
   });
 });
+
+describe("AccountDetailsSection removing a saved representative tax ID", () => {
+  const usEntityForeignRep = { is_business: true, business_country: "US", country: "IN" };
+
+  it("offers Remove for a US business with a representative outside the US and flags the clear", () => {
+    const updates = renderEditableSection(makeUser({ individual_tax_id_entered: true }), usEntityForeignRep);
+    fireEvent.click(screen.getByText("Remove"));
+    expect(updates).toContainEqual({ clear_individual_tax_id: true });
+    expect(screen.getByText(/will be removed when you save/u)).toBeTruthy();
+    fireEvent.click(screen.getByText("Undo"));
+    expect(updates.at(-1)).toEqual({ clear_individual_tax_id: false });
+  });
+
+  it("does not offer Remove where the personal tax ID is required", () => {
+    renderSection(makeUser({ individual_tax_id_entered: true }), {
+      is_business: true,
+      business_country: "US",
+      country: "US",
+    });
+    expect(screen.queryByText("Remove")).toBeNull();
+    expect(screen.getByText("Change")).toBeTruthy();
+  });
+});

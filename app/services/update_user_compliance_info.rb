@@ -29,6 +29,7 @@ class UpdateUserComplianceInfo
   end
 
   MAX_ENCRYPTED_FIELD_LENGTH = 200
+  CLEAR_PERSONAL_TAX_ID_ERROR = "A saved personal tax ID can only be removed for a US business with a representative outside the US."
   MASKED_TAX_ID_PATTERN = /[\u2022*]/
   PERU_DNI_DIGIT_COUNT = 9
   # A Singapore NRIC/FIN is a leading letter (S/T for citizens and permanent residents,
@@ -124,8 +125,10 @@ class UpdateUserComplianceInfo
         return { success: false, error_message: birthday_error } if birthday_error
 
         old_compliance_info = current_compliance_info
+        return { success: false, error_message: CLEAR_PERSONAL_TAX_ID_ERROR } if clear_individual_tax_id_rejected?(old_compliance_info)
+
         compliance_info_changed = compliance_info_changed?(old_compliance_info)
-        old_compliance_info.reload if old_compliance_info.persisted? && encrypted_compliance_info_params_present?
+        old_compliance_info.reload if old_compliance_info.persisted? && (encrypted_compliance_info_params_present? || clear_individual_tax_id?)
         unless compliance_info_changed
           UserComplianceInfoRequest.handle_new_user_compliance_info(old_compliance_info)
           unless old_compliance_info.nationality_resubmission_required?
@@ -169,7 +172,7 @@ class UpdateUserComplianceInfo
         ActiveRecord::Base.transaction(requires_new: true) do
           saved, new_compliance_info = if !compliance_info_changed
             [true, old_compliance_info]
-          elsif encrypted_compliance_info_params_present?
+          elsif encrypted_compliance_info_params_present? || clear_individual_tax_id?
             dup_and_save_compliance_info(old_compliance_info)
           else
             old_compliance_info.dup_and_save do |new_compliance_info|
@@ -275,14 +278,29 @@ class UpdateUserComplianceInfo
         old_compliance_info.attributes.except("id", "created_at", "updated_at", "deleted_at", *ENCRYPTED_COMPLIANCE_INFO_FIELDS.map(&:to_s))
       )
       ENCRYPTED_COMPLIANCE_INFO_FIELDS.each do |field|
+        next if field == :individual_tax_id && clear_individual_tax_id?
+
         value = encrypted_compliance_info_value(old_compliance_info, field)
         new_compliance_info.public_send("#{field}=", value) if value.present?
       end
       new_compliance_info
     end
 
+    def clear_individual_tax_id?
+      ActiveModel::Type::Boolean.new.cast(compliance_params[:clear_individual_tax_id]) == true
+    end
+
+    # Only the shape whose blank field is a supported state (Stripe asks for a document instead);
+    # everywhere else the ID is required and clearing it would just fail verification later.
+    def clear_individual_tax_id_rejected?(old_compliance_info)
+      return false unless clear_individual_tax_id?
+
+      !(old_compliance_info.is_business && old_compliance_info.business_country_code == "US" && old_compliance_info.country_code != "US")
+    end
+
     def compliance_info_changed?(old_compliance_info)
       simple_compliance_info_changed?(old_compliance_info) ||
+        (clear_individual_tax_id? && encrypted_compliance_info_value(old_compliance_info, :individual_tax_id).present?) ||
         country_changed?(old_compliance_info, :country) ||
         country_changed?(old_compliance_info, :business_country) ||
         business_mode_param_changed?(old_compliance_info) ||
