@@ -55,7 +55,12 @@ export const CountrySelectionModal = ({ country: initialCountry, countries }: Pr
       <Modal
         open
         onClose={() => {
-          const previousRoute = sessionStorage.getItem("inertia_previous_route");
+          let previousRoute: string | null = null;
+          try {
+            previousRoute = sessionStorage.getItem("inertia_previous_route");
+          } catch {
+            // Use the dashboard fallback when the browser blocks session storage.
+          }
           if (previousRoute) {
             window.history.back();
           } else {

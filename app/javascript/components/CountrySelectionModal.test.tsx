@@ -1,13 +1,44 @@
 // @vitest-environment happy-dom
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CountrySelectionModal } from "$app/components/CountrySelectionModal";
 
-afterEach(() => document.body.replaceChildren());
+const { get } = vi.hoisted(() => ({ get: vi.fn() }));
+vi.mock("@inertiajs/react", () => ({ router: { get } }));
+
+afterEach(() => {
+  cleanup();
+  get.mockClear();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe("CountrySelectionModal", () => {
+  it("returns to the dashboard when session storage is blocked", () => {
+    vi.stubGlobal("Routes", { dashboard_path: () => "/dashboard" });
+    vi.spyOn(window, "sessionStorage", "get").mockImplementation(() => {
+      throw new DOMException("Storage unavailable", "SecurityError");
+    });
+    render(<CountrySelectionModal country="US" countries={{ US: "United States" }} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    expect(get).toHaveBeenCalledExactlyOnceWith("/dashboard");
+  });
+
+  it("goes back when a previous route is available", () => {
+    vi.stubGlobal("sessionStorage", { getItem: () => "/products" });
+    const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+    render(<CountrySelectionModal country="US" countries={{ US: "United States" }} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    expect(back).toHaveBeenCalledOnce();
+    expect(get).not.toHaveBeenCalled();
+  });
+
   it("makes each requirement a full-width interactive row", () => {
     render(<CountrySelectionModal country="US" countries={{ US: "United States" }} />);
 
