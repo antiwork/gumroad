@@ -243,6 +243,10 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
     email: installment?.send_emails ?? hasAudience,
     profile: installment?.shown_on_profile ?? true,
   });
+  // "Post to profile" is only offered to the Everyone audience, so the profile channel is off for
+  // every other audience however the seller last left that checkbox — otherwise a hidden true keeps
+  // driving the primary button, the preview action and the submitted shown_on_profile.
+  const profileChannel = audienceType === "everyone" && channel.profile;
   // A new post starts in the sections that take new posts by default; the seller can untick them.
   const [shownInProfileSections, setShownInProfileSections] = React.useState(
     installment?.shown_in_profile_sections ??
@@ -602,7 +606,7 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
     not_clicked_post_id: audienceType === "customers" ? notClickedPostId || null : null,
     opened_post_id: audienceType === "customers" ? openedPostId || null : null,
     send_emails: channel.email,
-    shown_on_profile: channel.profile,
+    shown_on_profile: profileChannel,
     allow_comments: allowComments,
   };
   React.useEffect(() => {
@@ -645,7 +649,7 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
       invalidFieldRefsAndErrors.push([titleRef, "Please set a title."]);
     }
 
-    if (!channel.email && !channel.profile) {
+    if (!channel.email && !profileChannel) {
       invalidFieldNames.add("channel");
       invalidFieldRefsAndErrors.push([sendEmailRef, "Please set at least one channel for your update."]);
     }
@@ -736,7 +740,7 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
         action !== "save_and_publish"
           ? publishDate
           : null,
-      shown_in_profile_sections: audienceType === "everyone" && channel.profile ? [...shownInProfileSections] : [],
+      shown_in_profile_sections: profileChannel ? [...shownInProfileSections] : [],
       ...installmentFiltersPayload,
     },
     variant_external_id: selectedVariantId,
@@ -932,7 +936,7 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
             </>
           ) : (
             <>
-              {channel.email && channel.profile ? (
+              {channel.email && profileChannel ? (
                 <Popover>
                   <PopoverAnchor>
                     <PopoverTrigger disabled={isBusy} asChild>
@@ -959,7 +963,7 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
               ) : (
                 <Button
                   disabled={isBusy}
-                  onClick={() => save(channel.profile ? "save_and_preview_post" : "save_and_preview_email")}
+                  onClick={() => save(profileChannel ? "save_and_preview_post" : "save_and_preview_email")}
                 >
                   <Eye pack="filled" className="size-5" />
                   Preview
@@ -979,7 +983,7 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
                 <PopoverAnchor>
                   <PopoverTrigger disabled={isBusy} asChild>
                     <Button>
-                      {channel.profile ? "Publish" : "Send"}
+                      {profileChannel ? "Publish" : "Send"}
                       <ChevronDown className="size-5" />
                     </Button>
                   </PopoverTrigger>
@@ -990,7 +994,7 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
                       {isPublishing && secondsLeftToPublish > 0 ? (
                         <>
                           <Button color="accent" disabled>
-                            {channel.profile ? "Publishing" : "Sending"} in {secondsLeftToPublish}...
+                            {profileChannel ? "Publishing" : "Sending"} in {secondsLeftToPublish}...
                           </Button>
                           <Button
                             style={{ marginLeft: "var(--spacer-2)" }}
@@ -1024,7 +1028,7 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
                             );
                           }}
                         >
-                          {channel.profile ? "Publish now" : "Send now"}
+                          {profileChannel ? "Publish now" : "Send now"}
                         </Button>
                       )}
                     </div>
@@ -1171,7 +1175,7 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
                         />
                       </Label>
                     ) : null}
-                    {audienceType === "everyone" && channel.profile ? (
+                    {profileChannel ? (
                       context.profile_sections.length > 0 ? (
                         <>
                           {context.profile_sections.map((section) => (
