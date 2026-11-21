@@ -12,7 +12,12 @@ export const CartNavigationButton = ({ className }: { className?: string }) => {
   const cartItemsCount = useCartItemsCount();
 
   return hasCartItems(cartItemsCount) ? (
-    <NavigationButton className={className} color="filled" href={Routes.checkout_url({ host: appDomain })}>
+    <NavigationButton
+      className={className}
+      color="filled"
+      href={Routes.checkout_url({ host: appDomain })}
+      aria-label={`Cart, ${cartItemsCount} ${cartItemsCount === 1 ? "item" : "items"}`}
+    >
       <Cart pack="filled" className="size-5" />
       {cartItemsCount}
     </NavigationButton>
