@@ -11,7 +11,12 @@ export const DiscoverEligibilityPromo = ({ rememberDismissal }: { rememberDismis
   const [show, setShow] = React.useState(false);
 
   useRunOnce(() => {
-    if (localStorage.getItem("showDiscoverEligibilityPromo") !== "false") setShow(true);
+    try {
+      if (localStorage.getItem("showDiscoverEligibilityPromo") === "false") return;
+    } catch {
+      // Without storage the promo can still be dismissed for this visit.
+    }
+    setShow(true);
   });
 
   if (!show) return null;
@@ -36,8 +41,14 @@ export const DiscoverEligibilityPromo = ({ rememberDismissal }: { rememberDismis
           <LinkButton
             className="w-max"
             onClick={() => {
-              if (rememberDismissal) localStorage.setItem("showDiscoverEligibilityPromo", "false");
               setShow(false);
+              if (rememberDismissal) {
+                try {
+                  localStorage.setItem("showDiscoverEligibilityPromo", "false");
+                } catch {
+                  // The dismissal still applies to the current visit.
+                }
+              }
             }}
           >
             Close
