@@ -130,6 +130,14 @@ describe "SafeRedirectPathService" do
       end
     end
 
+    context "when path is an absolute url with no host" do
+      it "returns the site root instead of raising on the malformed uri" do
+        @path = "https://"
+
+        expect(service.process).to eq "/"
+      end
+    end
+
     context "when path is nil" do
       it "returns the site root" do
         @path = nil

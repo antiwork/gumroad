@@ -46,7 +46,13 @@ class SafeRedirectPathService
     end
 
     def url
-      @_url ||= URI.parse(Addressable::URI.escape(CGI.unescape(path).split("#").first))
+      @_url ||= begin
+        URI.parse(Addressable::URI.escape(CGI.unescape(path).split("#").first))
+      rescue Addressable::URI::InvalidURIError, URI::InvalidURIError
+        # A scheme with no authority ("https://") is not a usable redirect target;
+        # fall back to the site root rather than 500 the request.
+        Addressable::URI.parse("/")
+      end
     end
 
     def domain
