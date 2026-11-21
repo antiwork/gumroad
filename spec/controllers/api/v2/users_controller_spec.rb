@@ -164,12 +164,17 @@ describe Api::V2::UsersController do
         expect(@user.seller_profile.seo_title).to eq("Old title")
       end
 
-      it "attaches a storefront share image uploaded as a blob" do
-        blob = ActiveStorage::Blob.create_and_upload!(
+      def reserved_share_image_blob(uploader: @user)
+        ActiveStorage::Blob.create_and_upload!(
           io: File.open(Rails.root.join("spec", "support", "fixtures", "smilie.png")),
           filename: "smilie.png",
-          content_type: "image/png"
+          content_type: "image/png",
+          metadata: { uploaded_by_user_id: uploader.id }
         )
+      end
+
+      it "attaches a storefront share image uploaded as a blob" do
+        blob = reserved_share_image_blob
 
         put @action, params: { access_token: @token.token, share_image_signed_blob_id: blob.signed_id }
 
@@ -204,6 +209,24 @@ describe Api::V2::UsersController do
 
         expect(response.parsed_body["success"]).to eq(true)
         expect(@user.reload.seller_profile.share_image).to be_attached
+      end
+
+      it "leaves the share image unattached when the name in the same request is rejected" do
+        blob = reserved_share_image_blob
+
+        put @action, params: { access_token: @token.token, name: "a" * (User::MAX_LENGTH_NAME + 1), share_image_signed_blob_id: blob.signed_id }
+
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(@user.reload.seller_profile.share_image).to_not be_attached
+      end
+
+      it "refuses a blob reserved by another account" do
+        blob = reserved_share_image_blob(uploader: create(:user))
+
+        put @action, params: { access_token: @token.token, share_image_signed_blob_id: blob.signed_id }
+
+        expect(response.parsed_body).to eq("success" => false, "message" => "The signed_blob_id must come from a POST /v2/direct_uploads reservation made with this account.")
+        expect(@user.reload.seller_profile.share_image).to_not be_attached
       end
 
       it "rejects an unusable signed blob id without saving the request" do

@@ -214,6 +214,14 @@ class SellerProfile < ApplicationRecord
     end
 
     def share_image_is_valid
+      # Signed ids of attached blobs reach other users (avatars, commission
+      # files). Re-sending this profile's own blob reuses its attachment, so
+      # this only runs for a blob new to the profile.
+      if share_image.blob.attachments.exists?
+        errors.add(:base, "That image is already used elsewhere. Please upload a new share image.")
+        return
+      end
+
       if share_image.byte_size > MAXIMUM_SHARE_IMAGE_FILE_SIZE
         errors.add(:base, "Please upload a share image smaller than #{ActiveSupport::NumberHelper.number_to_human_size(MAXIMUM_SHARE_IMAGE_FILE_SIZE)}.")
         return

@@ -52,6 +52,27 @@ describe SellerProfile do
       expect(seller_profile.errors[:base]).to include(a_string_matching(/JPG or PNG/))
     end
 
+    it "rejects a blob already attached to another record" do
+      other_user = create(:user)
+      other_user.avatar.attach(
+        io: File.open(Rails.root.join("spec", "support", "fixtures", "smilie.png")),
+        filename: "smilie.png",
+        content_type: "image/png"
+      )
+      seller_profile.share_image = other_user.avatar.blob
+
+      expect(seller_profile).not_to be_valid
+      expect(seller_profile.errors[:base]).to include(a_string_matching(/already used elsewhere/))
+    end
+
+    it "accepts its own share image again" do
+      attach_share_image
+      seller_profile.save!
+      seller_profile.share_image = seller_profile.share_image.blob
+
+      expect(seller_profile).to be_valid
+    end
+
     it "rejects an image over the size limit" do
       # Nothing is uploaded for this one: the size check reads the byte count
       # off the blob, so an identified blob is enough to exercise it.

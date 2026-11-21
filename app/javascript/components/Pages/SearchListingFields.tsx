@@ -24,6 +24,7 @@ export const SearchListingFields = ({
   onDescriptionChange,
   shareImageUrl,
   onShareImageChange,
+  onShareImageUploadingChange,
 }: {
   url: string;
   title: string;
@@ -38,6 +39,7 @@ export const SearchListingFields = ({
   // the field is not rendered.
   shareImageUrl?: string | null;
   onShareImageChange?: (image: ShareImageSelection | null) => void;
+  onShareImageUploadingChange?: (uploading: boolean) => void;
 }) => {
   const uid = React.useId();
   const listingTitle = title.trim() || defaultTitle;
@@ -97,7 +99,12 @@ export const SearchListingFields = ({
         <FieldsetDescription>Also shows in shared links. Leave blank to use the default.</FieldsetDescription>
       </Fieldset>
       {onShareImageChange ? (
-        <ShareImageInput imageUrl={shareImageUrl ?? null} disabled={disabled} onChange={onShareImageChange} />
+        <ShareImageInput
+          imageUrl={shareImageUrl ?? null}
+          disabled={disabled}
+          onChange={onShareImageChange}
+          onUploadingChange={onShareImageUploadingChange}
+        />
       ) : null}
     </section>
   );

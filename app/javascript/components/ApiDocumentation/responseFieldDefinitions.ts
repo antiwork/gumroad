@@ -747,7 +747,7 @@ export const USER_FIELDS: FieldDefinition[] = [
     name: "share_image_url",
     type: "string | null",
     description:
-      "URL of the seller's storefront share image, shown in link previews of their profile. Null when unset, in which case previews use the generated subscribe card or the profile picture. Available with the 'view_profile' scope.",
+      "URL of the seller's storefront share image, shown in link previews of their profile. Null when unset, in which case previews use the generated subscribe card or the profile picture. Available with the 'view_profile', 'edit_profile' or 'account' scope.",
   },
 ];
 

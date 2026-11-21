@@ -100,6 +100,7 @@ export default function PagesEdit() {
   // undefined = untouched, null = the saved image is marked for removal, and a
   // selection is an already-uploaded file waiting for the save.
   const [shareImageChange, setShareImageChange] = React.useState<ShareImageSelection | null | undefined>(undefined);
+  const [isShareImageUploading, setIsShareImageUploading] = React.useState(false);
   const [previewVersion, setPreviewVersion] = React.useState(0);
   const [isSaving, setIsSaving] = React.useState(false);
   // The toolbar's Insert image item and the paste/drop handlers both read this context and no-op
@@ -173,8 +174,8 @@ export default function PagesEdit() {
 
   const save = () => {
     // An in-flight image is an <img> with a blob: src, which the sanitizer drops — saving now would
-    // persist the page without it.
-    if (imageUploadSettings.isUploading) {
+    // persist the page without it. An in-flight share image has no signed id to send yet.
+    if (imageUploadSettings.isUploading || isShareImageUploading) {
       showAlert("Please wait for all images to finish uploading before saving.", "warning");
       return;
     }
@@ -197,7 +198,8 @@ export default function PagesEdit() {
         setSavedSeoDescription(seoDescription);
         if (shareImageChange !== undefined) {
           setShareImageUrl(shareImageChange?.url ?? null);
-          setShareImageChange(undefined);
+          // A file chosen while the save was in flight stays pending.
+          setShareImageChange((current) => (current === shareImageChange ? undefined : current));
         }
         // Bump the preview frame's cache-busting param so it reloads and shows
         // the page as just saved.
@@ -283,6 +285,7 @@ export default function PagesEdit() {
         ? {
             shareImageUrl: shareImageChange === undefined ? shareImageUrl : (shareImageChange?.url ?? null),
             onShareImageChange: setShareImageChange,
+            onShareImageUploadingChange: setIsShareImageUploading,
           }
         : {})}
     />

@@ -24,13 +24,19 @@ export const ShareImageInput = ({
   imageUrl,
   disabled = false,
   onChange,
+  onUploadingChange,
 }: {
   imageUrl: string | null;
   disabled?: boolean;
   onChange: (image: { signedId: string; url: string } | null) => void;
+  onUploadingChange?: ((uploading: boolean) => void) | undefined;
 }) => {
   const [uploading, setUploading] = React.useState(false);
   const id = React.useId();
+  const updateUploading = (value: boolean) => {
+    setUploading(value);
+    onUploadingChange?.(value);
+  };
 
   const handleFile = async (file: File) => {
     const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
@@ -39,14 +45,14 @@ export const ShareImageInput = ({
       return;
     }
 
-    setUploading(true);
+    updateUploading(true);
     try {
       const blob = await uploadFileWithRetry(file, "/rails/active_storage/direct_uploads");
       onChange({ signedId: blob.signed_id, url: Routes.s3_utility_cdn_url_for_blob_path({ key: blob.key }) });
     } catch (error) {
       showAlert(uploadErrorMessage(error), "error");
     } finally {
-      setUploading(false);
+      updateUploading(false);
     }
   };
 
@@ -54,10 +60,10 @@ export const ShareImageInput = ({
 
   return (
     <Fieldset>
-      <Label htmlFor={id}>Share image</Label>
+      <Label htmlFor={!uploading && imageUrl == null ? id : undefined}>Share image</Label>
       {uploading ? (
         <Placeholder className={classNames(PREVIEW_ASPECT_CLASS, "items-center")}>
-          <LoadingSpinner className="size-8" />
+          <LoadingSpinner className="size-8" aria-label="Uploading share image" />
         </Placeholder>
       ) : imageUrl == null ? (
         <Placeholder className={classNames(PREVIEW_ASPECT_CLASS, "items-center")}>

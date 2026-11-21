@@ -31,9 +31,64 @@ export const GetUser = () => (
     "user_id": "G_-mnBf9b1j9A7a4ub4nFQ==",
     "email": "johnsmith@gumroad.com", # available with the 'view_sales' scope
     "url": "https://gumroad.com/sailorjohn", # only if username is set
-    "profile_picture_url": "https://assets.gumroad.com/user/abc/avatar"
+    "profile_picture_url": "https://assets.gumroad.com/user/abc/avatar",
+    "share_image_url": null # available with the 'view_profile' scope
   }
 }`}
+    </CodeSnippet>
+  </ApiEndpoint>
+);
+
+export const UpdateUser = () => (
+  <ApiEndpoint
+    method="put"
+    path="/user"
+    description={
+      <>
+        <p>
+          Update the user's profile details and how their storefront appears in search results and link previews.
+          Requires the <code>edit_profile</code> scope and a confirmed email address. Parameters you leave out are not
+          changed.
+        </p>
+        <p>
+          The share image replaces the generated subscribe card (or the profile picture, for a seller without one) in
+          link previews of the storefront and its pages. It doesn't change any product's images. Upload a JPG or PNG of
+          up to 5 MB: reserve it with <code>POST /v2/direct_uploads</code> passing <code>purpose=media</code>, upload
+          the bytes to the URL it returns with every header from <code>direct_upload.headers</code>, then pass the
+          returned signed ID here. Link previews show the image at 1024x536px (1.91:1), so a taller image loses its top
+          and bottom, and apps that crop to a square, like WhatsApp, cut its sides.
+        </p>
+      </>
+    }
+  >
+    <ApiParameters>
+      <ApiParameter name="name" description="(optional) - The user's display name" />
+      <ApiParameter name="bio" description="(optional) - The user's bio" />
+      <ApiParameter
+        name="seo_title"
+        description="(optional) - The storefront's title in search results, up to 70 characters; null or an empty string uses the default"
+      />
+      <ApiParameter
+        name="seo_description"
+        description="(optional) - The storefront's description in search results, up to 320 characters; null or an empty string uses the default"
+      />
+      <ApiParameter
+        name="share_image_signed_blob_id"
+        description="(optional) - A signed blob ID from a POST /v2/direct_uploads reservation made by this account, which hasn't been used anywhere else yet; null or an empty string removes the share image"
+      />
+    </ApiParameters>
+    <ApiResponseFields>
+      {renderFields([
+        { name: "success", type: "boolean", description: "Whether the request succeeded" },
+        { name: "user", type: "object", description: "The updated user object", children: USER_FIELDS },
+      ])}
+    </ApiResponseFields>
+    <CodeSnippet caption="cURL example">
+      {`curl https://api.gumroad.com/v2/user \\
+  -X PUT \\
+  -H "Authorization: Bearer ACCESS_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"seo_title":"Hand-lettered posters","share_image_signed_blob_id":"SIGNED_BLOB_ID"}'`}
     </CodeSnippet>
   </ApiEndpoint>
 );

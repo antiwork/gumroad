@@ -247,6 +247,35 @@ describe PagesController, type: :controller, inertia: true do
       expect(seller.seller_profile.reload.share_image).to be_attached
     end
 
+    it "keeps the current share image when the search title in the same save is rejected" do
+      attach_share_image(seller.seller_profile)
+      current_blob = seller.seller_profile.share_image.blob
+      blob = ActiveStorage::Blob.create_and_upload!(
+        io: File.open(Rails.root.join("spec", "support", "fixtures", "smilie.png")),
+        filename: "replacement.png",
+        content_type: "image/png"
+      )
+
+      patch :update, params: { slug: "profile", seo_title: "a" * (Page::MAX_SEO_TITLE_LENGTH + 1), share_image_signed_blob_id: blob.signed_id }
+
+      expect(seller.seller_profile.reload.share_image.blob).to eq(current_blob)
+      expect(blob.attachments).to be_empty
+    end
+
+    it "refuses a blob that is already attached elsewhere" do
+      other_user = create(:user)
+      other_user.avatar.attach(
+        io: File.open(Rails.root.join("spec", "support", "fixtures", "smilie.png")),
+        filename: "smilie.png",
+        content_type: "image/png"
+      )
+
+      patch :update, params: { slug: "profile", share_image_signed_blob_id: other_user.avatar.blob.signed_id }
+
+      expect(seller.reload.seller_profile.share_image).to_not be_attached
+      expect(response).to redirect_to(edit_page_path("profile"))
+    end
+
     it "reports an unusable signed blob id instead of saving it" do
       patch :update, params: { slug: "profile", share_image_signed_blob_id: "not-a-signed-blob" }
 

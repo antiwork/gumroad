@@ -288,11 +288,12 @@ class Api::V2::UsersController < Api::V2::BaseController
 
     # The home page's SEO fields live on the seller profile. The lock serializes
     # a first profile save with the profile settings save, and the profile is
-    # validated first so a rejected value leaves the name and bio unsaved.
+    # validated first so a rejected value leaves the name and bio unsaved. The
+    # share image goes through the assignment setter, not `attach`, so it is
+    # written only by the final save.
     def update_with_seo_fields(user, seo_params)
       failed = nil
       blob_error = nil
-      share_image_removal = false
       user.with_locked_seller_profile do |seller_profile|
         seller_profile.assign_attributes(seo_params)
         # A blank value removes the image; an absent key leaves it alone, so a
@@ -300,25 +301,31 @@ class Api::V2::UsersController < Api::V2::BaseController
         if params.key?(:share_image_signed_blob_id)
           signed_blob_id = params[:share_image_signed_blob_id]
           if signed_blob_id.blank?
-            share_image_removal = seller_profile.share_image.attached?
-          elsif (blob = ActiveStorage::Blob.find_signed(signed_blob_id))
-            seller_profile.share_image.attach(blob)
-          else
+            seller_profile.share_image = nil
+          elsif (blob = ActiveStorage::Blob.find_signed(signed_blob_id)).nil?
             blob_error = "The signed_blob_id is invalid or expired."
             raise ActiveRecord::Rollback
+          elsif !uploaded_by?(blob, user)
+            blob_error = "The signed_blob_id must come from a POST /v2/direct_uploads reservation made with this account."
+            raise ActiveRecord::Rollback
+          else
+            seller_profile.share_image = blob
           end
         end
         next failed = seller_profile unless seller_profile.valid?
         next failed = user unless user.update(permitted_update_params)
 
-        # Purging destroys a row, so it waits for the rest of the request to be
-        # valid.
-        seller_profile.share_image.purge if share_image_removal
         seller_profile.save!
       end
       return render_response(false, message: blob_error) if blob_error
 
       failed ? error_with_object(:user, failed) : success_with_object(:user, user)
+    end
+
+    # Same ownership stamp CreatePublicMediaService checks: a signed id proves
+    # the blob exists, not who uploaded it.
+    def uploaded_by?(blob, user)
+      blob.metadata.with_indifferent_access[:uploaded_by_user_id].to_s == user.id.to_s
     end
 
     def ensure_custom_html_pages_enabled

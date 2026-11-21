@@ -47,7 +47,8 @@ vi.mock("@rails/activestorage", () => ({
   },
 }));
 
-const patch = vi.hoisted(() => vi.fn());
+type VisitOptions = { onSuccess: () => void; onFinish: () => void };
+const patch = vi.hoisted(() => vi.fn<(url: string, data: Record<string, unknown>, options: VisitOptions) => void>());
 const props = vi.hoisted((): { current: Record<string, unknown> } => ({ current: {} }));
 vi.mock("@inertiajs/react", () => ({
   usePage: () => ({ props: props.current }),
@@ -62,11 +63,11 @@ vi.mock("$app/components/PreviewSidebar", () => ({
   PreviewChrome: ({ children }: { children: React.ReactNode }) => children,
 }));
 
-const renderEditor = (readOnly = false) => {
+const renderEditor = (readOnly = false, isProfile = false) => {
   canEdit.current = !readOnly;
   props.current = {
     page: {
-      slug: "about",
+      slug: isProfile ? "profile" : "about",
       title: "About",
       content: "<p>Hello</p>",
       custom_html: false,
@@ -76,7 +77,7 @@ const renderEditor = (readOnly = false) => {
       default_seo_title: "About — Seller",
       default_seo_description: null,
     },
-    is_profile: false,
+    is_profile: isProfile,
     is_new: false,
     username: "seller",
     profile_url: "https://seller.gumroad.com/",
@@ -93,7 +94,12 @@ const pasteImage = (container: HTMLElement) =>
     clipboardData: { files: [new File(["pixels"], "photo.png", { type: "image/png" })] },
   });
 
-const settleUpload = (blob = { key: "blob-key" }) => {
+const chooseShareImage = (container: HTMLElement, name = "cover.png") =>
+  fireEvent.change(assertDefined(container.querySelector('#search-listing input[type="file"]')), {
+    target: { files: [new File(["pixels"], name, { type: "image/png" })] },
+  });
+
+const settleUpload = (blob: { key: string; signed_id?: string } = { key: "blob-key" }) => {
   const callback = assertDefined(uploads.pending.shift());
   callback(null, blob);
 };
@@ -172,5 +178,44 @@ describe("PagesEdit", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     expect(patch).toHaveBeenCalledTimes(1);
+  });
+
+  it("holds the save until the share image has uploaded", async () => {
+    const { container } = renderEditor(false, true);
+    chooseShareImage(container);
+    await waitFor(() => expect(uploads.pending).toHaveLength(1));
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(patch).not.toHaveBeenCalled();
+
+    settleUpload({ key: "share-key", signed_id: "share-signed-id" });
+    await waitFor(() => expect(screen.getByRole("img", { name: "Share image" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(patch).toHaveBeenCalledTimes(1);
+    expect(patch.mock.calls[0]?.[1]).toMatchObject({ share_image_signed_blob_id: "share-signed-id" });
+  });
+
+  it("keeps a share image chosen while a save was in flight", async () => {
+    const { container } = renderEditor(false, true);
+    chooseShareImage(container, "first.png");
+    await waitFor(() => expect(uploads.pending).toHaveLength(1));
+    settleUpload({ key: "first-key", signed_id: "first-signed-id" });
+    await waitFor(() => expect(screen.getByRole("img", { name: "Share image" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    const firstSave = assertDefined(patch.mock.calls[0]?.[2]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove share image" }));
+    chooseShareImage(container, "second.png");
+    await waitFor(() => expect(uploads.pending).toHaveLength(1));
+    settleUpload({ key: "second-key", signed_id: "second-signed-id" });
+    await waitFor(() => expect(screen.getByRole("img", { name: "Share image" })).toBeTruthy());
+    React.act(() => {
+      firstSave.onSuccess();
+      firstSave.onFinish();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(patch).toHaveBeenCalledTimes(2);
+    expect(patch.mock.calls[1]?.[1]).toMatchObject({ share_image_signed_blob_id: "second-signed-id" });
   });
 });

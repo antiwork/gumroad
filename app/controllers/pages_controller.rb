@@ -136,23 +136,14 @@ class PagesController < Sellers::BaseController
       # Same lock as profile settings, so a first profile save can't create a
       # second row for the seller.
       seller_profile = nil
-      share_image_removed = false
       saved = current_seller.with_locked_seller_profile do |profile|
         seller_profile = profile
-        case (share_image = share_image_request(profile))
-        when :removed then share_image_removed = true
-        when String
-          profile.errors.add(:base, share_image)
+        if (share_image_error = assign_share_image(profile))
+          profile.errors.add(:base, share_image_error)
           raise ActiveRecord::Rollback
         end
         profile.assign_attributes(seo_params)
-        next false unless profile.save
-
-        # Purging destroys a row, so it waits for the rest of the request to be
-        # valid — a rejected search title must not drop the image the seller
-        # still has.
-        profile.share_image.purge if share_image_removed
-        true
+        profile.save
       end
       return redirect_to edit_page_path("profile"), notice: "Changes saved!", status: :see_other if saved
 
@@ -295,20 +286,23 @@ class PagesController < Sellers::BaseController
       params.permit(:seo_title, :seo_description).to_h.symbolize_keys
     end
 
-    # What the request asks for the storefront share image: nil when it does not
-    # touch it, :removed for a removal, a blob attachment to add one, and a
-    # message when the signed blob id cannot be used, so a tampered or expired
-    # one comes back as a form error instead of a 500.
-    def share_image_request(profile)
-      return nil unless params.key?(:share_image_signed_blob_id)
+    # Stages the share image change with the assignment setter rather than
+    # `attach`, which writes immediately on a persisted profile, so a rejected
+    # search title keeps the image as it was. Returns a message when the signed
+    # blob id cannot be used, so a tampered or expired one is a form error.
+    def assign_share_image(profile)
+      return unless params.key?(:share_image_signed_blob_id)
 
       signed_blob_id = params[:share_image_signed_blob_id]
-      return :removed if signed_blob_id.blank?
+      if signed_blob_id.blank?
+        profile.share_image = nil
+        return
+      end
 
       blob = signed_blob_id.is_a?(String) ? ActiveStorage::Blob.find_signed(signed_blob_id) : nil
       return "That image upload could not be found or has expired. Please choose the file again." if blob.nil?
 
-      profile.share_image.attach(blob)
+      profile.share_image = blob
       nil
     end
 
