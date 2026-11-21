@@ -261,7 +261,6 @@ const PdfReader = ({
     // fetch, a parse failure, an out-of-memory load — and getDocument's rejection used to be
     // unhandled, which left isLoading true and the loading overlay up for good.
     const handleLoadError = () => {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- set by the effect's cleanup closure, which the compiler cannot see from here
       if (isCancelled) return;
       window.clearTimeout(stallTimer);
       const release = teardown;
@@ -441,10 +440,10 @@ const PdfReader = ({
               <Fieldset>
                 <FieldsetTitle>Appearance</FieldsetTitle>
                 <div>
-                  <Button size="icon" className="mr-2" onClick={zoomOut}>
+                  <Button size="icon" className="mr-2" aria-label="Zoom out" onClick={zoomOut}>
                     <SearchMinus className="size-5" />
                   </Button>
-                  <Button size="icon" onClick={zoomIn}>
+                  <Button size="icon" aria-label="Zoom in" onClick={zoomIn}>
                     <SearchPlus className="size-5" />
                   </Button>
                 </div>
