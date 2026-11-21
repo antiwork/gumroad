@@ -68,6 +68,8 @@ class Api::V2::FilesController < Api::V2::BaseController
     )
 
     render json: { success: true, file_url: s3_file_url(key) }
+  rescue Aws::S3::Errors::NoSuchUpload => e
+    render status: :bad_request, json: { status: 400, error: e.message, error_code: "multipart_upload_not_found" }
   rescue Aws::S3::Errors::ServiceError => e
     error_400(e.message)
   end

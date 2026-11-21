@@ -177,6 +177,7 @@ describe Api::V2::FilesController do
         post action, params: params
         expect(response.status).to eq(400)
         expect(response.parsed_body["error"]).to include("boom")
+        expect(response.parsed_body["error_code"]).to be_nil
       end
 
       it "returns 400 when part_number is an array instead of a scalar" do
@@ -226,7 +227,9 @@ describe Api::V2::FilesController do
           .and_raise(Aws::S3::Errors::NoSuchUpload.new(nil, "The specified upload does not exist."))
         post action, params: params
         expect(response.status).to eq(400)
+        expect(response.parsed_body["status"]).to eq(400)
         expect(response.parsed_body["error"]).to include("does not exist")
+        expect(response.parsed_body["error_code"]).to eq("multipart_upload_not_found")
       end
     end
 
