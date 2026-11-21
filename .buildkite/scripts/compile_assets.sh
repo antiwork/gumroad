@@ -196,8 +196,8 @@ fi
 
 # Raises the web clusters for the deploy's scale_up once the production image's assets are
 # built, on both paths: soon enough for the new instances to boot (about 1.5 minutes before
-# they pass), and late enough that target tracking has rarely scaled the idle ones back in
-# (about 5.5 minutes after a raise). It never fails the compile. A compile that fails first
+# they pass). The raise pins min-size too, so target tracking cannot scale them back in
+# before the deploy's own scale_up pins it. It never fails the compile. A compile that fails first
 # never starts it; one that has started finishes its few-second raise within its own deadline.
 PRESCALE_SCRIPT=${PRESCALE_SCRIPT:-.buildkite/scripts/prescale_web_clusters.sh}
 PRESCALE_PID=""

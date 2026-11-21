@@ -4,9 +4,14 @@
 # doubles the desired capacity, capped at the ASG's max; with min at least half of max,
 # as today, that is always the max. This step only ever writes the max, because AWS has
 # no compare-and-set on desired capacity and any lower write could undo a scale-out
-# that lands between the read and the write. It sets no min-size pin: a build that never
-# deploys is scaled back in by target tracking, as after a deploy. Best effort: it never
-# lowers a cluster and never fails the build.
+# that lands between the read and the write. The write also pins min-size to the same
+# number, in the same API call: with desired alone, a CPU target-tracking scale-in that was
+# already in ALARM can set it straight back, and the OldestInstance termination policy then
+# removes the serving instances first and keeps the ones still booting (gumroad-private#4859).
+# The deploy's scale_up_clusters pins min-size too, but runs minutes later. A deploy lowers
+# the pin again in restore_web_scale_in; a build that never reaches scale_up leaves it until
+# the next deploy's restore, which costs spare instances for that time and nothing else.
+# Best effort: it never lowers a cluster and never fails the build.
 
 set -uo pipefail
 
@@ -61,8 +66,9 @@ for asg in "${WEB_ASGS[@]}"; do
     continue
   fi
 
-  if output=$(aws autoscaling set-desired-capacity "${AWS_LIMITS[@]}" --auto-scaling-group-name "$asg" --desired-capacity "$max" 2>&1); then
-    logger "Raised $asg from $desired to $max"
+  if output=$(aws autoscaling update-auto-scaling-group "${AWS_LIMITS[@]}" --auto-scaling-group-name "$asg" \
+      --desired-capacity "$max" --min-size "$max" 2>&1); then
+    logger "Raised $asg from $desired to $max and pinned min-size at $max, so target tracking cannot scale it back in"
   else
     logger "WARNING: could not raise $asg to $max ($output); leaving it to the deploy's scale_up"
   fi

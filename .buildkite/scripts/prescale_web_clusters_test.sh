@@ -13,8 +13,9 @@ ok()   { PASS=$((PASS + 1)); echo "  ok   $1"; }
 fail() { FAIL=$((FAIL + 1)); echo "  FAIL $1"; }
 
 # The stub answers describe-auto-scaling-groups from SIZES_<asg> ("desired max", or
-# FAIL). It fails set-desired-capacity
-# for the ASG named in SET_FAIL and logs each set. Any other call or argument, a read
+# FAIL). It fails update-auto-scaling-group for the ASG named in SET_FAIL, logs each
+# update as "<asg> <desired> <min>", and records the resulting ASG in $WORK/asg_<asg>
+# ("desired min max") so a case can replay a scale-in against it. Any other call or argument, a read
 # without the query and output the script parses, or a call whose time limits could
 # let it run past 60 s, is logged and fails.
 mkdir -p "$WORK/bin"
@@ -27,7 +28,7 @@ unsupported() {
 }
 call="$1 $2"
 [ $# -ge 2 ] && shift 2 || unsupported "$@"
-asg="" capacity="" query="" output="" connect="" read_timeout=""
+asg="" capacity="" minsize="" query="" output="" connect="" read_timeout=""
 while [ $# -gt 0 ]; do
   case "$call $1" in
     "autoscaling "*" --cli-connect-timeout") connect=$2 ;;
@@ -35,8 +36,9 @@ while [ $# -gt 0 ]; do
     "autoscaling describe-auto-scaling-groups --auto-scaling-group-names") asg=$2 ;;
     "autoscaling describe-auto-scaling-groups --query") query=$2 ;;
     "autoscaling describe-auto-scaling-groups --output") output=$2 ;;
-    "autoscaling set-desired-capacity --auto-scaling-group-name") asg=$2 ;;
-    "autoscaling set-desired-capacity --desired-capacity") capacity=$2 ;;
+    "autoscaling update-auto-scaling-group --auto-scaling-group-name") asg=$2 ;;
+    "autoscaling update-auto-scaling-group --desired-capacity") capacity=$2 ;;
+    "autoscaling update-auto-scaling-group --min-size") minsize=$2 ;;
     *) unsupported "$call" "$@" ;;
   esac
   shift 2
@@ -53,10 +55,14 @@ case "$call" in
     sizes=${!var:-}
     [ "$sizes" = "FAIL" ] && { echo "AccessDenied" >&2; exit 255; }
     printf '%s\n' "$sizes" ;;
-  "autoscaling set-desired-capacity")
-    [ -n "$asg" ] && [[ "$capacity" =~ ^[0-9]+$ ]] || unsupported "$call without a group or a capacity"
+  "autoscaling update-auto-scaling-group")
+    [ -n "$asg" ] && [[ "$capacity" =~ ^[0-9]+$ ]] && [[ "$minsize" =~ ^[0-9]+$ ]] \
+      || unsupported "$call without a group, a capacity and a min-size"
     [ "${SET_FAIL:-}" = "$asg" ] && { echo "ValidationError" >&2; exit 255; }
-    echo "$asg $capacity" >> "$CALLS" ;;
+    echo "$asg $capacity $minsize" >> "$CALLS"
+    var="SIZES_${asg//-/_}"
+    read -r _ max <<< "${!var}"
+    echo "$capacity $minsize $max" > "$(dirname "$CALLS")/asg_$asg" ;;
   *) unsupported "$call" ;;
 esac
 STUB
@@ -81,19 +87,38 @@ run() {
 
 blue=SIZES_production_web_cluster_blue_asg
 green=SIZES_production_web_cluster_green_asg
-both_raised="$(printf 'production-web-cluster-blue-asg 14\nproduction-web-cluster-green-asg 14')"
+both_raised="$(printf 'production-web-cluster-blue-asg 14 14\nproduction-web-cluster-green-asg 14 14')"
 
 echo "prescale_web_clusters.sh"
 
 export "$blue=7	14" "$green=7	14"; unset SET_FAIL
 run
 [ "$STATUS" -eq 0 ] && [ "$(cat "$WORK/calls")" = "$both_raised" ] \
-  && ok "doubles both clusters from their usual 7 to 14" || fail "doubles both clusters from their usual 7 to 14: $(cat "$WORK/calls")"
+  && ok "doubles both clusters from their usual 7 to 14, pinning min-size to 14 in the same call" || fail "doubles both clusters from their usual 7 to 14: $(cat "$WORK/calls")"
 
 export "$blue=10	14" "$green=9	14"
 run
 [ "$STATUS" -eq 0 ] && [ "$(cat "$WORK/calls")" = "$both_raised" ] \
   && ok "caps the doubling at the ASG's max, as scale_up_clusters does" || fail "caps the doubling at the max: $(cat "$WORK/calls")"
+
+# gumroad-private#4859: target tracking's scale-in alarm was already in ALARM when the
+# pre-scale raised desired from 7 to 14 and set it back to 7 eleven seconds later; with
+# OldestInstance that removed every serving instance. AWS never takes desired below
+# min-size, so replay that scale-in against the ASG the script left behind: it must
+# not drop either cluster below 14.
+scale_in_floor() { # asg: the capacity an ASG ends at when target tracking asks for 7
+  local desired minsize max
+  read -r desired minsize max < "$WORK/asg_$1"
+  [ 7 -lt "$minsize" ] && echo "$minsize" || echo 7
+}
+rm -f "$WORK"/asg_*
+export "$blue=7	14" "$green=7	14"
+run
+[ "$STATUS" -eq 0 ] \
+  && [ "$(scale_in_floor production-web-cluster-blue-asg)" = 14 ] \
+  && [ "$(scale_in_floor production-web-cluster-green-asg)" = 14 ] \
+  && ok "a scale-in to 7 right after the pre-scale cannot drop either cluster below 14" \
+  || fail "scale-in after pre-scale: $(cat "$WORK"/asg_* 2>&1)"
 
 export "$blue=14	14" "$green=14	14"
 run
@@ -102,17 +127,17 @@ run
 
 export "$blue=4	20" "$green=7	14"
 run
-[ "$STATUS" -eq 0 ] && [ "$(cat "$WORK/calls")" = "production-web-cluster-green-asg 14" ] && grep -q "stays below its max" "$WORK/out" \
+[ "$STATUS" -eq 0 ] && [ "$(cat "$WORK/calls")" = "production-web-cluster-green-asg 14 14" ] && grep -q "stays below its max" "$WORK/out" \
   && ok "skips a cluster whose doubling stays below its max, since only a write of the max cannot lower it" || fail "doubling below max: $(cat "$WORK/calls")"
 
 export "$blue=FAIL" "$green=7	14"
 run
-[ "$STATUS" -eq 0 ] && [ "$(cat "$WORK/calls")" = "production-web-cluster-green-asg 14" ] && grep -q "could not read production-web-cluster-blue-asg" "$WORK/out" \
+[ "$STATUS" -eq 0 ] && [ "$(cat "$WORK/calls")" = "production-web-cluster-green-asg 14 14" ] && grep -q "could not read production-web-cluster-blue-asg" "$WORK/out" \
   && ok "a failed read skips that cluster, raises the other and exits 0" || fail "a failed read: $(cat "$WORK/calls")"
 
 export "$blue=7	14" "$green=7	14"; export SET_FAIL=production-web-cluster-blue-asg
 run
-[ "$STATUS" -eq 0 ] && [ "$(cat "$WORK/calls")" = "production-web-cluster-green-asg 14" ] && grep -q "could not raise production-web-cluster-blue-asg" "$WORK/out" \
+[ "$STATUS" -eq 0 ] && [ "$(cat "$WORK/calls")" = "production-web-cluster-green-asg 14 14" ] && grep -q "could not raise production-web-cluster-blue-asg" "$WORK/out" \
   && ok "a failed raise is reported, the other cluster is raised and the step exits 0" || fail "a failed raise: $(cat "$WORK/calls")"
 unset SET_FAIL
 
