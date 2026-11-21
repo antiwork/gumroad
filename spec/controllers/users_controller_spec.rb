@@ -518,11 +518,20 @@ describe UsersController do
           expect(meta_content("og:image:height")).to be_empty
         end
 
-        # A share image replaces the image, not the copy Search and sharing owns.
-        it "keeps the page title rather than switching to the bare seller name" do
+        # "Subscribe to ..." describes the generated card, which the seller's own
+        # image replaces, so the title carries their name instead.
+        it "titles the card with the seller's name" do
           get :show, params: { username: share_image_seller.username }
 
-          expect(meta_content("og:title")).to start_with("Subscribe to")
+          expect(meta_content("og:title")).to eq(share_image_seller.name)
+        end
+
+        it "keeps the seller's name as the title when there is no generated card behind the image" do
+          share_image_seller.subscribe_preview.purge
+
+          get :show, params: { username: share_image_seller.username }
+
+          expect(meta_content("og:title")).to eq(share_image_seller.name)
         end
 
         it "restores the generated card when the seller removes the image" do
