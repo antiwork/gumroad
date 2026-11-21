@@ -8,7 +8,11 @@ import { Button, NavigationButton } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { CustomHtmlPreview } from "$app/components/Pages/CustomHtmlPreview";
-import { SearchListingFields, type SeoMaxLengths, type ShareImageSelection } from "$app/components/Pages/SearchListingFields";
+import {
+  SearchListingFields,
+  type SeoMaxLengths,
+  type ShareImageSelection,
+} from "$app/components/Pages/SearchListingFields";
 import { PreviewChrome, PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { useSectionImageUploadSettings } from "$app/components/Profile/EditSections";
 import { ImageUploadSettingsContext, RichTextEditor } from "$app/components/RichTextEditor";

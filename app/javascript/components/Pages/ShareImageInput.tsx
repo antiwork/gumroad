@@ -1,14 +1,15 @@
 import { Plus, Trash } from "@boxicons/react";
 import * as React from "react";
 
+import { classNames } from "$app/utils/classNames";
+import { uploadErrorMessage, uploadFileWithRetry } from "$app/utils/directUpload";
+
 import { Button, buttonVariants } from "$app/components/Button";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 import { Label } from "$app/components/ui/Label";
 import { Placeholder } from "$app/components/ui/Placeholder";
-import { classNames } from "$app/utils/classNames";
-import { uploadErrorMessage, uploadFileWithRetry } from "$app/utils/directUpload";
 
 const ALLOWED_EXTENSIONS = ["png", "jpg", "jpeg"];
 
@@ -82,7 +83,10 @@ export const ShareImageInput = ({
           <img
             alt="Share image"
             src={imageUrl}
-            className={classNames(PREVIEW_ASPECT_CLASS, "w-full rounded-sm border border-border bg-background object-cover")}
+            className={classNames(
+              PREVIEW_ASPECT_CLASS,
+              "w-full rounded-sm border border-border bg-background object-cover",
+            )}
           />
           <Button
             color="primary"
@@ -97,9 +101,9 @@ export const ShareImageInput = ({
         </figure>
       )}
       <FieldsetDescription>
-        JPG or PNG up to 5 MB. Link previews show a 1024x536px (1.91:1) image — a taller one gets its top and
-        bottom cut off, and square-cropping apps like WhatsApp cut the sides. Leave empty to use your generated
-        subscribe card, or your profile picture if you have no card.
+        JPG or PNG up to 5 MB. Link previews show a 1024x536px (1.91:1) image — a taller one gets its top and bottom cut
+        off, and square-cropping apps like WhatsApp cut the sides. Leave empty to use your generated subscribe card, or
+        your profile picture if you have no card.
       </FieldsetDescription>
     </Fieldset>
   );
