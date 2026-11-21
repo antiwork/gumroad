@@ -66,6 +66,7 @@ class SellerProfile < ApplicationRecord
     cdn_url_for(share_image.url) if share_image.attached?
   rescue => e
     Rails.logger.warn("SellerProfile#share_image_url error (#{id}): #{e.class} => #{e.message}")
+    nil
   end
 
   def custom_styles

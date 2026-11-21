@@ -45,6 +45,14 @@ describe SellerProfile do
       expect(seller_profile.share_image_url).to eq(seller_profile.share_image.url)
     end
 
+    it "resolves no URL when the storage URL cannot be built" do
+      attach_share_image
+      seller_profile.save!
+      allow(seller_profile.share_image).to receive(:url).and_raise(Aws::Sigv4::Errors::MissingCredentialsError)
+
+      expect(seller_profile.share_image_url).to be_nil
+    end
+
     it "rejects a file that is not a JPG or PNG" do
       attach_share_image(fixture: "test.pdf", content_type: "application/pdf")
 
