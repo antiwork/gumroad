@@ -30,6 +30,15 @@ const moveUpButtons = () => screen.getAllByLabelText<HTMLButtonElement>("Move de
 const moveDownButtons = () => screen.getAllByLabelText<HTMLButtonElement>("Move detail down");
 
 describe("AttributesEditor", () => {
+  it("names the detail fields and identifies which detail is deleted", () => {
+    const { setCustomAttributes } = renderEditor([{ name: "Format", value: "PDF" }]);
+
+    expect(screen.getByRole<HTMLInputElement>("combobox", { name: "Detail name" }).value).toBe("Format");
+    expect(screen.getByRole<HTMLInputElement>("textbox", { name: "Detail value" }).value).toBe("PDF");
+    fireEvent.click(screen.getByRole("button", { name: "Delete Format" }));
+    expect(setCustomAttributes).toHaveBeenCalledExactlyOnceWith([]);
+  });
+
   it("moves a detail up", () => {
     const { setCustomAttributes } = renderEditor([
       { name: "Format", value: "PDF" },
