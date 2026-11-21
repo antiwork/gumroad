@@ -198,7 +198,8 @@ class SalesTaxCalculator
             special_epublication_countries = [
               Compliance::Countries::ISL.alpha2,
               Compliance::Countries::CHE.alpha2,
-              Compliance::Countries::MEX.alpha2
+              Compliance::Countries::MEX.alpha2,
+              Compliance::Countries::NGA.alpha2 # zero-rated by NTA 2025 s.186(c); no row, so the lookup yields no tax
             ]
 
             zip_tax_rates = ZipTaxRate.alive
