@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -178,6 +178,37 @@ describe("DashboardPage getting started", () => {
       owner,
     );
   const bringYourAi = () => screen.getByText("Bring your AI").closest("[data-status]");
+
+  it("keeps the checklist usable when reading or writing the preference fails", () => {
+    const storage = vi.spyOn(window, "localStorage", "get").mockImplementation(() => {
+      throw new DOMException("Storage unavailable", "SecurityError");
+    });
+    try {
+      renderChecklist({});
+
+      fireEvent.click(screen.getByRole("link", { name: "Minimize getting started" }));
+      const expand = screen.getByRole("link", { name: "Expand getting started" });
+      fireEvent.click(expand);
+      expect(screen.getByRole("link", { name: "Minimize getting started" })).toBeTruthy();
+    } finally {
+      storage.mockRestore();
+    }
+  });
+
+  it("still toggles the checklist when the preference cannot be written", () => {
+    const write = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("Storage is full", "QuotaExceededError");
+    });
+    try {
+      renderChecklist({});
+
+      fireEvent.click(screen.getByRole("link", { name: "Minimize getting started" }));
+      fireEvent.click(screen.getByRole("link", { name: "Expand getting started" }));
+      expect(screen.getByRole("link", { name: "Minimize getting started" })).toBeTruthy();
+    } finally {
+      write.mockRestore();
+    }
+  });
 
   it("sends a seller with no AI connection to the MCP page", () => {
     renderChecklist({});

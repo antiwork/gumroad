@@ -329,13 +329,21 @@ export const DashboardPage = ({
   const [showDismissConfirmation, setShowDismissConfirmation] = React.useState<boolean>(false);
 
   useRunOnce(() => {
-    setGettingStartedMinimized(window.localStorage.getItem(GETTING_STARTED_MINIMIZED_KEY) === "true");
+    try {
+      setGettingStartedMinimized(window.localStorage.getItem(GETTING_STARTED_MINIMIZED_KEY) === "true");
+    } catch {
+      // Keep the default if the browser blocks preference storage.
+    }
   });
 
   const toggleGettingStarted = () => {
     const newState = !gettingStartedMinimized;
-    window.localStorage.setItem(GETTING_STARTED_MINIMIZED_KEY, JSON.stringify(newState));
     setGettingStartedMinimized(newState);
+    try {
+      window.localStorage.setItem(GETTING_STARTED_MINIMIZED_KEY, JSON.stringify(newState));
+    } catch {
+      // The checklist still toggles for the current visit.
+    }
   };
 
   const dismissGettingStarted = async () => {
