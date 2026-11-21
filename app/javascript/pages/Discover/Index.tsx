@@ -74,12 +74,17 @@ const ProductsCarousel = ({ products, title }: { products: CardProduct[]; title:
       <header className="flex items-center justify-between">
         <h2>{title}</h2>
         <div className="flex items-center gap-2">
-          <button className="cursor-pointer all-unset" onClick={() => setActive(getPreviousIndex(products.length))}>
+          <button
+            aria-label="Previous product"
+            className="cursor-pointer all-unset"
+            onClick={() => setActive(getPreviousIndex(products.length))}
+          >
             <ArrowLeft className="size-6" />
           </button>
           {active + 1} / {products.length}
           <button
             className="cursor-pointer all-unset"
+            aria-label="Next product"
             onClick={() => setActive((active + products.length + 1) % products.length)}
           >
             <ArrowRight className="size-6" />
