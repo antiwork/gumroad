@@ -131,7 +131,7 @@ describe("Email Creation Flow", :js, type: :system) do
     expect(installment.not_bought_variants).to be_nil
     expect(installment.affiliate_products).to be_nil
     expect(installment.send_emails).to be(true)
-    expect(installment.shown_on_profile).to be(true)
+    expect(installment.shown_on_profile).to be(false)
     expect(installment.paid_more_than_cents).to eq(100)
     expect(installment.paid_less_than_cents).to eq(1000)
     expect(installment.created_after).to be_present
@@ -221,7 +221,7 @@ describe("Email Creation Flow", :js, type: :system) do
     expect(installment.not_bought_variants).to be_nil
     expect(installment.affiliate_products).to be_nil
     expect(installment.send_emails).to be(true)
-    expect(installment.shown_on_profile).to be(true)
+    expect(installment.shown_on_profile).to be(false)
     expect(installment.paid_more_than_cents).to be_nil
     expect(installment.paid_less_than_cents).to be_nil
     expect(installment.created_after).to be_nil
@@ -441,7 +441,7 @@ describe("Email Creation Flow", :js, type: :system) do
     expect(installment.not_bought_variants).to be_nil
     expect(installment.affiliate_products).to match_array([product.unique_permalink, another_product.unique_permalink])
     expect(installment.send_emails).to be(true)
-    expect(installment.shown_on_profile).to be(true)
+    expect(installment.shown_on_profile).to be(false)
     expect(installment.paid_more_than_cents).to be_nil
     expect(installment.paid_less_than_cents).to be_nil
     expect(installment.created_after).to be_nil
@@ -756,8 +756,8 @@ describe("Email Creation Flow", :js, type: :system) do
     wait_for_ajax
     expect(page).to have_text("Audience Hidden for privacy / 6", normalize_ws: true)
 
-    select_disclosure "Publish" do
-      click_on "Publish now"
+    select_disclosure "Send" do
+      click_on "Send now"
     end
     wait_for_ajax
 
