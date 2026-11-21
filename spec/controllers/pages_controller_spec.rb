@@ -262,6 +262,17 @@ describe PagesController, type: :controller, inertia: true do
       expect(blob.attachments).to be_empty
     end
 
+    it "reports a share image upload whose bytes never reached storage" do
+      blob = ActiveStorage::Blob.create_before_direct_upload!(
+        filename: "cover.png", byte_size: 6, checksum: Digest::MD5.base64digest("pixels"), content_type: "image/png"
+      )
+
+      patch :update, params: { slug: "profile", share_image_signed_blob_id: blob.signed_id }
+
+      expect(seller.reload.seller_profile.share_image).to_not be_attached
+      expect(response).to redirect_to(edit_page_path("profile"))
+    end
+
     it "refuses a blob that is already attached elsewhere" do
       other_user = create(:user)
       other_user.avatar.attach(

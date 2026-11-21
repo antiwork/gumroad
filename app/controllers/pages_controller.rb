@@ -15,6 +15,7 @@ class PagesController < Sellers::BaseController
   layout "inertia"
 
   SEO_MAX_LENGTHS = { title: Page::MAX_SEO_TITLE_LENGTH, description: Page::MAX_SEO_DESCRIPTION_LENGTH }.freeze
+  SHARE_IMAGE_UPLOAD_MISSING_MESSAGE = "That image upload could not be found or has expired. Please choose the file again."
 
   before_action :set_page, only: [:edit, :update, :destroy, :preview, :products]
   # The seller reaches the preview straight off a save, so a replica read can serve a slice
@@ -300,10 +301,14 @@ class PagesController < Sellers::BaseController
       end
 
       blob = signed_blob_id.is_a?(String) ? ActiveStorage::Blob.find_signed(signed_blob_id) : nil
-      return "That image upload could not be found or has expired. Please choose the file again." if blob.nil?
+      return SHARE_IMAGE_UPLOAD_MISSING_MESSAGE if blob.nil?
 
+      # Assigning identifies the blob from its stored bytes, which an
+      # interrupted upload never wrote.
       profile.share_image = blob
       nil
+    rescue ActiveStorage::FileNotFoundError
+      SHARE_IMAGE_UPLOAD_MISSING_MESSAGE
     end
 
     def page_errors(page)

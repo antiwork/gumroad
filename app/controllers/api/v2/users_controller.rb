@@ -309,7 +309,14 @@ class Api::V2::UsersController < Api::V2::BaseController
             blob_error = "The signed_blob_id must come from a POST /v2/direct_uploads reservation made with this account."
             raise ActiveRecord::Rollback
           else
-            seller_profile.share_image = blob
+            begin
+              # Assigning identifies the blob from its stored bytes, which a
+              # reservation doesn't have until the upload finishes.
+              seller_profile.share_image = blob
+            rescue ActiveStorage::FileNotFoundError
+              blob_error = "The signed_blob_id has no uploaded file yet. Upload the file first, then try again."
+              raise ActiveRecord::Rollback
+            end
           end
         end
         next failed = seller_profile unless seller_profile.valid?

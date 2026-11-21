@@ -212,11 +212,25 @@ describe Api::V2::UsersController do
       end
 
       it "leaves the share image unattached when the name in the same request is rejected" do
+        # `attach` writes at once only on a persisted, unchanged profile.
+        @user.seller_profile.save!
         blob = reserved_share_image_blob
 
         put @action, params: { access_token: @token.token, name: "a" * (User::MAX_LENGTH_NAME + 1), share_image_signed_blob_id: blob.signed_id }
 
         expect(response.parsed_body["success"]).to eq(false)
+        expect(@user.reload.seller_profile.share_image).to_not be_attached
+      end
+
+      it "rejects a reserved blob whose bytes were never uploaded" do
+        blob = ActiveStorage::Blob.create_before_direct_upload!(
+          filename: "cover.png", byte_size: 6, checksum: Digest::MD5.base64digest("pixels"), content_type: "image/png",
+          metadata: { uploaded_by_user_id: @user.id }
+        )
+
+        put @action, params: { access_token: @token.token, share_image_signed_blob_id: blob.signed_id }
+
+        expect(response.parsed_body).to eq("success" => false, "message" => "The signed_blob_id has no uploaded file yet. Upload the file first, then try again.")
         expect(@user.reload.seller_profile.share_image).to_not be_attached
       end
 
