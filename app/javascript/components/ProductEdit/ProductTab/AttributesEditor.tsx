@@ -151,6 +151,7 @@ const AttributeEditor = ({
     <Input
       type="text"
       list={nameSuggestionsId}
+      aria-label="Detail name"
       value={attribute.name}
       onChange={(evt) => onUpdate?.({ name: evt.target.value })}
       disabled={!onUpdate}
@@ -158,6 +159,7 @@ const AttributeEditor = ({
     <Input
       type="text"
       value={attribute.value}
+      aria-label="Detail value"
       onChange={(evt) => onUpdate?.({ value: evt.target.value })}
       disabled={!onUpdate}
     />
@@ -172,7 +174,7 @@ const AttributeEditor = ({
           </Button>
         </>
       ) : null}
-      <Button onClick={onDelete}>
+      <Button aria-label={attribute.name ? `Delete ${attribute.name}` : "Delete detail"} onClick={onDelete}>
         <Trash className="size-5" />
       </Button>
     </div>
