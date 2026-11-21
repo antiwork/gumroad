@@ -37,6 +37,12 @@ export const Modal = ({
           if (!modal) e.preventDefault();
         }}
         onCloseAutoFocus={onCloseAutoFocus}
+        onEscapeKeyDown={(event) => {
+          if (!allowClose) event.preventDefault();
+        }}
+        onInteractOutside={(event) => {
+          if (!allowClose) event.preventDefault();
+        }}
       >
         {title ? (
           <div className="flex items-start justify-between gap-4">
@@ -56,7 +62,13 @@ export const Modal = ({
   );
 
   return (
-    <Dialog.Root onOpenChange={() => onClose?.()} modal={modal} {...props}>
+    <Dialog.Root
+      onOpenChange={(open) => {
+        if (!open && allowClose) onClose?.();
+      }}
+      modal={modal}
+      {...props}
+    >
       {usePortal ? <Dialog.Portal>{content}</Dialog.Portal> : content}
     </Dialog.Root>
   );

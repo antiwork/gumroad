@@ -195,7 +195,7 @@ export const ChatMessage = ({
       {deleteConfirmation ? (
         <Modal
           open
-          allowClose={deleteConfirmation.deleting}
+          allowClose={!deleteConfirmation.deleting}
           onClose={() => setDeleteConfirmation(null)}
           title="Delete message"
           footer={
@@ -205,6 +205,7 @@ export const ChatMessage = ({
               </Button>
               <Button
                 color="danger"
+                disabled={deleteConfirmation.deleting}
                 onClick={asyncVoid(async () => {
                   setDeleteConfirmation({ deleting: true });
                   try {

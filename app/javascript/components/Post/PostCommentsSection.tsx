@@ -73,7 +73,8 @@ export const PostCommentsSection = ({ paginated_comments }: Props) => {
 
   const [commentToDelete, setCommentToDelete] = React.useState<{ comment: Comment; deleting: boolean } | null>(null);
   const deleteComment = async () => {
-    if (!commentToDelete) return;
+    if (!commentToDelete || commentToDelete.deleting) return;
+    setCommentToDelete({ ...commentToDelete, deleting: true });
     try {
       const deletedCommentIds = await deleteCommentRequest({
         commentable_id,
@@ -88,6 +89,7 @@ export const PostCommentsSection = ({ paginated_comments }: Props) => {
         count: data.count - deletedCommentIds.length,
       }));
     } catch (e) {
+      setCommentToDelete({ ...commentToDelete, deleting: false });
       assertResponseError(e);
       showAlert("An error occurred while deleting the comment", "error");
     }
@@ -167,7 +169,7 @@ export const PostCommentsSection = ({ paginated_comments }: Props) => {
         {commentToDelete ? (
           <Modal
             open
-            allowClose={commentToDelete.deleting}
+            allowClose={!commentToDelete.deleting}
             onClose={() => setCommentToDelete(null)}
             title="Delete comment"
             footer={
