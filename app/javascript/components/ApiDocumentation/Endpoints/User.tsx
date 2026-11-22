@@ -55,8 +55,8 @@ export const UpdateUser = () => (
           link previews of the storefront and its pages. It doesn't change any product's images. Upload a JPG or PNG of
           up to 5 MB: reserve it with <code>POST /v2/direct_uploads</code> passing <code>purpose=media</code>, upload
           the bytes to the URL it returns with every header from <code>direct_upload.headers</code>, then pass the
-          returned signed ID here. Link previews show the image at 1024x536px (1.91:1), so a taller image loses its top
-          and bottom, and apps that crop to a square, like WhatsApp, cut its sides.
+          returned signed ID here. The image is served as uploaded. The recommended size is 1024x536px (1.91:1). Apps
+          that show link previews may crop it, some to a square, so keep important content in the center.
         </p>
       </>
     }

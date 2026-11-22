@@ -52,6 +52,15 @@ describe("ShareImageInput", () => {
     expect(onChange).toHaveBeenCalledWith(null);
   });
 
+  it("recommends 1024x536 and warns that preview apps may crop the image, some to a square", () => {
+    render(<ShareImageInput imageUrl={null} onChange={vi.fn()} />);
+
+    const help = screen.getByText(/Recommended size: 1024x536px \(1\.91:1\)\./u).textContent;
+    expect(help).toContain(
+      "Apps that show link previews may crop it, some to a square, so keep important content in the center.",
+    );
+  });
+
   it("refuses a file that is not a JPG or PNG without uploading it", async () => {
     const onChange = vi.fn();
     const { container } = render(<ShareImageInput imageUrl={null} onChange={onChange} />);

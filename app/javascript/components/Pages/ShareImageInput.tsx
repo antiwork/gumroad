@@ -13,8 +13,9 @@ import { Placeholder } from "$app/components/ui/Placeholder";
 
 const ALLOWED_EXTENSIONS = ["png", "jpg", "jpeg"];
 
-// 1.91:1 — the ratio the generated subscribe card and every link-preview
-// client use, so the seller sees the crop they will actually get.
+// The recommended 1.91:1 shape, the generated subscribe card's. The upload is
+// served uncropped and each preview app crops it its own way, some to a square,
+// so this preview is a guide, not the exact result.
 const PREVIEW_ASPECT_CLASS = "aspect-[1024/536]";
 
 // Uploads straight to storage and reports the signed blob id the server
@@ -107,9 +108,9 @@ export const ShareImageInput = ({
         </figure>
       )}
       <FieldsetDescription>
-        JPG or PNG up to 5 MB. Link previews show a 1024x536px (1.91:1) image — a taller one gets its top and bottom cut
-        off, and square-cropping apps like WhatsApp cut the sides. Leave empty to use your generated subscribe card, or
-        your profile picture if you have no card.
+        JPG or PNG, up to 5 MB. Recommended size: 1024x536px (1.91:1). Apps that show link previews may crop it, some to
+        a square, so keep important content in the center. Leave empty to use your generated subscribe card, or your
+        profile picture if you have no card.
       </FieldsetDescription>
     </Fieldset>
   );
