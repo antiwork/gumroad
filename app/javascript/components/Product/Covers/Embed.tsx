@@ -45,6 +45,7 @@ const Embed = ({ cover, dimensions, frameIsShaped }: Props) => {
     >
       {/* eslint-disable-next-line react/iframe-missing-sandbox */}
       <iframe
+        title="Product cover video"
         key={cover.url}
         ref={iframeRef}
         width={dimensions?.width}
