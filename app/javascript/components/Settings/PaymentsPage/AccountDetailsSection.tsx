@@ -112,6 +112,9 @@ const AccountDetailsSection = ({
       setIsEditingIndividualTaxId(false);
       setIndividualTaxIdInput("");
     }
+    if (!user.individual_tax_id_entered && complianceInfo.clear_individual_tax_id) {
+      updateComplianceInfo({ clear_individual_tax_id: false });
+    }
     if (user.business_tax_id_entered) setIsEditingBusinessTaxId(false);
   }, [saveCounter]);
 
@@ -1362,13 +1365,37 @@ const AccountDetailsSection = ({
                     </button>
                   ) : null}
                 </div>
-                <LinkButton
-                  className="self-start text-sm"
-                  onClick={() => setIsEditingIndividualTaxId(true)}
-                  disabled={isFormDisabled}
-                >
-                  Change
-                </LinkButton>
+                {complianceInfo.clear_individual_tax_id ? (
+                  <FieldsetDescription className="text-foreground">
+                    This tax ID will be removed when you save.{" "}
+                    <LinkButton
+                      className="text-sm"
+                      onClick={() => updateComplianceInfo({ clear_individual_tax_id: false })}
+                      disabled={isFormDisabled}
+                    >
+                      Undo
+                    </LinkButton>
+                  </FieldsetDescription>
+                ) : (
+                  <div className="flex gap-3">
+                    <LinkButton
+                      className="self-start text-sm"
+                      onClick={() => setIsEditingIndividualTaxId(true)}
+                      disabled={isFormDisabled}
+                    >
+                      Change
+                    </LinkButton>
+                    {usEntityWithForeignRepresentative(complianceInfo) ? (
+                      <LinkButton
+                        className="self-start text-sm"
+                        onClick={() => updateComplianceInfo({ clear_individual_tax_id: true })}
+                        disabled={isFormDisabled}
+                      >
+                        Remove
+                      </LinkButton>
+                    ) : null}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="flex flex-col gap-2">

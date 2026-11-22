@@ -49,6 +49,7 @@ export type ComplianceInfo = {
   dob_day: number;
   dob_year: number;
   individual_tax_id?: string | null;
+  clear_individual_tax_id?: boolean;
   updated_country_code?: string | null;
   first_name_kanji?: string | null;
   last_name_kanji?: string | null;
