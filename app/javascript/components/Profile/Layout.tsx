@@ -42,7 +42,12 @@ export const Layout = ({ creatorProfile, hideFollowForm, currencySelector, shown
           </NavigationButton>
         ) : null}
         {creatorProfile.twitter_handle ? (
-          <NavigationButton outline href={`https://twitter.com/${creatorProfile.twitter_handle}`} target="_blank">
+          <NavigationButton
+            outline
+            href={`https://twitter.com/${creatorProfile.twitter_handle}`}
+            target="_blank"
+            aria-label={`@${creatorProfile.twitter_handle} on X`}
+          >
             <TwitterX pack="brands" className="size-5" />
           </NavigationButton>
         ) : null}
