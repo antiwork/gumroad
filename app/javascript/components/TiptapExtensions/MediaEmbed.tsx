@@ -109,7 +109,7 @@ export const heyzineShelfUrl = (raw: string): string | null => {
 const shelfEmbedHtml = (shelfUrl: string): string =>
   '<div style="left: 0; width: 100%; height: ' +
   `${DEFAULT_RAW_EMBED_HEIGHT}px; position: relative;">` +
-  `<iframe src="${shelfUrl}" style="top: 0; left: 0; width: 100%; height: 100%; position: absolute; border: 0;" allowfullscreen></iframe>` +
+  `<iframe src="${shelfUrl}" title="Flipbook" style="top: 0; left: 0; width: 100%; height: 100%; position: absolute; border: 0;" allowfullscreen></iframe>` +
   "</div>";
 
 // Any other provider keeps the height iframely (or the seller, from the menu) chose for it.
