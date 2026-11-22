@@ -858,6 +858,26 @@ describe Order::CreateService, :vcr do
         expect(purchase_responses.fetch("option-0")[:error_code]).to eq(PurchaseErrorCode::OFFER_CODE_INSUFFICIENT_QUANTITY)
       end
 
+      it "counts an eligible option toward the code minimum amount" do
+        category = create(:variant_category, link: product_1)
+        eligible = create(:variant, variant_category: category)
+        offer_code.update!(universal: false, products: [product_1], minimum_amount_cents: price_1 - 1_00, variants: [eligible])
+        params[:line_items] = [{
+          uid: "option-0",
+          permalink: product_1.unique_permalink,
+          perceived_price_cents: price_1 - 1_00,
+          price_cents: price_1,
+          quantity: 1,
+          variants: [eligible.external_id],
+          discount_code: offer_code.code,
+        }]
+
+        order, purchase_responses = described_class.new(params:).perform
+
+        expect(purchase_responses).to be_empty
+        expect(order.purchases.sole.offer_code).to eq(offer_code)
+      end
+
       it "combines variant quantities when checking the minimum" do
         offer_code.update!(minimum_quantity: 2)
         variant_category = create(:variant_category, link: product_1)
