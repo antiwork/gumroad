@@ -1864,6 +1864,23 @@ class Subscription < ApplicationRecord
     free_trial_ends_at.to_fs(:formatted_date_full_month)
   end
 
+  # Memberships inside the failed-payment retry window, matching what `status` reports as "pending_failure".
+  def self.pending_failure_ids_for(seller)
+    active.where(seller_id: seller.id, deactivated_at: nil).where(<<~SQL.squish).find_each.filter_map do |subscription|
+      EXISTS (
+        SELECT 1 FROM purchases failed
+        WHERE failed.subscription_id = subscriptions.id AND failed.purchase_state = 'failed'
+          AND NOT EXISTS (
+            SELECT 1 FROM purchases newer
+            WHERE newer.subscription_id = failed.subscription_id
+              AND (newer.created_at > failed.created_at OR (newer.created_at = failed.created_at AND newer.id > failed.id))
+          )
+      )
+    SQL
+      subscription.id if !subscription.is_installment_plan? && subscription.status == "pending_failure"
+    end
+  end
+
   def pending_failure?
     return false unless alive?
     # Use in-memory traversal when `purchases` is already preloaded

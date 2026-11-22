@@ -34,6 +34,7 @@ describe("getPagedCustomers", () => {
         createdBefore: null,
         country: null,
         activeCustomersOnly: false,
+        failurePendingOnly: false,
         minimumLicenseUses: null,
       }).response,
     ).rejects.toBeInstanceOf(ResponseError);
