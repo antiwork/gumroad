@@ -1925,6 +1925,19 @@ class SalesTaxCalculatorTest < ActiveSupport::TestCase
             compare_calculations(expected: expected_sales_tax, actual: actual_sales_tax)
           end
 
+          test "does not assess VAT for epublication products" do
+            standard_tax_rate
+            product = create_product(user: @seller, is_epublication: true)
+
+            expected_sales_tax = SalesTaxCalculation.zero_tax(100)
+
+            actual_sales_tax = SalesTaxCalculator.new(product:,
+                                                      price_cents: 100,
+                                                      buyer_location: { country: "NG" }).calculate
+
+            compare_calculations(expected: expected_sales_tax, actual: actual_sales_tax)
+          end
+
           test "does not assess VAT for physical products" do
             product = create_physical_product(user: @seller)
 
