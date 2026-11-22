@@ -61,12 +61,12 @@ describe("ShareImageInput", () => {
     );
   });
 
-  it("leads with the image covering every storefront page but not product pages", () => {
+  it("leads with which shared links use the image and which don't", () => {
     render(<ShareImageInput imageUrl={null} onChange={vi.fn()} />);
 
     const help = screen.getByText(/Recommended size: 1024x536px/u).textContent;
     expect(help).toMatch(
-      /^Shared links to all your storefront pages use this image\. Product pages keep their own cover\. JPG or PNG/u,
+      /^Shared links to your home page and other pages use this image\. Links to products, posts and wishlists don't\. JPG or PNG/u,
     );
   });
 

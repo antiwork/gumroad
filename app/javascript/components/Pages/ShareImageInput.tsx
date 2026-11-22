@@ -108,10 +108,10 @@ export const ShareImageInput = ({
         </figure>
       )}
       <FieldsetDescription>
-        Shared links to all your storefront pages use this image. Product pages keep their own cover. JPG or PNG, up to
-        5 MB. Recommended size: 1024x536px (1.91:1). Apps that show link previews may crop it, some to a square, so keep
-        important content in the center. Without a share image, shared links show a card made from your profile, or your
-        profile picture.
+        Shared links to your home page and other pages use this image. Links to products, posts and wishlists don't. JPG
+        or PNG, up to 5 MB. Recommended size: 1024x536px (1.91:1). Apps that show link previews may crop it, some to a
+        square, so keep important content in the center. Without a share image, shared links show a card made from your
+        profile, or your profile picture.
       </FieldsetDescription>
     </Fieldset>
   );
