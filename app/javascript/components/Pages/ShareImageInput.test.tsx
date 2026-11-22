@@ -61,12 +61,12 @@ describe("ShareImageInput", () => {
     );
   });
 
-  it("leads with which shared links use the image and which don't", () => {
+  it("leads with which shared links use the image", () => {
     render(<ShareImageInput imageUrl={null} onChange={vi.fn()} />);
 
     const help = screen.getByText(/Recommended size: 1024x536px/u).textContent;
     expect(help).toMatch(
-      /^Shared links to your home page and other pages use this image\. Links to products, posts and wishlists don't\. JPG or PNG/u,
+      /^Shared links to your home page and other pages use this image\. Product images stay unchanged\. JPG or PNG/u,
     );
   });
 
