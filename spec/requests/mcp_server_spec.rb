@@ -1047,6 +1047,16 @@ describe "MCP server" do
         end
       end
 
+      it "gives the totals query its own deadline and reports the timeout as a tool error" do
+        expect(WithMaxExecutionTime).to receive(:timeout_queries).with(seconds: Mcp::Server::TOTALS_QUERY_TIMEOUT)
+          .and_raise(WithMaxExecutionTime::QueryTimeoutError, "maximum statement execution time exceeded")
+
+        post_mcp({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_sales_totals", arguments: {} } })
+
+        expect(response.parsed_body.dig("result", "isError")).to eq(true)
+        expect(response.parsed_body.dig("result", "content", 0, "text")).to eq("Computing sales totals took too long. Try a shorter date range.")
+      end
+
       it "requires the view_sales scope" do
         @token.update!(scopes: "view_profile")
 

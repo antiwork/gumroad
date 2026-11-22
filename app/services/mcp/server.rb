@@ -83,6 +83,9 @@ module Mcp
     TOTALS_MAX_DAYS = 366
     # A store can have thousands of products, and there are ~250 countries; period rows are bounded by the range.
     TOTALS_MAX_ROWS = 100
+    # A range can span a year and the aggregate walks every sale in it, so a large creator's query
+    # needs its own deadline; otherwise it runs to Rack::Timeout's 120s and SIGTERMs the Puma worker.
+    TOTALS_QUERY_TIMEOUT = 30
 
     class ToolError < StandardError; end
 
@@ -1233,7 +1236,9 @@ module Mcp
           .not_is_bundle_product_purchase
         sales = sales.where(link_id: find_product!(args["product_id"]).id) if args["product_id"].present?
 
-        buckets = sales_total_buckets(sales, timezone, start_date, end_date, breakdown)
+        buckets = WithMaxExecutionTime.timeout_queries(seconds: TOTALS_QUERY_TIMEOUT) do
+          sales_total_buckets(sales, timezone, start_date, end_date, breakdown)
+        end
         {
           start_date: start_date.iso8601,
           end_date: end_date.iso8601,
@@ -1243,6 +1248,8 @@ module Mcp
           totals: sales_totals_from(buckets.values),
           rows: sales_total_rows(buckets, breakdown)
         }
+      rescue WithMaxExecutionTime::QueryTimeoutError, ActiveRecord::StatementTimeout
+        raise ToolError, "Computing sales totals took too long. Try a shorter date range."
       end
 
       # Each bucket is [revenue_cents, units]. The range is walked in constant-offset segments
