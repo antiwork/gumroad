@@ -109,8 +109,7 @@ export const ShareImageInput = ({
       )}
       <FieldsetDescription>
         JPG or PNG, up to 5 MB. Recommended size: 1024x536px (1.91:1). Apps that show link previews may crop it, some to
-        a square, so keep important content in the center. Leave empty to use your generated subscribe card, or your
-        profile picture if you have no card.
+        a square, so keep important content in the center. Leave blank to use the default.
       </FieldsetDescription>
     </Fieldset>
   );

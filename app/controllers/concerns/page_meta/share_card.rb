@@ -70,7 +70,8 @@ module PageMeta
             end
             specs << ["og:image:alt", alt, alt_html]
             # An avatar is a small square: announcing it as a summary_large_image
-            # would have every client upscale it. The two wide sources get it.
+            # would have every client upscale it. The generated card and the
+            # seller's own upload, whatever its shape, are meant as large cards.
             unless avatar?
               specs << ["twitter:card", "summary_large_image", "summary_large_image"]
               specs << ["twitter:image", url, url_html]
