@@ -468,6 +468,8 @@ describe("insertMediaEmbed", () => {
       const html = String(node?.attrs?.html);
       expect(html).toContain('src="https://heyzine.com/shelf/66f3c4fc1e.html"');
       expect(html).not.toContain("iframely.net");
+      // The frame we build needs a name of its own: iframely gives us none for a shelf.
+      expect(html).toContain('title="Flipbook"');
       expect(rawEmbedHeight(html)).toBe(DEFAULT_RAW_EMBED_HEIGHT);
       // The link an email falls back to still opens the seller's library.
       expect(node?.attrs?.url).toBe("https://heyzine.com/shelf/66f3c4fc1e.html");
