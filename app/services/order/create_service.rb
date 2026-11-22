@@ -56,7 +56,7 @@ class Order::CreateService
     order = Order.new(purchaser: buyer)
     purchase_responses = {}
     failed_purchases = []
-    cart_items = line_items.map { _1.slice(:permalink, :price_cents) }
+    cart_items = line_items.map { _1.slice(:permalink, :price_cents, :variants) }
     spent_once_per_cart_allocations = Set.new
 
     line_items.each_with_index do |line_item_params, line_item_index|
