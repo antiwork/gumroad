@@ -110,7 +110,8 @@ export const ShareImageInput = ({
       <FieldsetDescription>
         JPG or PNG, up to 5 MB. Recommended size: 1024x536px (1.91:1). Apps that show link previews may crop it, some to
         a square, so keep important content in the center. Without a share image, shared links show a card made from
-        your profile, or your profile picture.
+        your profile, or your profile picture. This image is used for all your storefront pages. Product images stay
+        unchanged.
       </FieldsetDescription>
     </Fieldset>
   );
