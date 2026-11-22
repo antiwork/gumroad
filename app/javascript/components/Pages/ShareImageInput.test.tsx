@@ -61,11 +61,13 @@ describe("ShareImageInput", () => {
     );
   });
 
-  it("says the image covers every storefront page but not product pages", () => {
+  it("leads with the image covering every storefront page but not product pages", () => {
     render(<ShareImageInput imageUrl={null} onChange={vi.fn()} />);
 
     const help = screen.getByText(/Recommended size: 1024x536px/u).textContent;
-    expect(help).toContain("This image is used for all your storefront pages. Product images stay unchanged.");
+    expect(help).toMatch(
+      /^Shared links to all your storefront pages use this image\. Product pages keep their own cover\. JPG or PNG/u,
+    );
   });
 
   it("refuses a file that is not a JPG or PNG without uploading it", async () => {
