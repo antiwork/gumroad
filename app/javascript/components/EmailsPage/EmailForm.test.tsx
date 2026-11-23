@@ -88,7 +88,11 @@ type SentPayload = {
     opened_post_id: string | null;
     not_bought_products: string[] | null;
     not_bought_variants: string[] | null;
+    shown_on_profile: boolean;
+    shown_in_profile_sections: string[];
   };
+  save_action_name: string;
+  send_preview_email: boolean;
 };
 const beforeListeners = vi.hoisted((): ((e: unknown) => void)[] => []);
 const sent = vi.hoisted((): { payload: SentPayload | null } => ({ payload: null }));
@@ -269,6 +273,97 @@ describe("EmailForm", () => {
 
     expect(screen.getByRole("switch", { name: "Read Posts" })).toHaveProperty("checked", true);
     expect(screen.getByRole("switch", { name: "Archive" })).toHaveProperty("checked", false);
+  });
+});
+
+describe("EmailForm profile channel", () => {
+  const audienceContext: InstallmentFormContext = {
+    ...context,
+    audience_types: ["everyone", "followers", "customers"],
+    profile_sections: [{ id: "read-posts", name: "Read Posts", add_new_posts: true }],
+  };
+
+  // A customer-only draft saved while the profile channel was hidden still stores
+  // shown_on_profile true; its audience is the only thing that makes the composer an email.
+  const customersDraft: Installment = {
+    external_id: "email-1",
+    display_type: "draft",
+    name: "Win-back",
+    message: "Hello",
+    published_at: null,
+    updated_at: "2026-08-01T00:00:00Z",
+    stream_only: false,
+    streamable: false,
+    send_emails: true,
+    shown_on_profile: true,
+    installment_type: "seller",
+    paid_more_than_cents: null,
+    paid_less_than_cents: null,
+    allow_comments: true,
+    full_url: "https://seller.gumroad.com/p/win-back",
+    has_been_blasted: false,
+    files: [],
+  };
+
+  const postToProfile = () => screen.queryByLabelText(/Post to profile/u);
+  const save = async () => {
+    fireEvent.change(screen.getByPlaceholderText("Title"), { target: { value: "Hello" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(sent.payload).not.toBeNull());
+  };
+
+  it("keeps the Everyone default, where a new email posts to the profile", async () => {
+    renderForm(null, audienceContext);
+
+    expect(postToProfile()).toHaveProperty("checked", true);
+    expect(screen.getByRole("button", { name: "Publish" })).not.toBeNull();
+
+    await save();
+    expect(sent.payload?.installment.shown_on_profile).toBe(true);
+    expect(sent.payload?.installment.shown_in_profile_sections).toEqual(["read-posts"]);
+  });
+
+  it("turns the profile channel off once the audience is not Everyone", async () => {
+    renderForm(null, audienceContext);
+    expect(screen.getByRole("button", { name: "Publish" })).not.toBeNull();
+
+    fireEvent.click(screen.getByLabelText("Customers only"));
+
+    expect(postToProfile()).toBeNull();
+    expect(screen.getByRole("button", { name: "Send" })).not.toBeNull();
+
+    await save();
+    expect(sent.payload?.installment.shown_on_profile).toBe(false);
+    expect(sent.payload?.installment.shown_in_profile_sections).toEqual([]);
+  });
+
+  it("opens an existing customers-only draft with the profile channel off", async () => {
+    renderForm(customersDraft, audienceContext);
+
+    expect(postToProfile()).toBeNull();
+    expect(screen.getByRole("button", { name: "Send" })).not.toBeNull();
+
+    await save();
+    expect(sent.payload?.installment.shown_on_profile).toBe(false);
+  });
+
+  it("previews the email rather than a post when the profile channel is off", async () => {
+    renderForm(customersDraft, audienceContext);
+
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+
+    await waitFor(() => expect(sent.payload?.save_action_name).toBe("save_and_preview_email"));
+    expect(sent.payload?.send_preview_email).toBe(true);
+  });
+
+  it("keeps the seller's Everyone setting across an audience round trip", () => {
+    renderForm(null, audienceContext);
+
+    fireEvent.click(screen.getByLabelText("Customers only"));
+    fireEvent.click(screen.getByLabelText("Everyone"));
+
+    expect(postToProfile()).toHaveProperty("checked", true);
+    expect(screen.getByRole("button", { name: "Publish" })).not.toBeNull();
   });
 });
 
