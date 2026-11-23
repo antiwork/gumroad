@@ -8,6 +8,18 @@ describe HomeController do
   before { allow(GithubStarsController).to receive(:cached_count).and_return(1234) }
 
   describe "GET about" do
+    it "names the footer's newsletter controls and social links" do
+      get :about
+
+      document = Nokogiri::HTML(response.body)
+      newsletter = document.at_css('form[action="https://gumroad.com/follow_from_embed_form"]')
+      expect(newsletter.at_css('input[aria-label="Email address"]')&.[]("type")).to eq("email")
+      expect(newsletter.at_css('button[aria-label="Subscribe"]')&.[]("type")).to eq("submit")
+      %w[X YouTube Instagram Facebook Pinterest].each do |destination|
+        expect(document.at_css(%(a[aria-label="Gumroad on #{destination}"] svg))&.[]("aria-hidden")).to eq("true")
+      end
+    end
+
     it "renders the figure held in Redis" do
       $redis.set(RedisKey.prev_week_payout_usd, "424242")
 

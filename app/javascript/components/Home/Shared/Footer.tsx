@@ -36,8 +36,8 @@ const FooterLink = ({
 
 // shrink-0: these anchors wrap bare SVGs, so a flex parent that runs short squeezes them to zero
 // width and the icons vanish silently instead of overflowing.
-const SocialLink = ({ href, children }: { href: string; children: React.ReactNode }) => (
-  <a href={href} className="shrink-0 hover:text-pink">
+const SocialLink = ({ href, label, children }: { href: string; label: string; children: React.ReactNode }) => (
+  <a href={href} aria-label={label} className="shrink-0 hover:text-pink">
     {children}
   </a>
 );
@@ -57,13 +57,14 @@ export const HomeFooter = ({ currencySelector = false }: { currencySelector?: bo
           <form action="https://gumroad.com/follow_from_embed_form" method="post" className="flex gap-1">
             <input name="seller_id" type="hidden" value="6282492303727" />
             <div className="lg:flex-1">
-              <Input name="email" placeholder="Your email address" type="email" />
+              <Input name="email" placeholder="Your email address" type="email" aria-label="Email address" />
             </div>
             <div className="group relative inline-block">
               <div className="absolute inset-0 z-[2] rounded-sm border border-black bg-yellow transition-transform duration-150" />
               <div className="absolute inset-0 z-[1] rounded-sm border border-black bg-red transition-transform duration-150 group-hover:translate-x-2 group-hover:translate-y-2" />
               <button
                 type="submit"
+                aria-label="Subscribe"
                 className="relative z-[3] inline-flex h-12 w-full cursor-pointer items-center justify-center rounded-sm border border-black bg-pink px-3 text-base text-black no-underline transition-all duration-150 group-hover:-translate-x-2 group-hover:-translate-y-2 lg:h-12 lg:w-auto lg:px-6 lg:text-base"
               >
                 →
@@ -114,24 +115,45 @@ export const HomeFooter = ({ currencySelector = false }: { currencySelector?: bo
         */}
         <div className="flex flex-wrap items-center justify-between gap-6">
           <div className="flex grow justify-between gap-6">
-            <SocialLink href="https://x.com/gumroad">
-              <svg width="24" height="24" viewBox="0 0 1200 1227" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <SocialLink href="https://x.com/gumroad" label="Gumroad on X">
+              <svg
+                aria-hidden="true"
+                width="24"
+                height="24"
+                viewBox="0 0 1200 1227"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
                 <path
                   d="M714.163 519.284L1160.89 0H1055.03L667.137 450.887L357.328 0H0L468.492 681.821L0 1226.37H105.866L515.491 750.218L842.672 1226.37H1200L714.137 519.284H714.163ZM569.165 687.828L521.697 619.934L144.011 79.6944H306.615L611.412 515.685L658.88 583.579L1055.08 1150.3H892.476L569.165 687.854V687.828Z"
                   fill="currentColor"
                 />
               </svg>
             </SocialLink>
-            <SocialLink href="https://www.youtube.com/channel/UC6o7H5wr2Cf4ibntYEs4Mcg">
-              <svg width="33" height="25" viewBox="0 0 33 25" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <SocialLink href="https://www.youtube.com/channel/UC6o7H5wr2Cf4ibntYEs4Mcg" label="Gumroad on YouTube">
+              <svg
+                aria-hidden="true"
+                width="33"
+                height="25"
+                viewBox="0 0 33 25"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
                 <path
                   d="M32.2197 5.58439C32.2197 2.77196 30.1507 0.509525 27.5941 0.509525C24.1312 0.347654 20.5995 0.285156 16.9903 0.285156H15.8651C12.2647 0.285156 8.72672 0.347654 5.26378 0.51015C2.71346 0.51015 0.644451 2.78509 0.644451 5.59751C0.488181 7.82183 0.421923 10.0468 0.425673 12.2717C0.419422 14.4966 0.490265 16.7237 0.6382 18.9528C0.6382 21.7652 2.70721 24.0464 5.25753 24.0464C8.89549 24.2151 12.6272 24.2901 16.4214 24.2839C20.2219 24.2964 23.9432 24.2172 27.5853 24.0464C30.1419 24.0464 32.2109 21.7652 32.2109 18.9528C32.361 16.7216 32.4297 14.4966 32.4235 12.2655C32.4376 10.0405 32.3697 7.81349 32.2197 5.58439ZM13.3648 18.4028V6.12187L22.4284 12.2592L13.3648 18.4028Z"
                   fill="currentColor"
                 />
               </svg>
             </SocialLink>
-            <SocialLink href="https://www.instagram.com/gumroad/">
-              <svg width="24" height="25" viewBox="0 0 24 25" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <SocialLink href="https://www.instagram.com/gumroad/" label="Gumroad on Instagram">
+              <svg
+                aria-hidden="true"
+                width="24"
+                height="25"
+                viewBox="0 0 24 25"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
                 <path
                   d="M16.7451 2.28498C18.0171 2.28893 19.2359 2.81703 20.1353 3.75392C21.0347 4.69081 21.5417 5.96037 21.5455 7.28533V17.285C21.5417 18.6099 21.0347 19.8795 20.1353 20.8164C19.2359 21.7533 18.0171 22.2814 16.7451 22.2853H7.14546C5.8735 22.2814 4.65472 21.7533 3.75531 20.8164C2.85589 19.8795 2.34892 18.6099 2.34512 17.285V7.28533C2.34892 5.96037 2.85589 4.69081 3.75531 3.75392C4.65472 2.81703 5.8735 2.28893 7.14546 2.28498H16.7451ZM16.7451 0.285156H7.14546C3.44929 0.285156 0.425293 3.43516 0.425293 7.28533V17.285C0.425293 21.1352 3.44929 24.2852 7.14546 24.2852H16.7451C20.4413 24.2852 23.4653 21.1352 23.4653 17.285V7.28533C23.4653 3.43516 20.4413 0.285156 16.7451 0.285156Z"
                   fill="currentColor"
@@ -142,16 +164,30 @@ export const HomeFooter = ({ currencySelector = false }: { currencySelector?: bo
                 />
               </svg>
             </SocialLink>
-            <SocialLink href="https://www.facebook.com/gumroad">
-              <svg width="14" height="25" viewBox="0 0 14 25" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <SocialLink href="https://www.facebook.com/gumroad" label="Gumroad on Facebook">
+              <svg
+                aria-hidden="true"
+                width="14"
+                height="25"
+                viewBox="0 0 14 25"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
                 <path
                   d="M13.4653 0.285156H9.91988C8.35269 0.285156 6.84969 0.917297 5.74152 2.04252C4.63335 3.16773 4.01079 4.69386 4.01079 6.28516V9.88516H0.465332V14.6852H4.01079V24.2852H8.73806V14.6852H12.2835L13.4653 9.88516H8.73806V6.28516C8.73806 5.9669 8.86257 5.66167 9.08421 5.43663C9.30584 5.21159 9.60644 5.08516 9.91988 5.08516H13.4653V0.285156Z"
                   fill="currentColor"
                 />
               </svg>
             </SocialLink>
-            <SocialLink href="http://pinterest.com/gumroad">
-              <svg width="25" height="25" viewBox="0 0 25 25" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <SocialLink href="http://pinterest.com/gumroad" label="Gumroad on Pinterest">
+              <svg
+                aria-hidden="true"
+                width="25"
+                height="25"
+                viewBox="0 0 25 25"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
                 <path
                   d="M12.468 0.285156C5.83975 0.285156 0.465332 5.65717 0.465332 12.2825C0.465332 17.1939 3.42313 21.4144 7.65086 23.2729C7.61871 22.4374 7.64551 21.4304 7.85984 20.5199C8.09025 19.5451 9.40304 13.9803 9.40304 13.9803C9.40304 13.9803 9.01724 13.2144 9.01724 12.0843C9.01724 10.3061 10.046 8.97786 11.332 8.97786C12.4251 8.97786 12.9503 9.79732 12.9503 10.7775C12.9503 11.8754 12.2483 13.5143 11.8893 15.0354C11.5892 16.3102 12.527 17.3438 13.7862 17.3438C16.0581 17.3438 17.5906 14.4249 17.5906 10.9649C17.5906 8.33514 15.817 6.36951 12.5966 6.36951C8.9583 6.36951 6.68636 9.08498 6.68636 12.1164C6.68636 13.1609 6.99715 13.9 7.4794 14.4677C7.69909 14.7301 7.73124 14.8373 7.65086 15.1372C7.59192 15.3568 7.46332 15.887 7.40438 16.1013C7.32401 16.4066 7.07752 16.5137 6.80425 16.4012C5.12709 15.7156 4.34477 13.8839 4.34477 11.8165C4.34477 8.41013 7.2222 4.32354 12.9235 4.32354C17.5048 4.32354 20.5216 7.63887 20.5216 11.1952C20.5216 15.9031 17.9014 19.4166 14.0434 19.4166C12.7466 19.4166 11.5303 18.715 11.1124 17.9223C11.1124 17.9223 10.4158 20.686 10.2657 21.2216C10.0139 22.1481 9.51557 23.0694 9.06011 23.7924C10.1649 24.1182 11.3108 24.2841 12.4627 24.2852C19.0909 24.2852 24.4653 18.9131 24.4653 12.2878C24.4653 5.66253 19.0963 0.285156 12.468 0.285156Z"
                   fill="currentColor"

@@ -17,7 +17,7 @@
   <div class="absolute inset-0 rounded-sm bg-yellow border border-black transition-transform duration-150 z-2"></div>
   <div class="absolute inset-0 rounded-sm bg-red border border-black transition-transform duration-150 group-hover:translate-x-2 group-hover:translate-y-2 z-1"></div>
   <% if local_assigns[:type] == "submit" %>
-    <%= button_tag type: "submit", class: button_classes do %>
+    <%= button_tag type: "submit", class: button_classes, aria: { label: local_assigns[:aria_label] } do %>
       <%= text %>
     <% end %>
   <% else %>
