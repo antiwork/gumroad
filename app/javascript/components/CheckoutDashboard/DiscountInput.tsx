@@ -25,12 +25,14 @@ export const DiscountInput = React.forwardRef<
     ariaDescribedBy?: string | undefined;
   }
 >(({ discount, setDiscount, currencyCode, currencyCodeSelector, disableFixedAmount, ariaDescribedBy }, ref) => {
+  const amountTypeName = React.useId();
   const fixedAmountFieldset = (
     <Fieldset state={discount.type === "cents" && discount.error ? "danger" : undefined}>
       <div className="grid items-center gap-4 md:grid-cols-[auto_1fr]!">
         <Label>
           <Radio
             checked={discount.type === "cents"}
+            name={amountTypeName}
             onChange={(evt) => {
               if (evt.target.checked) setDiscount({ type: "cents", value: 0 });
             }}
@@ -66,6 +68,7 @@ export const DiscountInput = React.forwardRef<
           <Label>
             <Radio
               checked={discount.type === "percent"}
+              name={amountTypeName}
               onChange={(evt) => {
                 if (evt.target.checked) setDiscount({ type: "percent", value: 0 });
               }}

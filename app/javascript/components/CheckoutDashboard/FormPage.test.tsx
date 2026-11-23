@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -109,5 +109,45 @@ describe("FormPage payment method switches", () => {
 
     expect(switchFor(/offer stripe link at checkout/iu)).toHaveProperty("checked", false);
     expect(switchFor(/show paypal's debit or credit card button/iu)).toHaveProperty("checked", false);
+  });
+});
+
+describe("FormPage radio groups", () => {
+  afterEach(cleanup);
+
+  // Each option used to carry no `name`, so every option was its own native group: Tab stopped
+  // on each of them and the fieldset's options were not announced as one choice set.
+  it("gives each radio set one shared name, and keeps the two sets separate", () => {
+    render(<FormPage {...props(false)} />);
+
+    const groupNamed = (name: string) => screen.getByRole("group", { name });
+    const radiosIn = (name: string) => within(groupNamed(name)).getAllByRole<HTMLInputElement>("radio");
+    // The shared name of a set, failing the test if the options do not all agree on one.
+    const sharedName = (radios: HTMLInputElement[]) => {
+      const names = new Set(radios.map((radio) => radio.name));
+      expect([...names]).toHaveLength(1);
+      return radios[0]?.name ?? "";
+    };
+
+    const discountField = radiosIn("Add discount code field to purchase form");
+    expect(discountField).toHaveLength(2);
+    expect(sharedName(discountField)).not.toBe("");
+
+    const recommendations = radiosIn("Product recommendations during checkout");
+    expect(recommendations).toHaveLength(4);
+
+    // Two sets, two names — a shared name across both would make them one group.
+    expect(sharedName(recommendations)).not.toBe(sharedName(discountField));
+
+    // One choice set still behaves as one: picking an option clears the other.
+    const discountGroup = groupNamed("Add discount code field to purchase form");
+    const never = within(discountGroup).getByLabelText<HTMLInputElement>("Never");
+    const onlyIfAvailable = within(discountGroup).getByLabelText<HTMLInputElement>("Only if a discount is available");
+    expect(never.checked).toBe(true);
+
+    fireEvent.click(onlyIfAvailable);
+
+    expect(onlyIfAvailable.checked).toBe(true);
+    expect(never.checked).toBe(false);
   });
 });

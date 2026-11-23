@@ -48,6 +48,7 @@ export const MoreLikeThis = TiptapNode.create<{ productId: string }>({
 });
 
 const MoreLikeThisNodeView = ({ editor, node, extension, selected, getPos }: NodeViewProps) => {
+  const recommendationName = React.useId();
   const [recommendedProducts, setRecommendedProducts] = React.useState<CardProduct[] | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
   const recommendationType = isRecommendationType(node.attrs.recommendationType)
@@ -104,6 +105,7 @@ const MoreLikeThisNodeView = ({ editor, node, extension, selected, getPos }: Nod
                         <Label>
                           <Radio
                             checked={node.attrs.recommendationType === "own_products"}
+                            name={recommendationName}
                             onChange={() => handleRecommendationTypeChange("own_products")}
                           />
                           Only my products
@@ -113,6 +115,7 @@ const MoreLikeThisNodeView = ({ editor, node, extension, selected, getPos }: Nod
                         <Label>
                           <Radio
                             checked={node.attrs.recommendationType === "directly_affiliated_products"}
+                            name={recommendationName}
                             onChange={() => handleRecommendationTypeChange("directly_affiliated_products")}
                           />
                           My products and affiliated
@@ -122,6 +125,7 @@ const MoreLikeThisNodeView = ({ editor, node, extension, selected, getPos }: Nod
                         <Label>
                           <Radio
                             checked={node.attrs.recommendationType === "gumroad_affiliates_products"}
+                            name={recommendationName}
                             onChange={() => handleRecommendationTypeChange("gumroad_affiliates_products")}
                           />
                           All products via

@@ -350,6 +350,7 @@ const FormPage = ({
               <Label>
                 <Radio
                   checked={displayOfferCodeField}
+                  name={`${uid}-display_offer_code_field`}
                   onChange={(evt) => updateUserData({ display_offer_code_field: evt.target.checked })}
                   disabled={!loggedInUser?.policies.checkout_form.update}
                 />
@@ -358,6 +359,7 @@ const FormPage = ({
               <Label>
                 <Radio
                   checked={!displayOfferCodeField}
+                  name={`${uid}-display_offer_code_field`}
                   onChange={(evt) => updateUserData({ display_offer_code_field: !evt.target.checked })}
                   disabled={!loggedInUser?.policies.checkout_form.update}
                 />
@@ -377,6 +379,7 @@ const FormPage = ({
               <Label>
                 <Radio
                   checked={recommendationType === "no_recommendations"}
+                  name={`${uid}-recommendation_type`}
                   onChange={(evt) => {
                     if (evt.target.checked) updateUserData({ recommendation_type: "no_recommendations" });
                   }}
@@ -386,6 +389,7 @@ const FormPage = ({
               <Label>
                 <Radio
                   checked={recommendationType === "own_products"}
+                  name={`${uid}-recommendation_type`}
                   onChange={(evt) => {
                     if (evt.target.checked) updateUserData({ recommendation_type: "own_products" });
                   }}
@@ -395,6 +399,7 @@ const FormPage = ({
               <Label>
                 <Radio
                   checked={recommendationType === "directly_affiliated_products"}
+                  name={`${uid}-recommendation_type`}
                   onChange={(evt) => {
                     if (evt.target.checked) updateUserData({ recommendation_type: "directly_affiliated_products" });
                   }}
@@ -404,6 +409,7 @@ const FormPage = ({
               <Label>
                 <Radio
                   checked={recommendationType === "gumroad_affiliates_products"}
+                  name={`${uid}-recommendation_type`}
                   onChange={(evt) => {
                     if (evt.target.checked) updateUserData({ recommendation_type: "gumroad_affiliates_products" });
                   }}
