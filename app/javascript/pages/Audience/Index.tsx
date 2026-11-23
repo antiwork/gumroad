@@ -23,12 +23,13 @@ import placeholder from "$assets/images/placeholders/audience.png";
 
 interface AudiencePageProps {
   total_follower_count: number;
+  seller_time_zone: string;
   audience_data?: AudienceDataByDate | null;
 }
 
 function Audience() {
-  const { total_follower_count, audience_data } = cast<AudiencePageProps>(usePage().props);
-  const dateRange = useAnalyticsDateRange();
+  const { total_follower_count, seller_time_zone, audience_data } = cast<AudiencePageProps>(usePage().props);
+  const dateRange = useAnalyticsDateRange(seller_time_zone);
   const startTime = lightFormat(dateRange.from, "yyyy-MM-dd");
   const endTime = lightFormat(dateRange.to, "yyyy-MM-dd");
 
@@ -59,7 +60,7 @@ function Audience() {
               </PopoverContent>
             </Popover>
             <div className="flex-1">
-              <DateRangePicker {...dateRange} />
+              <DateRangePicker {...dateRange} timeZone={seller_time_zone} />
             </div>
           </div>
         ) : null

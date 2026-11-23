@@ -15,6 +15,9 @@ class AudienceController < Sellers::BaseController
 
     render inertia: "Audience/Index", props: {
       total_follower_count: InertiaRails.always { total_follower_count },
+      # The page sends date-only bounds that CreatorAnalytics::Following resolves in the seller's
+      # zone, so the client anchors its default range and presets on that same calendar date.
+      seller_time_zone: current_seller.timezone_id,
       audience_data: InertiaRails.defer do
         if total_follower_count.zero?
           nil
