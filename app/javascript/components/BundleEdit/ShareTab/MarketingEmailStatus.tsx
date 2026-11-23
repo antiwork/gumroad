@@ -42,10 +42,10 @@ export const MarketingEmailStatus = ({
   products = [],
   currencyType = "usd",
 }: MarketingEmailStatusProps) => {
-  // Only show for published bundles with products
-  if (!isPublished || products.length === 0) return null;
-
+  const audienceName = React.useId();
   const [sendToAllCustomers, setSendToAllCustomers] = React.useState(false);
+
+  if (!isPublished || products.length === 0) return null;
   const queryParams = {
     template: "bundle_marketing",
     bundle_product_permalinks: sendToAllCustomers ? undefined : products.map(({ permalink }) => permalink),
@@ -68,13 +68,21 @@ export const MarketingEmailStatus = ({
         <strong>
           Your product bundle is ready. Would you like to send an email about this offer to existing customers?
         </strong>
-        <Fieldset>
+        <Fieldset aria-label="Email audience">
           <Label>
-            <Radio checked={!sendToAllCustomers} onChange={(evt) => setSendToAllCustomers(!evt.target.checked)} />
+            <Radio
+              name={audienceName}
+              checked={!sendToAllCustomers}
+              onChange={(evt) => setSendToAllCustomers(!evt.target.checked)}
+            />
             Customers who have purchased at least one product in the bundle
           </Label>
           <Label>
-            <Radio checked={sendToAllCustomers} onChange={(evt) => setSendToAllCustomers(evt.target.checked)} />
+            <Radio
+              name={audienceName}
+              checked={sendToAllCustomers}
+              onChange={(evt) => setSendToAllCustomers(evt.target.checked)}
+            />
             All customers
           </Label>
         </Fieldset>
