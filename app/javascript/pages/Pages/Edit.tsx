@@ -8,7 +8,11 @@ import { Button, NavigationButton } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { CustomHtmlPreview } from "$app/components/Pages/CustomHtmlPreview";
-import { SearchListingFields, type SeoMaxLengths } from "$app/components/Pages/SearchListingFields";
+import {
+  SearchListingFields,
+  type SeoMaxLengths,
+  type ShareImageSelection,
+} from "$app/components/Pages/SearchListingFields";
 import { PreviewChrome, PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { useSectionImageUploadSettings } from "$app/components/Profile/EditSections";
 import { ImageUploadSettingsContext, RichTextEditor } from "$app/components/RichTextEditor";
@@ -32,6 +36,9 @@ type PageProps = {
     custom_html: boolean;
     seo_title: string;
     seo_description: string;
+    // The seller's storefront share image, null when they have not set one.
+    // Only the profile sends it; a slugged page has no share image.
+    share_image_url: string | null;
     // What the public page shows when the seller leaves a field blank.
     default_seo_title: string;
     default_seo_description: string | null;
@@ -89,6 +96,11 @@ export default function PagesEdit() {
   const [seoDescription, setSeoDescription] = React.useState(page.seo_description);
   const [savedSeoTitle, setSavedSeoTitle] = React.useState(page.seo_title);
   const [savedSeoDescription, setSavedSeoDescription] = React.useState(page.seo_description);
+  const [shareImageUrl, setShareImageUrl] = React.useState(page.share_image_url);
+  // undefined = untouched, null = the saved image is marked for removal, and a
+  // selection is an already-uploaded file waiting for the save.
+  const [shareImageChange, setShareImageChange] = React.useState<ShareImageSelection | null | undefined>(undefined);
+  const [isShareImageUploading, setIsShareImageUploading] = React.useState(false);
   const [previewVersion, setPreviewVersion] = React.useState(0);
   const [isSaving, setIsSaving] = React.useState(false);
   // The toolbar's Insert image item and the paste/drop handlers both read this context and no-op
@@ -104,6 +116,7 @@ export default function PagesEdit() {
     canEdit &&
     (seoTitle !== savedSeoTitle ||
       seoDescription !== savedSeoDescription ||
+      shareImageChange !== undefined ||
       (isContentEditable && (title !== savedTitle || content !== savedContent)));
 
   // Warn before navigating away with unsaved edits. `beforeunload` covers full
@@ -161,20 +174,33 @@ export default function PagesEdit() {
 
   const save = () => {
     // An in-flight image is an <img> with a blob: src, which the sanitizer drops — saving now would
-    // persist the page without it.
-    if (imageUploadSettings.isUploading) {
+    // persist the page without it. An in-flight share image has no signed id to send yet.
+    if (imageUploadSettings.isUploading || isShareImageUploading) {
       showAlert("Please wait for all images to finish uploading before saving.", "warning");
       return;
     }
     setIsSaving(true);
     const seoParams = { seo_title: seoTitle, seo_description: seoDescription };
-    const params = isContentEditable ? { title, content, ...seoParams } : seoParams;
+    // An untouched image sends no key; a removal sends an explicit null, which
+    // is what the server reads as "purge".
+    const shareImageParams =
+      is_profile && shareImageChange !== undefined
+        ? { share_image_signed_blob_id: shareImageChange?.signedId ?? null }
+        : {};
+    const params = isContentEditable
+      ? { title, content, ...seoParams, ...shareImageParams }
+      : { ...seoParams, ...shareImageParams };
     const options = {
       onSuccess: () => {
         setSavedTitle(title);
         setSavedContent(content);
         setSavedSeoTitle(seoTitle);
         setSavedSeoDescription(seoDescription);
+        if (shareImageChange !== undefined) {
+          setShareImageUrl(shareImageChange?.url ?? null);
+          // A file chosen while the save was in flight stays pending.
+          setShareImageChange((current) => (current === shareImageChange ? undefined : current));
+        }
         // Bump the preview frame's cache-busting param so it reloads and shows
         // the page as just saved.
         setPreviewVersion((version) => version + 1);
@@ -255,6 +281,13 @@ export default function PagesEdit() {
       disabled={!canEdit}
       onTitleChange={setSeoTitle}
       onDescriptionChange={setSeoDescription}
+      {...(is_profile
+        ? {
+            shareImageUrl: shareImageChange === undefined ? shareImageUrl : (shareImageChange?.url ?? null),
+            onShareImageChange: setShareImageChange,
+            onShareImageUploadingChange: setIsShareImageUploading,
+          }
+        : {})}
     />
   );
 

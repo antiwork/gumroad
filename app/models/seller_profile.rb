@@ -1,12 +1,16 @@
 # frozen_string_literal: true
 
 class SellerProfile < ApplicationRecord
+  include CdnUrlHelper
+
   FONT_CHOICES = ["ABC Favorit", "Inter", "Domine", "Merriweather", "Roboto Slab", "Roboto Mono"]
   DANGER_COLOR_CHOICES = ["#dc341e", "#9b1c12", "#ffb4ab"]
   # "small" matches Gumroad's stock radius. Checkout also passes these values to Stripe's
   # Appearance API, which cannot read CSS variables, so keep them literal lengths.
   BORDER_RADIUS_CHOICES = { "none" => "0rem", "small" => "0.25rem", "medium" => "0.5rem", "large" => "1rem" }.freeze
   BUTTON_HOVER_OFFSETS = { "lift" => "0.25rem", "none" => "0rem" }.freeze
+  ALLOWED_SHARE_IMAGE_CONTENT_TYPES = ["image/png", "image/jpeg", "image/jpg"].freeze
+  MAXIMUM_SHARE_IMAGE_FILE_SIZE = 5.megabytes
 
   def self.google_fonts_css_source(fonts)
     families = fonts.sort.map { "family=#{_1}:wght@400;600" }.join("&")
@@ -31,6 +35,11 @@ class SellerProfile < ApplicationRecord
   validates :seo_title, length: { maximum: Page::MAX_SEO_TITLE_LENGTH }
   validates :seo_description, length: { maximum: Page::MAX_SEO_DESCRIPTION_LENGTH }
 
+  # The storefront share image, served ahead of the generated subscribe card.
+  # Kept small: every crawl of the profile fetches it.
+  has_one_attached :share_image
+  validate :share_image_is_valid, if: -> { share_image.attached? && share_image.new_record? }
+
   before_validation :normalize_colors
   after_commit :clear_custom_style_cache, if: -> { %w[highlight_color background_color font border_radius button_hover].any? { |prop| send(:"saved_change_to_#{prop}?") } }
 
@@ -48,6 +57,16 @@ class SellerProfile < ApplicationRecord
     section_updated_at = seller.seller_profile_sections.on_profile.maximum(:updated_at)
     tabs = Array(json_data["tabs"]).map { [_1["name"], Array(_1["sections"])] }
     Digest::SHA256.hexdigest([tabs, section_updated_at&.iso8601(6)].to_json)
+  end
+
+  # The share image as a CDN URL, or nil when the seller has not uploaded one.
+  # Deliberately nil rather than a placeholder: `avatar_url` always resolves, so
+  # a caller must be able to tell "no seller image" from "no image at all".
+  def share_image_url
+    cdn_url_for(share_image.url) if share_image.attached?
+  rescue => e
+    Rails.logger.warn("SellerProfile#share_image_url error (#{id}): #{e.class} => #{e.message}")
+    nil
   end
 
   def custom_styles
@@ -193,5 +212,24 @@ class SellerProfile < ApplicationRecord
 
     def clear_custom_style_cache
       Rails.cache.delete custom_style_cache_name
+    end
+
+    def share_image_is_valid
+      # Signed ids of attached blobs reach other users (avatars, commission
+      # files). Re-sending this profile's own blob reuses its attachment, so
+      # this only runs for a blob new to the profile.
+      if share_image.blob.attachments.exists?
+        errors.add(:base, "That image is already used elsewhere. Please upload a new share image.")
+        return
+      end
+
+      if share_image.byte_size > MAXIMUM_SHARE_IMAGE_FILE_SIZE
+        errors.add(:base, "Please upload a share image smaller than #{ActiveSupport::NumberHelper.number_to_human_size(MAXIMUM_SHARE_IMAGE_FILE_SIZE)}.")
+        return
+      end
+
+      unless ALLOWED_SHARE_IMAGE_CONTENT_TYPES.include?(share_image.content_type.to_s.downcase)
+        errors.add(:base, "Please upload a share image in JPG or PNG format.")
+      end
     end
 end

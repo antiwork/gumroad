@@ -1,15 +1,17 @@
 import * as React from "react";
 
+import { ShareImageInput } from "$app/components/Pages/ShareImageInput";
 import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { Textarea } from "$app/components/ui/Textarea";
 
 export type SeoMaxLengths = { title: number; description: number };
+export type ShareImageSelection = { signedId: string; url: string };
 
-// The search title and description for a storefront page or the home page.
-// The listing preview shows what a blank field falls back to, so the seller
-// sees the result of leaving a field empty without reading the hints.
+// The search title, description and share image for a storefront page or the
+// home page. The listing preview shows what a blank field falls back to, so the
+// seller sees the result of leaving a field empty without reading the hints.
 export const SearchListingFields = ({
   url,
   title,
@@ -20,6 +22,9 @@ export const SearchListingFields = ({
   disabled,
   onTitleChange,
   onDescriptionChange,
+  shareImageUrl,
+  onShareImageChange,
+  onShareImageUploadingChange,
 }: {
   url: string;
   title: string;
@@ -30,6 +35,11 @@ export const SearchListingFields = ({
   disabled: boolean;
   onTitleChange: (title: string) => void;
   onDescriptionChange: (description: string) => void;
+  // Only the profile has a share image; a slugged page passes no callback and
+  // the field is not rendered.
+  shareImageUrl?: string | null;
+  onShareImageChange?: (image: ShareImageSelection | null) => void;
+  onShareImageUploadingChange?: (uploading: boolean) => void;
 }) => {
   const uid = React.useId();
   const listingTitle = title.trim() || defaultTitle;
@@ -39,9 +49,7 @@ export const SearchListingFields = ({
     <section id="search-listing" className="grid gap-4" aria-labelledby={`${uid}-heading`}>
       <header className="grid gap-1">
         <h3 id={`${uid}-heading`}>Search and sharing</h3>
-        <p className="text-sm text-muted">
-          Set the SEO title and meta description that search engines and shared links show for this page.
-        </p>
+        <p className="text-sm text-muted">Set what search engines and shared links show for this page.</p>
       </header>
       <div className="grid gap-1 rounded border border-border bg-background p-4" aria-label="Search listing preview">
         <span className="truncate text-sm text-muted">{url.replace(/^https?:\/\//u, "")}</span>
@@ -90,6 +98,14 @@ export const SearchListingFields = ({
         />
         <FieldsetDescription>Also shows in shared links. Leave blank to use the default.</FieldsetDescription>
       </Fieldset>
+      {onShareImageChange ? (
+        <ShareImageInput
+          imageUrl={shareImageUrl ?? null}
+          disabled={disabled}
+          onChange={onShareImageChange}
+          onUploadingChange={onShareImageUploadingChange}
+        />
+      ) : null}
     </section>
   );
 };

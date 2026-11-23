@@ -469,6 +469,81 @@ describe UsersController do
         Nokogiri::HTML.parse(response.body).xpath("//meta[@property='#{property}']/@content").text
       end
 
+      context "when the seller uploaded a storefront share image" do
+        let!(:share_image_seller) { create(:named_seller, :with_subscribe_preview, username: "shareimageseller") }
+
+        before do
+          share_image_seller.seller_profile.share_image.attach(
+            io: File.open(Rails.root.join("spec", "support", "fixtures", "smilie.png")),
+            filename: "smilie.png",
+            content_type: "image/png"
+          )
+          share_image_seller.seller_profile.save!
+          @request.host = share_image_seller.subdomain
+        end
+
+        # The seller picked this image for their profile's previews, so it wins
+        # over the generated card the same way the card wins over the avatar.
+        it "serves it ahead of the generated card on og:image and twitter:image" do
+          get :show, params: { username: share_image_seller.username }
+
+          expect(share_image_seller.seller_profile.share_image_url).to be_present
+          expect(meta_content("og:image")).to eq(share_image_seller.seller_profile.share_image_url)
+          expect(meta_content("twitter:image")).to eq(share_image_seller.seller_profile.share_image_url)
+          expect(meta_content("og:image")).to_not eq(share_image_seller.subscribe_preview_url)
+        end
+
+        it "describes the image with the seller's name and the uploaded type" do
+          get :show, params: { username: share_image_seller.username }
+
+          expect(meta_content("og:image:alt")).to eq(share_image_seller.name_or_username)
+          expect(meta_content("og:image:type")).to eq("image/png")
+        end
+
+        it "serves the image even when the seller has no generated card" do
+          share_image_seller.subscribe_preview.purge
+
+          get :show, params: { username: share_image_seller.username }
+
+          expect(share_image_seller.subscribe_preview_url).to be_nil
+          expect(meta_content("og:image")).to eq(share_image_seller.seller_profile.share_image_url)
+        end
+
+        # The card's dimensions describe the generated PNG, not the seller's own
+        # upload — advertising them here would lie to the crawler.
+        it "does not advertise the generated card's dimensions" do
+          get :show, params: { username: share_image_seller.username }
+
+          expect(meta_content("og:image:width")).to be_empty
+          expect(meta_content("og:image:height")).to be_empty
+        end
+
+        # "Subscribe to ..." describes the generated card, which the seller's own
+        # image replaces, so the title carries their name instead.
+        it "titles the card with the seller's name" do
+          get :show, params: { username: share_image_seller.username }
+
+          expect(meta_content("og:title")).to eq(share_image_seller.name)
+        end
+
+        it "keeps the seller's name as the title when there is no generated card behind the image" do
+          share_image_seller.subscribe_preview.purge
+
+          get :show, params: { username: share_image_seller.username }
+
+          expect(meta_content("og:title")).to eq(share_image_seller.name)
+        end
+
+        it "restores the generated card when the seller removes the image" do
+          share_image_seller.seller_profile.share_image.purge
+
+          get :show, params: { username: share_image_seller.username }
+
+          expect(meta_content("og:image")).to eq(share_image_seller.subscribe_preview_url)
+          expect(meta_content("og:image:width")).to eq(SubscribePreviewGeneratorService::OUTPUT_WIDTH.to_s)
+        end
+      end
+
       context "when the seller has a subscribe preview" do
         let!(:preview_seller) { create(:named_seller, :with_subscribe_preview, username: "previewseller") }
 

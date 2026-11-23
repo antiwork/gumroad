@@ -743,6 +743,12 @@ export const USER_FIELDS: FieldDefinition[] = [
   },
   { name: "url", type: "string", description: "User's Gumroad profile URL" },
   { name: "profile_picture_url", type: "string", description: "URL of the user's profile picture" },
+  {
+    name: "share_image_url",
+    type: "string | null",
+    description:
+      "URL of the seller's storefront share image, shown in link previews of their storefront and its pages. Null when unset, in which case previews use the generated subscribe card or the profile picture. Available with the 'view_profile', 'edit_profile' or 'account' scope.",
+  },
 ];
 
 export const INSTALLMENT_FIELDS: FieldDefinition[] = [

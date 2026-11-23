@@ -81,6 +81,7 @@ import { GetTaxForms, DownloadTaxForm } from "$app/components/ApiDocumentation/E
 import { CreateThumbnail, DeleteThumbnail } from "$app/components/ApiDocumentation/Endpoints/Thumbnails";
 import {
   GetUser,
+  UpdateUser,
   GetUserCustomHtml,
   UpdateUserCustomHtml,
   PreviewUserCustomHtml,
@@ -249,6 +250,7 @@ export default function Api() {
 
               <ApiResource name="User" id="user">
                 <GetUser />
+                <UpdateUser />
                 <GetUserCustomHtml />
                 <UpdateUserCustomHtml />
                 <PreviewUserCustomHtml />

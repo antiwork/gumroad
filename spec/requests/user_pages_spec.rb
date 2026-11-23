@@ -179,6 +179,33 @@ describe "Public serving of seller pages", type: :request do
       )
     end
 
+    # The storefront share image the seller set in Search and sharing. It lives
+    # on the seller profile, so it needs a save of its own.
+    def attach_share_image(user)
+      user.seller_profile.share_image.attach(
+        io: File.open(Rails.root.join("spec", "support", "fixtures", "smilie.png")),
+        filename: "smilie.png",
+        content_type: "image/png"
+      )
+      user.seller_profile.save!
+    end
+
+    it "serves the seller's share image ahead of the generated card" do
+      attach_subscribe_preview(seller)
+      attach_share_image(seller)
+
+      get "http://seller.example.com/vault"
+
+      expect(seller.seller_profile.share_image_url).to be_present
+      share_image_url = ERB::Util.h(seller.seller_profile.share_image_url)
+      expect(response.body).to include(%(<meta property="og:image" content="#{share_image_url}">))
+      expect(response.body).to include(%(<meta property="twitter:card" content="summary_large_image">))
+      expect(response.body).to include(%(<meta property="twitter:image" content="#{share_image_url}">))
+      expect(response.body).to include(%(<meta property="og:image:type" content="image/png">))
+      expect(response.body).not_to include(%(property="og:image:width"))
+      expect(response.body).not_to include(ERB::Util.h(seller.subscribe_preview_url))
+    end
+
     it "serves the seller's subscribe-preview card on og:image and twitter:image" do
       attach_subscribe_preview(seller)
 

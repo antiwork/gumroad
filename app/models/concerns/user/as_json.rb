@@ -22,6 +22,7 @@ module User::AsJson
     if (api_scopes_options(options) & %w[view_profile edit_profile account]).present?
       result[:seo_title] = seller_profile.seo_title
       result[:seo_description] = seller_profile.seo_description
+      result[:share_image_url] = seller_profile.share_image_url
     end
 
     if options[:internal_use]
