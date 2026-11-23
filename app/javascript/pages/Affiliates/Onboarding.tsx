@@ -292,7 +292,7 @@ const ProductRow = ({ product, disabled, onChange }: ProductRowProps) => {
         <Fieldset state={invalidAttrs.has("destination_url") ? "danger" : undefined}>
           <Input
             type="text"
-            aria-label="destination_url"
+            aria-label={`Destination URL for ${product.name}`}
             disabled={disabled || !product.enabled}
             placeholder="https://link.com"
             value={product.destination_url || ""}
