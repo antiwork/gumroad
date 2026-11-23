@@ -41,5 +41,34 @@ describe InstantPayoutsController do
         expect(flash[:alert]).to eq("Error message")
       end
     end
+
+    context "when the date param is not a plain date string" do
+      it "rejects a nested date param without raising" do
+        expect(InstantPayoutsService).not_to receive(:new)
+
+        post :create, params: { date: { "x" => "2026-11-24" } }
+
+        expect(response).to redirect_to(balance_path)
+        expect(flash[:alert]).to eq("Invalid date")
+      end
+
+      it "rejects an array date param without raising" do
+        expect(InstantPayoutsService).not_to receive(:new)
+
+        post :create, params: { date: ["2026-11-24"] }
+
+        expect(response).to redirect_to(balance_path)
+        expect(flash[:alert]).to eq("Invalid date")
+      end
+
+      it "rejects an unparseable date string" do
+        expect(InstantPayoutsService).not_to receive(:new)
+
+        post :create, params: { date: "not-a-date" }
+
+        expect(response).to redirect_to(balance_path)
+        expect(flash[:alert]).to eq("Invalid date")
+      end
+    end
   end
 end
