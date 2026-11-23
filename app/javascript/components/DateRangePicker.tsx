@@ -3,8 +3,6 @@ import {
   endOfMonth,
   endOfQuarter,
   endOfYear,
-  parseISO,
-  startOfDay,
   startOfMonth,
   startOfQuarter,
   startOfYear,
@@ -14,6 +12,8 @@ import {
   subYears,
 } from "date-fns";
 import * as React from "react";
+
+import { calendarDateInTimeZone } from "$app/utils/date";
 
 import { DateInput } from "$app/components/DateInput";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
@@ -47,11 +47,12 @@ export const DateRangePicker = ({
   // Earliest date the caller's backend holds data for — where "All time" starts. Callers that
   // leave it out fall back to the date tracking itself began.
   minDate?: Date;
-  // The backend's own time zone, as an IANA identifier. "All time" ends on today there, since the
+  // The backend's own time zone, as an IANA identifier. Presets use today's date there, since the
   // browser's date can be a day off when the two zones disagree.
   timeZone?: string;
 }) => {
-  const today = new Date();
+  const now = new Date();
+  const today = timeZone ? calendarDateInTimeZone(now, timeZone) : now;
   const uid = React.useId();
   const [isCustom, setIsCustom] = React.useState(false);
   const [open, setOpen] = React.useState(false);
@@ -62,14 +63,7 @@ export const DateRangePicker = ({
     setTo(to);
     setOpen(false);
   };
-  // Both ends follow the backend when the caller supplies them, so "All time" spans exactly what
-  // it will return. Derived here next to `today` rather than passed in, so it stays right on a
-  // dashboard left open past midnight. en-CA formats as YYYY-MM-DD. An account cannot be created
-  // after its own today, so this cannot invert.
   const allTimeStart = minDate ?? PRODUCT_EVENT_TRACKING_STARTED_DATE;
-  const allTimeEnd = timeZone
-    ? startOfDay(parseISO(new Intl.DateTimeFormat("en-CA", { timeZone }).format(today)))
-    : today;
   const presets = [
     { label: "Today", from: today, to: today },
     { label: "Last 7 days", from: subDays(today, LAST_7_DAYS_START_OFFSET), to: today },
@@ -97,7 +91,7 @@ export const DateRangePicker = ({
       from: startOfYear(subYears(today, 1)),
       to: endOfYear(subYears(today, 1)),
     },
-    { label: "All time", from: allTimeStart, to: allTimeEnd },
+    { label: "All time", from: allTimeStart, to: today },
   ];
   return (
     <Popover

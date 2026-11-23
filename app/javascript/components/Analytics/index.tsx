@@ -174,7 +174,7 @@ const Analytics = ({
   );
   const [aggregateBy, setAggregateBy] = React.useState<"hourly" | "daily" | "monthly">("daily");
   const minDate = React.useMemo(() => startOfDay(parseISO(earliest_date)), [earliest_date]);
-  const dateRange = useAnalyticsDateRange();
+  const dateRange = useAnalyticsDateRange(seller_time_zone);
   const { locale } = useUserAgentInfo();
   // Hourly buckets are only available for short ranges (the backend rejects wider
   // ones). Compare calendar days, not exact times: the picked dates carry a
