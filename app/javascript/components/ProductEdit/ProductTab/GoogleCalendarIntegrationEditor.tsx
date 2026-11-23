@@ -33,6 +33,7 @@ export const GoogleCalendarIntegrationEditor = ({
 }) => {
   const [isEnabled, setIsEnabled] = React.useState(!!integration);
   const [isLoading, setIsLoading] = React.useState(false);
+  const connectSequence = React.useRef(0);
   const [calendars, setCalendars] = React.useState<{ id: string; summary: string }[]>(
     integration?.integration_details.calendar_id
       ? [{ id: integration.integration_details.calendar_id, summary: integration.integration_details.calendar_summary }]
@@ -40,6 +41,13 @@ export const GoogleCalendarIntegrationEditor = ({
   );
 
   const { updateProduct, googleClientId } = useProductEditContext();
+
+  React.useEffect(
+    () => () => {
+      connectSequence.current += 1;
+    },
+    [],
+  );
 
   React.useEffect(() => {
     if (integration?.integration_details) {
@@ -58,14 +66,19 @@ export const GoogleCalendarIntegrationEditor = ({
   }, [integration]);
 
   const handleConnectGoogleAccount = () => {
+    const attempt = ++connectSequence.current;
+    const isCurrent = () => attempt === connectSequence.current;
     setIsLoading(true);
     const oauthPopup = window.open(getOAuthUrl(googleClientId), "google_calendar", "popup=yes");
     startOauthRedirectChecker({
       oauthPopup,
       onSuccess: async (code) => {
+        if (!isCurrent()) return;
         try {
           const { accessToken, refreshToken, email } = await fetchAccountInfo(code);
+          if (!isCurrent()) return;
           const calendarList = await fetchCalendarList(accessToken, refreshToken);
+          if (!isCurrent()) return;
           setCalendars(calendarList);
           if (calendarList.length > 0) {
             onChange({
@@ -79,17 +92,21 @@ export const GoogleCalendarIntegrationEditor = ({
             });
           }
         } catch (e) {
+          if (!isCurrent()) return;
           assertResponseError(e);
           showAlert("Could not connect to your Google Calendar account, please try again.", "error");
         } finally {
-          setIsLoading(false);
+          if (isCurrent()) setIsLoading(false);
         }
       },
       onError: () => {
+        if (!isCurrent()) return;
         showAlert("Could not connect to your Google Calendar account, please try again.", "error");
         setIsLoading(false);
       },
-      onPopupClose: () => setIsLoading(false),
+      onPopupClose: () => {
+        if (isCurrent()) setIsLoading(false);
+      },
     });
   };
 
@@ -108,6 +125,8 @@ export const GoogleCalendarIntegrationEditor = ({
           setEnabledForOptions(true);
           handleConnectGoogleAccount();
         } else {
+          connectSequence.current += 1;
+          setIsLoading(false);
           onChange(null);
           setIsEnabled(false);
           setEnabledForOptions(false);
