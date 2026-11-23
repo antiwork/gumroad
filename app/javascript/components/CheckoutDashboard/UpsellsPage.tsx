@@ -772,6 +772,7 @@ const Form = ({
               <Label>
                 <Radio
                   checked={type === "cross-sell"}
+                  name={`${uid}-offer_type`}
                   onChange={(evt) => {
                     if (evt.target.checked) setType("cross-sell");
                   }}
@@ -781,6 +782,7 @@ const Form = ({
               <Label>
                 <Radio
                   checked={type === "replacement-cross-sell"}
+                  name={`${uid}-offer_type`}
                   onChange={(evt) => {
                     if (evt.target.checked) setType("replacement-cross-sell");
                   }}
@@ -790,6 +792,7 @@ const Form = ({
               <Label>
                 <Radio
                   checked={type === "upsell"}
+                  name={`${uid}-offer_type`}
                   onChange={(evt) => {
                     if (evt.target.checked) setType("upsell");
                   }}

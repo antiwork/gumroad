@@ -1088,6 +1088,7 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
                       <Radio
                         wrapperClassName="ml-auto"
                         id={`${uid}-recipient_everyone`}
+                        name={`${uid}-recipient_audience`}
                         checked={audienceType === "everyone"}
                         disabled={isPublished}
                         onChange={() => setAudienceType("everyone")}
@@ -1099,6 +1100,7 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
                         <Radio
                           wrapperClassName="ml-auto"
                           id={`${uid}-recipient_followers_only`}
+                          name={`${uid}-recipient_audience`}
                           checked={audienceType === "followers"}
                           disabled={isPublished}
                           onChange={() => setAudienceType("followers")}
@@ -1111,6 +1113,7 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
                         <Radio
                           wrapperClassName="ml-auto"
                           id={`${uid}-recipient_customers_only`}
+                          name={`${uid}-recipient_audience`}
                           checked={audienceType === "customers"}
                           disabled={isPublished}
                           onChange={() => setAudienceType("customers")}
@@ -1123,6 +1126,7 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
                         <Radio
                           wrapperClassName="ml-auto"
                           id={`${uid}-recipient_affiliates_only`}
+                          name={`${uid}-recipient_audience`}
                           checked={audienceType === "affiliates"}
                           disabled={isPublished}
                           onChange={() => setAudienceType("affiliates")}

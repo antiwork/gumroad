@@ -258,6 +258,7 @@ function DiscoverIndex() {
   // the implicit curated default — used to keep the SEO title suffix off a page the user
   // explicitly navigated to with `?sort=curated`, even though that equals the default value.
   const sortWasExplicitRef = React.useRef(initialParsed.sortWasExplicit);
+  const ratingFilterName = React.useId();
 
   const [state, dispatch] = useSearchReducer({
     params: addInitialOffset(initialParsed.params),
@@ -532,6 +533,7 @@ function DiscoverIndex() {
                               wrapperClassName="ml-auto"
                               value={number}
                               aria-label={`${number} ${number === 1 ? "star" : "stars"} and up`}
+                              name={ratingFilterName}
                               checked={number === state.params.rating}
                               readOnly
                               onClick={() =>
