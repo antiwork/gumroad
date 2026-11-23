@@ -111,6 +111,7 @@ export const AffiliateForm = ({
             <Fieldset state={errors["affiliate.destination_url"] ? "danger" : undefined}>
               <Input
                 type="url"
+                aria-label="Destination URL for all products"
                 value={data.destination_url || ""}
                 placeholder="https://link.com"
                 onChange={(e) => onUpdateDestinationUrl(e.target.value)}
@@ -153,6 +154,7 @@ export const AffiliateForm = ({
               <Input
                 type="text"
                 placeholder="https://link.com"
+                aria-label={`Destination URL for ${product.name}`}
                 value={product.destination_url || ""}
                 onChange={(e) => onUpdateProduct(product.id, { destination_url: e.target.value })}
                 disabled={processing || !product.enabled}
