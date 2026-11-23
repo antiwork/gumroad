@@ -82,8 +82,10 @@ export const CircleIntegrationEditor = ({
     integration ? parseInt(integration.integration_details.space_group_id, 10) : null,
   );
 
+  // The switch is authoritative: the dropdown stays reachable while it is off, so a selection made
+  // there must not put back the integration the seller turned off.
   React.useEffect(() => {
-    if (!apiKey || !selectedCommunityId || !selectedSpaceGroupId) return;
+    if (!isEnabled || !apiKey || !selectedCommunityId || !selectedSpaceGroupId) return;
     onChange({
       name: "circle",
       api_key: apiKey,
@@ -93,7 +95,7 @@ export const CircleIntegrationEditor = ({
         space_group_id: selectedSpaceGroupId.toString(),
       },
     });
-  }, [selectedSpaceGroupId]);
+  }, [isEnabled, selectedSpaceGroupId]);
 
   const setEnabledForOptions = (enabled: boolean) =>
     updateProduct((product) => {
@@ -186,7 +188,7 @@ export const CircleIntegrationEditor = ({
                     value={selectedSpaceGroupId ?? "select-space-group"}
                     onChange={(ev) => {
                       setSelectedSpaceGroupId(parseInt(ev.target.value, 10));
-                      setEnabledForOptions(true);
+                      if (isEnabled) setEnabledForOptions(true);
                     }}
                   >
                     <option value="select-space-group" disabled>
