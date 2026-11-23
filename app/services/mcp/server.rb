@@ -536,6 +536,7 @@ module Mcp
                  "limit" => { type: "integer", description: "Max payouts to return (1-50, default 10)." },
                  "cursor" => { type: "string", description: "next_cursor from the previous page." }
                }, read_only: true),
+          tool("get_balance", "The creator's unpaid balance and an estimate of the next payout: its date and amount, from the same payout rules as the Payouts page. Shows whether payouts are paused and why no estimate is available. An estimate, not a promise: a payout can still be held, delayed or fail. Use list_payouts for payouts already made.", {}, read_only: true),
           tool("search_products", "Search Gumroad's catalogue, not just the connected creator's own products. These are the same results the discover page shows. Use it when someone wants to see what exists in a topic, compare prices, or find something to learn a skill from. Each URL carries the MCP referrer, so a visit or purchase that starts from this result is distinguishable from the creator's own traffic.", {
                  "query" => { type: "string", description: "What to search for, e.g. \"learn to draw\" or \"tax spreadsheet\"." },
                  "limit" => { type: "integer", description: "Max products to return (1-#{SEARCH_MAX_LIMIT}, default #{SEARCH_DEFAULT_LIMIT})." }
@@ -1562,6 +1563,29 @@ module Mcp
             }
           end,
           next_cursor:
+        }.compact
+      end
+
+      # Read-only: no payout is created or changed. The estimate is withheld while payouts are
+      # paused, because the schedule would otherwise name a date nothing is going to happen on.
+      def tool_get_balance(_args)
+        require_scopes!(:view_payouts, :account)
+        paused = user.payouts_paused?
+        minimum = user.minimum_payout_amount_cents
+        next_date = user.next_payout_date unless paused
+
+        {
+          currency: "usd",
+          unpaid_balance_cents: user.unpaid_balance_cents,
+          payouts_status: user.payouts_status,
+          payouts_paused_by: user.payouts_paused_by_source,
+          minimum_payout_cents: minimum,
+          next_payout: next_date && {
+            estimated_date: next_date.iso8601,
+            estimated_amount_cents: user.payout_amount_for_payout_date(next_date)
+          },
+          next_payout_unavailable_reason: (paused ? "payouts_paused" : "below_minimum_balance" if next_date.nil?),
+          note: "Estimates only; a payout is not guaranteed."
         }.compact
       end
 
