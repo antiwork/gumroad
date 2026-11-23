@@ -67,6 +67,8 @@ const CodeBlockComponent = ({ node, updateAttributes, editor }: NodeViewProps) =
       <div style={{ width: "fit-content", float: "right" }}>
         {isEditable ? (
           <Select
+            aria-label="Code language"
+            contentEditable={false}
             onChange={(e) => updateAttributes({ language: e.target.value })}
             defaultValue={language || "plaintext"}
             style={{
