@@ -1,4 +1,8 @@
 import { formatDistanceToNow, parseISO } from "date-fns";
+import { formatInTimeZone } from "date-fns-tz";
+
+export const calendarDateInTimeZone = (date: Date, timeZone: string): Date =>
+  parseISO(formatInTimeZone(date, timeZone, "yyyy-MM-dd"));
 
 export const formatDate = (
   date: Date,

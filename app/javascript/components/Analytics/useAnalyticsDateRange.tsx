@@ -2,9 +2,11 @@ import { router } from "@inertiajs/react";
 import { lightFormat, parseISO, subMonths } from "date-fns";
 import * as React from "react";
 
+import { calendarDateInTimeZone } from "$app/utils/date";
+
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
-export const useAnalyticsDateRange = () => {
+export const useAnalyticsDateRange = (timeZone?: string) => {
   const location = useOriginalLocation();
   const url = new URL(location);
 
@@ -15,9 +17,13 @@ export const useAnalyticsDateRange = () => {
     return isNaN(parsed.getTime()) ? null : parsed;
   };
 
-  const [from, setFrom] = React.useState(() => tryParseDateParam("from") ?? subMonths(new Date(), 1));
+  const today = () => {
+    const now = new Date();
+    return timeZone ? calendarDateInTimeZone(now, timeZone) : now;
+  };
+  const [from, setFrom] = React.useState(() => tryParseDateParam("from") ?? subMonths(today(), 1));
   const [to, setTo] = React.useState(() => {
-    const value = tryParseDateParam("to") ?? new Date();
+    const value = tryParseDateParam("to") ?? today();
     return value < from ? from : value;
   });
 
