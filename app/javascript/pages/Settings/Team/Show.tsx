@@ -337,6 +337,7 @@ const TeamMembersSection = ({
                 <div className="flex items-center gap-2">
                   <Select
                     instanceId={memberInfo.id}
+                    aria-label={`Role for ${memberInfo.email}`}
                     options={memberInfo.options}
                     onChange={(newOption) => {
                       if (newOption !== null) {
