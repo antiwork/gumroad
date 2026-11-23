@@ -23,6 +23,15 @@ describe AudienceController, inertia: true do
       expect(inertia.props[:audience_data]).to be_nil
     end
 
+    it "passes the seller's IANA time zone so the client anchors its date range there" do
+      seller.update!(timezone: "Pacific Time (US & Canada)")
+
+      get :index
+
+      expect(response).to be_successful
+      expect(inertia.props[:seller_time_zone]).to eq("America/Los_Angeles")
+    end
+
     it "renders Inertia component with correct follower count and deferred audience data" do
       create(:active_follower, user: seller)
 
