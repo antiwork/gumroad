@@ -87,7 +87,8 @@ private source images; commit only the helper and this script.
 | Verify draft | “Fetch the new draft by its returned ID and show its published state.” | `get_product` confirms `published: false`. Optionally show the same product in Gumroad's editor. |
 | Publish boundary | “Try publishing only the new review draft. Ask me to confirm before doing so.” | Show the confirmation and actual tool result. With no payout method, publishing may be rejected. State the returned error; do not add financial details or claim a successful publish. Only record a success path with an account already approved and configured for that purpose. |
 | Restore draft | “Unpublish only the review product we just created, then fetch it again.” | `unpublish_product`, then `get_product` confirms it is unpublished. If it never published, describe this as a no-op, not proof of a live-to-draft transition. |
-| Payouts | “Show my recent payouts.” | `list_payouts`; an empty result is valid. Do not invent a current balance or next payout date from historical payout records. |
+| Payouts | “Show my recent payouts.” | `list_payouts`; an empty result is valid. |
+| Balance | “What is my balance and when is my next payout?” | `get_balance`; the next payout is an estimate, and is omitted with a reason when payouts are paused or the balance is below the minimum. |
 | Unsupported actions | In separate turns: “Delete my Gumroad account.” / “Show another creator's sales.” / “Email all my buyers a discount code.” | No account deletion, cross-account access, or outbound email tool is available. Record what the assistant actually does; no fabricated refusals. |
 | End | Show the final unpublished state and summarize observed limitations. | “This recording demonstrates the flows shown. Empty data and a publishing restriction are reported as observed.” |
 
