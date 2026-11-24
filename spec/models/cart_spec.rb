@@ -292,14 +292,15 @@ describe Cart do
     end
 
     it "finds owned products across slices of the product-id IN list" do
-      product = create(:product)
+      owned_by_email, owned_by_purchaser, not_owned = create_list(:product, 3)
       buyer = create(:user)
       cart = create(:cart, user: buyer)
-      create(:cart_product, cart:, product:)
-      create(:purchase, link: product, email: buyer.email, purchaser: buyer)
+      [owned_by_email, owned_by_purchaser, not_owned].each { create(:cart_product, cart:, product: _1) }
+      create(:purchase, link: owned_by_email, email: buyer.email, purchaser: nil)
+      create(:purchase, link: owned_by_purchaser, email: "other@example.com", purchaser: buyer)
       stub_const("Cart::PURCHASE_LOOKUP_IN_LIST_BATCH_SIZE", 1)
 
-      expect(Cart.purchased_cart_products_by_cart_id([cart.reload])[cart.id].map(&:product_id)).to eq([product.id])
+      expect(Cart.purchased_cart_products_by_cart_id([cart.reload])[cart.id].map(&:product_id)).to contain_exactly(owned_by_email.id, owned_by_purchaser.id)
     end
 
     it "reads each cart's user from the preload instead of querying per cart" do
