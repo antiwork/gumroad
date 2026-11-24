@@ -387,7 +387,7 @@ class InstallmentTest < ActiveSupport::TestCase
     HTML
 
     assert_equal(%(<p>hello, <code>world</code>!</p>
-<pre style="white-space: revert; overflow: auto; border: 1px solid currentColor; border-radius: 4px; background-color: #fff;"><code style="max-width: unset; border-width: 0; width: 100vw; background-color: #fff;">// bad
+<pre><code>// bad
 var a = 1;
 var b = 2;
 
@@ -395,12 +395,12 @@ var b = 2;
 const a = 1;
 const b = 2;</code></pre>
 <p>Ruby code:</p>
-<pre style="white-space: revert; overflow: auto; border: 1px solid currentColor; border-radius: 4px; background-color: #fff;"><code style="max-width: unset; border-width: 0; width: 100vw; background-color: #fff;"><span style="color: #9d0006">def</span> <span style="color: #282828;background-color: #fff">hello_world</span>
-  <span style="color: #282828;background-color: #fff">puts</span> <span style="color: #79740e;font-style: italic">"Hello, World!"</span>
+<pre><code><span style="color: #9d0006">def</span> <span style="color: #282828;background-color: #f8f8f5">hello_world</span>
+  <span style="color: #282828;background-color: #f8f8f5">puts</span> <span style="color: #79740e;font-style: italic">"Hello, World!"</span>
 <span style="color: #9d0006">end</span></code></pre>
 <p>TypeScript code:</p>
-<pre style="white-space: revert; overflow: auto; border: 1px solid currentColor; border-radius: 4px; background-color: #fff;"><code style="max-width: unset; border-width: 0; width: 100vw; background-color: #fff;"><span style="color: #af3a03">function</span> <span style="color: #282828;background-color: #fff">greet</span><span style="color: #282828">(</span><span style="color: #282828;background-color: #fff">name</span><span style="color: #282828">:</span> <span style="color: #9d0006">string</span><span style="color: #282828">):</span> <span style="color: #9d0006">void</span> <span style="color: #282828">{</span>
-  <span style="color: #282828;background-color: #fff">console</span><span style="color: #282828">.</span><span style="color: #282828;background-color: #fff">log</span><span style="color: #282828">(</span><span style="color: #79740e;font-style: italic">`Hello, </span><span style="color: #282828">${</span><span style="color: #282828;background-color: #fff">name</span><span style="color: #282828">}</span><span style="color: #79740e;font-style: italic">!`</span><span style="color: #282828">);</span>
+<pre><code><span style="color: #af3a03">function</span> <span style="color: #282828;background-color: #f8f8f5">greet</span><span style="color: #282828">(</span><span style="color: #282828;background-color: #f8f8f5">name</span><span style="color: #282828">:</span> <span style="color: #9d0006">string</span><span style="color: #282828">):</span> <span style="color: #9d0006">void</span> <span style="color: #282828">{</span>
+  <span style="color: #282828;background-color: #f8f8f5">console</span><span style="color: #282828">.</span><span style="color: #282828;background-color: #f8f8f5">log</span><span style="color: #282828">(</span><span style="color: #79740e;font-style: italic">`Hello, </span><span style="color: #282828">${</span><span style="color: #282828;background-color: #f8f8f5">name</span><span style="color: #282828">}</span><span style="color: #79740e;font-style: italic">!`</span><span style="color: #282828">);</span>
 <span style="color: #282828">}</span></code></pre>
 <p>Bye!</p>
 ), @installment.message_with_inline_syntax_highlighting_and_upsells)
@@ -417,23 +417,20 @@ const b = 2;</code></pre>
     HTML
 
     assert_equal(%(<p>Check out these products:</p>
-<div class="item">
-  <div class="product-checkout-cell">
-    <div class="figure">
-        <img alt="The Works of Edgar Gumstein" src="/images/native_types/thumbnails/digital.png">
-    </div>
-    <div class="section">
-      <div class="content">
-        <div class="section">
-          <h4><a href="http://app.test.gumroad.com:31337/checkout?accepted_offer_id=#{CGI.escape(upsell.external_id)}&amp;product=#{product.unique_permalink}">The Works of Edgar Gumstein</a></h4>
-        </div>
-        <div class="section">
-            <s style="display: inline;">$10</s>
-          $8
-        </div>
-      </div>
-    </div>
-  </div>
+<div class="card">
+  <table class="product" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+  <tr>
+      <td class="product-thumbnail" width="64">
+        <a target="_blank" href="http://app.test.gumroad.com:31337/checkout?accepted_offer_id=#{CGI.escape(upsell.external_id)}&amp;product=#{product.unique_permalink}"><img alt="The Works of Edgar Gumstein" width="64" height="64" src="/images/native_types/thumbnails/digital.png"></a>
+      </td>
+    <td class="product-info">
+      <h4 class="product-name"><a target="_blank" href="http://app.test.gumroad.com:31337/checkout?accepted_offer_id=#{CGI.escape(upsell.external_id)}&amp;product=#{product.unique_permalink}">The Works of Edgar Gumstein</a></h4>
+    </td>
+      <td class="product-price">
+<s>$10</s> $8</td>
+  </tr>
+</table>
+
 </div>
 
 <p>Great deals!</p>
