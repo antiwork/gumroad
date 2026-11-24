@@ -5,7 +5,11 @@ require "shared_examples/authorize_called"
 require "shared_examples/creator_dashboard_page"
 
 describe "Analytics date range", :js, :sidekiq_inline, type: :system do
-  let(:seller) { create(:user, created_at: Date.new(2023, 1, 1)) }
+  # Presets are anchored on the seller's calendar date (the Analytics page derives "today" from the
+  # seller's time zone), so the spec has to measure the same zone. The factory default is
+  # "Pacific Time (US & Canada)", which is still the previous day between 00:00 and 08:00 UTC —
+  # exactly when CI runs — so pin the seller to UTC and keep the date math aligned.
+  let(:seller) { create(:user, timezone: "UTC", created_at: Date.new(2023, 1, 1)) }
   let(:test_date) { Date.today }
 
   include_context "with switching account to user as admin for seller"
