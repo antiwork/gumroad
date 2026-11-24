@@ -289,6 +289,13 @@ describe AudienceMember::Searchable, :freeze_time do
       expect_filter_count(5, not_purchased_since: 1.minute.from_now.iso8601)
     end
 
+    it "applies not_purchased_since at the seller's midnight when the cutoff carries an offset" do
+      create_member(purchases: [{ "product_id" => 1, "created_at" => "2026-11-20T07:59:59Z" }])
+      create_member(purchases: [{ "product_id" => 1, "created_at" => "2026-11-20T08:00:00Z" }])
+
+      expect_filter_count(1, not_purchased_since: "2026-11-20T00:00:00-08:00")
+    end
+
     it "counts by type-specific creation dates" do
       create_member(follower: { "created_at" => 10.days.ago.iso8601 }, purchases: [{ "product_id" => 1, "created_at" => 3.days.ago.iso8601 }])
       create_member(follower: { "created_at" => 3.days.ago.iso8601 }, purchases: [{ "product_id" => 1, "created_at" => 10.days.ago.iso8601 }])

@@ -659,8 +659,8 @@ describe('EmailForm "Has not yet bought"', () => {
   it("sends the purchased-since exclusion in the recipient count and the save payload", async () => {
     renderForm({ ...draft, not_purchased_since: "2026-11-20" }, audienceContext);
 
-    const input = screen.getByLabelText("Exclude customers who purchased since");
-    expect((input as HTMLInputElement).value).toBe("2026-11-20");
+    const input = screen.getByLabelText<HTMLInputElement>("Exclude customers who purchased since");
+    expect(input.value).toBe("2026-11-20");
     fireEvent.change(input, { target: { value: "2026-11-22" } });
 
     await waitFor(() =>
