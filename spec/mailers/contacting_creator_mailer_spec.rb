@@ -1235,6 +1235,7 @@ describe ContactingCreatorMailer do
         link = Nokogiri::HTML(body).at_xpath("//th[starts-with(normalize-space(), \"Buyer's\")]/ancestor::tr[1]//a")
 
         expect(link).to be_present
+        expect(link.text).to eq("View receipt")
         expect(URI(link["href"]).path).to eq(receipt_location(purchase))
         expect(URI(link["href"]).query).to be_nil
         expect(body).not_to include(purchase.url_redirect.token)

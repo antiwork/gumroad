@@ -1,9 +1,12 @@
 <%# locals: item_info:, button_style: nil %>
 <% item_props = item_info.props %>
 <% seller = item_props.dig(:product, :seller) %>
+<%# The seller-branded header already carries this avatar and name. %>
 <% byline = capture do %>
-  <%= link_to(image_tag(seller[:avatar_url], alt: "Avatar of #{seller[:name]}", class: "avatar", width: 24, height: 24), seller[:profile_url], target: "_blank") %>
-  <%= link_to(seller[:name], seller[:profile_url], target: "_blank") %>
+  <% if @email_brand.blank? %>
+    <%= link_to(image_tag(seller[:avatar_url], alt: "Avatar of #{seller[:name]}", class: "avatar", width: 24, height: 24), seller[:profile_url], target: "_blank") %>
+    <%= link_to(seller[:name], seller[:profile_url], target: "_blank") %>
+  <% end %>
 <% end %>
 <%= render("shared/mailers/product", product: item_props[:product], byline:) %>
 

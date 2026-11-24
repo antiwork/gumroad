@@ -223,7 +223,7 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
 
     assert_includes body, "United States 1 1 $-0.09"
     assert_equal "Signed-net fixture", product_row.at_css("h4.product-name").text.strip
-    assert_equal({ "Views" => "1", "Sales" => "1", "Total" => "-0.09" }, product_stats(product_row))
+    assert_equal "1 view · 1 sale · $-0.09", product_stats(product_row)
     assert_includes body, "Romania 1 1 $1.2K"
     assert_includes body, "Canada 1 1 $1"
     assert_includes body, "Elsewhere 0 0 $0"
@@ -247,7 +247,7 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
     assert_includes body, "United States 1 1 €0.89"
     assert_includes body, "You earned a total of €0.89"
     assert_equal "Native-currency fixture", product_row.at_css("h4.product-name").text.strip
-    assert_equal({ "Views" => "1", "Sales" => "1", "Total" => "0.99" }, product_stats(product_row))
+    assert_equal "1 view · 1 sale · $0.99", product_stats(product_row)
   end
 
   test "perform renders the AI-generated buy list" do
@@ -459,9 +459,8 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
       )
     end
 
-    # A top product's icon stats, keyed by the icon's alt text.
     def product_stats(product_row)
-      product_row.css(".product-stat").to_h { |stat| [stat.at_css("img")["alt"], stat.text.strip] }
+      product_row.at_css(".product-byline").text.squish
     end
 
     # The download link for the seller's annual report. Asserted against the

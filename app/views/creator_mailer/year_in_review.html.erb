@@ -48,18 +48,11 @@
     <% @analytics_data[:top_selling_products].each do |product| %>
       <% views, sales, total = product[:stats] %>
       <% byline = capture do %>
-        <span class="product-stat">
-          <%= image_tag(image_url("email/eye-fill.png"), alt: "Views", width: 14, height: 14) %>
-          <%= number_to_si(views) %>
-        </span>
-        <span class="product-stat">
-          <%= image_tag(image_url("email/cart3-fill.png"), alt: "Sales", width: 14, height: 14) %>
-          <%= number_to_si(sales) %>
-        </span>
-        <span class="product-stat">
-          <%= image_tag(image_url("email/solid-currency-dollar.png"), alt: "Total", width: 14, height: 14) %>
-          <%= total.abs < 1 ? Money.from_amount(total, Currency::USD).format(no_cents_if_whole: true, symbol: false) : number_to_si(total) %>
-        </span>
+        <span class="nowrap"><%= number_to_si(views) %> <%= "view".pluralize(views) %></span>
+        ·
+        <span class="nowrap"><%= number_to_si(sales) %> <%= "sale".pluralize(sales) %></span>
+        ·
+        <span class="nowrap"><%= total.abs < 1 ? Money.from_amount(total, Currency::USD).format(no_cents_if_whole: true) : "$#{number_to_si(total)}" %></span>
       <% end %>
       <%= render("shared/mailers/product", product:, byline:) %>
     <% end %>

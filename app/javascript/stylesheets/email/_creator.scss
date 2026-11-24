@@ -9,18 +9,6 @@
     margin: 0 0 $gap-block;
   }
 
-  // Year in review: icon stats in a product row's byline.
-  .product-stat {
-    margin-right: 12px;
-    white-space: nowrap;
-  }
-
-  .product-stat img {
-    width: 14px;
-    height: 14px;
-    vertical-align: -2px;
-  }
-
   // A two-message exchange: <table class="chat" role="presentation"><tr>
   //   <td class="chat-avatar"><img class="avatar"></td><td class="chat-message">…
   .chat-avatar {

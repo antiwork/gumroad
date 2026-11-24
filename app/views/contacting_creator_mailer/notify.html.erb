@@ -137,8 +137,8 @@
     <% end %>
     <% if @buyer_receipt_link.present? %>
       <tr>
-        <th>Buyer's receipt link</th>
-        <td><%= link_to @buyer_receipt_link, @buyer_receipt_link %></td>
+        <th>Buyer's receipt</th>
+        <td><%= link_to "View receipt", @buyer_receipt_link %></td>
       </tr>
     <% end %>
     <% if @purchase.try(:is_gift_sender_purchase) %>

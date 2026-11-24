@@ -880,6 +880,10 @@ describe CustomerMailer do
             expect(powered_by.at_css("img")["alt"]).to eq("Gumroad")
           end
 
+          it "leaves the seller out of the product row, since the header already names them" do
+            expect(html.at_css("table.product .product-byline")).to be_nil
+          end
+
           it "keeps a border visible on a button whose accent matches the card" do
             seller.seller_profile.update!(highlight_color: "#ffffff")
 
@@ -898,6 +902,7 @@ describe CustomerMailer do
             expect(header.at_css("img")["alt"]).to eq("Gumroad")
             expect(header.text).not_to include("Maya Studio")
             expect(footer.text).not_to include("Powered by")
+            expect(html.at_css("table.product .product-byline").text.strip).to eq("Maya Studio")
 
             expect(button.text).to eq("View content")
             expect(button["style"]).to eq("background-color: #0057b8; color: #ffffff; border-color: #0057b8;")
