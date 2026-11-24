@@ -1,4 +1,5 @@
-<div>
-  <img src="<%= seller.avatar_url %>" class="user-avatar header-badge" style="width: 3em;">
-  <h2 style="text-align: center;"><%= subject %></h2>
+<%# locals: user (whose avatar leads the email), subject %>
+<div class="hero">
+  <img class="avatar large" src="<%= user.avatar_url %>" alt="" width="56" height="56">
+  <h2><%= subject %></h2>
 </div>

@@ -1,0 +1,22 @@
+<%# locals: product: { name:, url: nil, thumbnail_url: nil, thumbnail_alt: name }, byline: nil (captured markup), price: nil.
+    Without a url neither the name nor the thumbnail is linked. %>
+<% byline = local_assigns[:byline].to_s.strip %>
+<% price = local_assigns[:price] %>
+<table class="product" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+  <tr>
+    <% if product[:thumbnail_url].present? %>
+      <td class="product-thumbnail" width="64">
+        <%= link_to_if(product[:url].present?, image_tag(product[:thumbnail_url], alt: product[:thumbnail_alt] || product[:name], width: 64, height: 64), product[:url], target: "_blank") %>
+      </td>
+    <% end %>
+    <td class="product-info">
+      <h4 class="product-name"><%= link_to_if(product[:url].present?, product[:name], product[:url], target: "_blank") %></h4>
+      <% if byline.present? %>
+        <div class="product-byline"><%= byline.html_safe %></div>
+      <% end %>
+    </td>
+    <% if price.present? %>
+      <td class="product-price"><%= price %></td>
+    <% end %>
+  </tr>
+</table>

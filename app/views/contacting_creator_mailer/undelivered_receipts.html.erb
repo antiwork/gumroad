@@ -10,22 +10,22 @@
       knowing to ask.
     <% end %>
   </p>
-  <%# The email layout collapses a bare table to display:block, which stacks every cell into its own
-      box. `list` is the class that keeps real columns. %>
   <table class="list">
     <thead>
       <tr>
         <th>Buyer</th>
-        <th>Product</th>
         <th>Purchased</th>
       </tr>
     </thead>
     <tbody>
       <% @purchases.each do |purchase| %>
         <tr>
-          <td><%= link_to purchase.email, customer_sale_url(purchase.external_id) %></td>
-          <td><%= purchase.link.name %></td>
-          <td><%= purchase.created_at.to_date.to_fs(:formatted_date_full_month) %></td>
+          <td>
+            <%= link_to purchase.email, customer_sale_url(purchase.external_id) %>
+            <br>
+            <span class="small muted"><%= purchase.link.name %></span>
+          </td>
+          <td class="nowrap"><%= purchase.created_at.to_date.to_fs(:formatted_date_full_month) %></td>
         </tr>
       <% end %>
     </tbody>

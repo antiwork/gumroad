@@ -1,3 +1,6 @@
-<% @chargeables.each do |chargeable| %>
+<% @chargeables.each_with_index do |chargeable, index| %>
+  <% unless index.zero? %>
+    <hr>
+  <% end %>
   <%= render("customer_mailer/receipt", receipt_presenter: ReceiptPresenter.new(chargeable, for_email: @shared_reply_target, recommendations: @recommendations), chargeable: chargeable) %>
 <% end %>

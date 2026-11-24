@@ -1,0 +1,8 @@
+<%# locals: disputable %>
+<% if disputable.multiple_purchases? %>
+  <ul>
+    <% disputable.disputed_purchases.each do |purchase| %>
+      <li><%= link_to purchase.link.name, purchase.link.long_url %></li>
+    <% end %>
+  </ul>
+<% end %>

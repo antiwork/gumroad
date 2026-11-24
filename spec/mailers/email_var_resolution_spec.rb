@@ -21,27 +21,29 @@ describe "Receipt email custom properties" do
     inlined = Premailer::Rails::CustomizedPremailer.new(body).to_inline_css
     styles = Nokogiri::HTML(inlined).css("[style]").map { |node| node["style"] }
 
-    expect(styles.grep(/border-width: 0(;|\z)/)).to be_present
+    expect(styles.grep(/border(-\w+)?-style: none/)).to be_present
     expect(styles.grep(/border-style: solid; border-width: 0(;|\z)/)).to be_empty
+    # A side longhand is skipped by EmailZeroWidthBorderNormalizer, so the stylesheet may not leave one behind.
+    zero_width_solid = styles.select { |style| style.match?(/border(-\w+)?-style: solid/) && style.match?(/border(-\w+)?-width: 0(;|\z)/) }
+    expect(zero_width_solid).to be_empty
   end
 
-  it "renders the product cell as a table Outlook can lay out" do
+  it "renders the product row as a table Outlook can lay out" do
     purchase = create(:purchase, link: create(:product))
     mail = CustomerMailer.receipt(purchase.id)
     body = mail.html_part&.decoded || mail.body.decoded
     inlined = Premailer::Rails::CustomizedPremailer.new(body).to_inline_css
     doc = Nokogiri::HTML(inlined)
 
-    table = doc.css("table.product-checkout-cell").first
-    expect([table["border"], table["cellpadding"], table["cellspacing"]]).to eq(%w[0 0 0])
-    expect(table["style"]).to include("display: table")
+    table = doc.at_css("table.product")
+    expect([table["role"], table["border"], table["cellpadding"], table["cellspacing"], table["width"]]).to eq(%w[presentation 0 0 0 100%])
 
-    figure = doc.css("table.product-checkout-cell td.figure").first
-    expect(figure["width"]).to eq("128")
-    expect(figure["style"]).to include("border-width: 0 1px 0 0")
+    thumbnail = table.at_css("td.product-thumbnail")
+    expect(thumbnail["width"]).to eq("64")
+    image = thumbnail.at_css("img")
+    expect([image["width"], image["height"]]).to eq(%w[64 64])
 
-    expect(doc.css("table.product-checkout-cell td.section").first["style"]).to include("display: table-cell")
-    expect(doc.css("table.product-checkout-cell tr").first["style"]).to include("border-width: 0")
-    expect(doc.css(".product-checkout-cell div").map { |node| node["style"] }).not_to include(a_string_including("display: table-cell"))
+    expect(table.css("td").map { |cell| cell["style"] }).to all(include("border-style: none"))
+    expect(table.css("[style]").map { |node| node["style"] }).not_to include(a_string_matching(/display: table/))
   end
 end

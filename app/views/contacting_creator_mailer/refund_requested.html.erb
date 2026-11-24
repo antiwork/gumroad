@@ -6,7 +6,8 @@
   </p>
   <p>Reason: <%= @reason_copy %></p>
   <% if @refund_request.message.present? %>
-    <p>Message from the customer: <%= @refund_request.message %></p>
+    <p>Message from the customer:</p>
+    <blockquote class="preserve-lines"><%= @refund_request.message %></blockquote>
   <% end %>
   <p>
     <% if @refund_request.escalation_deadline.past? %>
@@ -17,7 +18,5 @@
     Refunding now keeps the purchase from turning into a chargeback, which costs more
     and counts against your account.
   </p>
-  <p>
-    <%= link_to "Refund this purchase", customer_sale_url(@purchase.external_id), class: "button primary" %>
-  </p>
+  <p><%= link_to "Refund this purchase", customer_sale_url(@purchase.external_id), class: "button primary" %></p>
 </div>

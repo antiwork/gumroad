@@ -260,6 +260,22 @@ describe SellerProfile do
       expect(subject.text_color_on_primary).to eq("#000000")
     end
 
+    it "fills an email button with the accent and borders it with the accent too" do
+      expect(subject.email_primary_button_style).to eq("background-color: #19ff1d; color: #000000; border-color: #19ff1d;")
+    end
+
+    it "gives an email button a visible border when its accent matches the surface behind it" do
+      profile = build(:seller_profile, highlight_color: "#ffffff", background_color: "#ffffff")
+
+      expect(profile.email_primary_button_style).to start_with("background-color: #ffffff; color: #000000; border-color: #")
+      expect(profile.email_primary_button_style).not_to include("border-color: #ffffff")
+      expect(profile.email_primary_button_style(surface: "#000000")).to end_with("border-color: #ffffff;")
+    end
+
+    it "repeats the theme for a post email's wrapper, with a font list that is safe inside a style attribute" do
+      expect(subject.email_body_style).to eq(%(background-color: #0a0a0a; color: #ffffff; font-family: '#{subject.font}', 'ABC Favorit', sans-serif;))
+    end
+
     it "gives the email footer the wordmark that stays visible on the background" do
       expect(subject.email_wordmark_image_path).to eq("email/wordmark_logo_light.png")
       expect(build(:seller_profile, background_color: "#ffffff").email_wordmark_image_path).to eq("email/wordmark_logo.png")

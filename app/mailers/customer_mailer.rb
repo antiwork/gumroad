@@ -84,7 +84,7 @@ class CustomerMailer < ApplicationMailer
     @footer_template = "layouts/mailers/receipt_footer" unless is_receipt_for_gift_receiver
     graphics_light = !is_receipt_for_gift_receiver && Feature.active?(:graphics_light_receipt, @chargeable.seller)
     template = is_receipt_for_gift_receiver ? "gift_receiver_receipt" : (graphics_light ? "receipt_light" : "receipt")
-    @seller_branding = seller_branding_for(@chargeable.seller) if template == "receipt"
+    @email_brand, @button_style = @receipt_presenter.seller_branding&.values_at(:email_brand, :button_style) if template == "receipt"
     mail(
       to: @chargeable.orderable.email,
       from: from_email_address_with_name(@chargeable.seller.name, "noreply@#{CUSTOMERS_MAIL_DOMAIN}"),
@@ -446,14 +446,6 @@ class CustomerMailer < ApplicationMailer
   end
 
   private
-    # Seller-only receipts: the profile highlight colour is the accent.
-    def seller_branding_for(seller)
-      return unless Feature.active?(:seller_branded_receipt, seller)
-
-      colors = seller.seller_profile.accessible_accent
-      { accent: colors[:accent], accent_text: colors[:text] }
-    end
-
     # Newest receipts are the ones a "resend my receipts" caller is after, so page newest-first;
     # the state filter stays in the window query so failed ids cannot eat the read budget.
     def read_renderable_chargeables(purchase_ids)

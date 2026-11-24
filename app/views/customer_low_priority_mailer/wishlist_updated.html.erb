@@ -1,32 +1,24 @@
 <%= header_section(@title) %>
-<div>
-  <div class="product-card horizontal">
-    <div class="figure">
-      <% if @thumbnail_products.size == 4 %>
-        <%= link_to @wishlist_url, class: "thumbnails", style: "text-decoration: none" do %>
-          <% @thumbnail_products.map do |product| %>
-            <%= image_tag(product.for_email_thumbnail_url, alt: product.name) %>
-          <% end %>
+<% wishlist = @wishlist_follower.wishlist %>
+<% owner = wishlist.user %>
+<% collage = @thumbnail_products.size == 4 %>
+<div class="card">
+  <% if collage %>
+    <table class="thumbnails" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+      <tr>
+        <% @thumbnail_products.each do |product| %>
+          <td width="25%"><%= link_to(image_tag(product.for_email_thumbnail_url, alt: product.name, width: 120, height: 120), @wishlist_url) %></td>
         <% end %>
-      <% elsif @thumbnail_products.size > 0 %>
-        <%= link_to @wishlist_url, class: "thumbnails" do %>
-          <%= image_tag(@thumbnail_products.first.for_email_thumbnail_url, alt: @thumbnail_products.first.name) %>
-        <% end %>
-      <% end %>
-    </div>
-    <div class="section">
-      <div class="header">
-        <h3>
-          <%= link_to(@wishlist_follower.wishlist.name, @wishlist_url, target: "_blank", style: "text-decoration: none") %>
-        </h3>
-        <div class="user">
-          <% if @wishlist_follower.wishlist.user.avatar_url.present? %>
-            <%= link_to(image_tag(@wishlist_follower.wishlist.user.avatar_url, alt: "Avatar of #{@wishlist_follower.wishlist.user.name_or_username}", class: "user-avatar"), @wishlist_follower.wishlist.user.profile_url, target: "_blank") %>
-          <% end %>
-          <%= link_to(@wishlist_follower.wishlist.user.name_or_username, @wishlist_follower.wishlist.user.profile_url, target: "_blank") %>
-        </div>
-      </div>
-    </div>
-  </div>
-  <%= link_to "View content", @wishlist_url, class: "button primary" %>
+      </tr>
+    </table>
+  <% end %>
+  <% byline = capture do %>
+    <% if owner.avatar_url.present? %>
+      <%= link_to(image_tag(owner.avatar_url, alt: "Avatar of #{owner.name_or_username}", class: "avatar", width: 24, height: 24), owner.profile_url, target: "_blank") %>
+    <% end %>
+    <%= link_to(owner.name_or_username, owner.profile_url, target: "_blank") %>
+  <% end %>
+  <% thumbnail_product = @thumbnail_products.first unless collage %>
+  <%= render("shared/mailers/product", product: { name: wishlist.name, url: @wishlist_url, thumbnail_url: thumbnail_product&.for_email_thumbnail_url, thumbnail_alt: thumbnail_product&.name }, byline:) %>
 </div>
+<p><%= link_to "View content", @wishlist_url, class: "button primary" %></p>

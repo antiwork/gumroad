@@ -112,9 +112,18 @@ class SellerProfile < ApplicationRecord
 
   # Email clients cannot read the CSS variables in custom_styles, so filled email buttons get the
   # accent as literal colours.
-  def email_primary_button_style
+  # The border is the accent itself unless that has vanished into the surface behind the button.
+  def email_primary_button_style(surface: background_color)
     colors = accessible_accent
-    "background-color: #{colors[:accent]}; color: #{colors[:text]}; border-color: #000000; box-shadow: 0.25rem 0.25rem 0 #000000;"
+    "background-color: #{colors[:accent]}; color: #{colors[:text]}; border-color: #{ContrastColor.visible_indicator(colors[:accent], surface)};"
+  end
+
+  # The theme again, for the post's own wrapper: a client that drops <body> (a forward, some Android
+  # apps) would otherwise show a dark theme's white wordmark and buttons on a white page.
+  def email_body_style
+    return "" unless HexColorValidator.safe_for_css?(background_color)
+
+    "background-color: #{background_color}; color: #{text_color_on_background}; font-family: #{font_family.tr('"', "'")};"
   end
 
   # The email footer wordmark is a fixed-colour PNG, so unlike text it cannot follow the theme:

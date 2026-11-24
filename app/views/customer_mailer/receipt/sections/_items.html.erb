@@ -1,14 +1,13 @@
+<%# locals: receipt_presenter:, button_style: nil %>
 <% charge_info = receipt_presenter.charge_info %>
 <div>
   <% receipt_presenter.items_infos.each do |item_info| %>
-    <div class="item">
-      <%= render("customer_mailer/receipt/item", item_info: item_info) %>
+    <div class="card">
+      <%= render("customer_mailer/receipt/item", item_info: item_info, button_style: local_assigns[:button_style]) %>
     </div>
   <% end %>
 
   <% if charge_info.product_questions_note.present? %>
-    <div>
-      <%= charge_info.product_questions_note %>
-    </div>
+    <p><%= charge_info.product_questions_note %></p>
   <% end %>
 </div>

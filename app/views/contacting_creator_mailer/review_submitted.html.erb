@@ -1,23 +1,26 @@
 <%= header_section("New review") %>
 <div>
-  <div><%= @buyer %> reviewed <%= link_to @product.name, @product.long_url %></div>
+  <p><%= @buyer %> reviewed <%= link_to @product.name, @product.long_url %></p>
 
-  <%= render("shared/mailers/review_rating", rating: @review.rating) %>
-
-  <% if @review.message.present? %>
-    <div>
-      <i><%= "\"#{@review.message}\"" %></i>
-    </div>
-  <% end %>
+  <div class="card">
+    <%= render("shared/mailers/review_rating", rating: @review.rating) %>
+    <% if @review.message.present? %>
+      <p><i><%= "\"#{@review.message}\"" %></i></p>
+    <% end %>
+  </div>
 
   <% if @review.pending_video.present? %>
-    <div>
+    <div class="review-video">
       <%= link_to customers_url(query: @review.purchase.email) do %>
         <%= render("shared/mailers/video_file_thumbnail", video_file: @review.pending_video.video_file) %>
       <% end %>
     </div>
-    <%= link_to "Review & approve video", customers_url(query: @review.purchase.email), class: "button" %>
   <% end %>
 
-  <%= link_to "View all reviews", @product.long_url, class: "button primary" %>
+  <p class="actions">
+    <% if @review.pending_video.present? %>
+      <%= link_to "Review & approve video", customers_url(query: @review.purchase.email), class: "button" %>
+    <% end %>
+    <%= link_to "View all reviews", @product.long_url, class: "button primary" %>
+  </p>
 </div>

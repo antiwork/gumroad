@@ -31,6 +31,7 @@ class OneOffMailer < ApplicationMailer
 
   def email_using_installment(user_id: nil, email: nil, installment_external_id:, subject: nil, reply_to: nil)
     @installment = Installment.find_by_external_id(installment_external_id)
+    @preheader = @installment.truncated_description
 
     email(user_id:, email:, subject: subject || @installment.subject, reply_to:, body: nil)
   end

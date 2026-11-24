@@ -1,18 +1,19 @@
-<!-- IMPORTANT:
-Do not include route helpers (`root_url`), because the URL options (e.g. the hostname) won't be correct. -->
+<%# layouts/email.html.erb without route helpers: this is rendered once per blast outside a request,
+    so their URL options (the hostname) would be wrong. Keep the two in step. Nothing
+    recipient-specific may be rendered here either; that is what the {{merge tags}} are for. %>
 <!DOCTYPE html>
-<html>
+<html lang="en" xmlns:o="urn:schemas-microsoft-com:office:office">
   <head>
     <title>{{subject}}</title>
-    <meta content="text/html; charset=UTF-8" http-equiv="Content-Type">
-    <meta name="viewport" content="initial-scale = 1.0, width=device-width">
+    <%= render("layouts/mailers/head") %>
     <style><%= @post.user.seller_profile.custom_styles.to_s.html_safe %></style>
     <%= vite_entrypoint_stylesheet_tag "email" %>
   </head>
   <body>
-    <div class="email post">
+    <%= render("shared/preheader_text", text: CGI.unescapeHTML(@post.truncated_description)) %>
+    <div class="email post" style="<%= @post.user.seller_profile.email_body_style %>">
+      <!--[if mso]><table role="presentation" align="center" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
       <div class="main">
-        <%= render("shared/preheader_text", text: CGI.unescapeHTML(@post.truncated_description)) %>
         <% if @has_post_url %>
           <%= header_section(post_title_displayable(post: @post, url: "{{post_url}}")) %>
         <% else %>
@@ -33,42 +34,35 @@ Do not include route helpers (`root_url`), because the URL options (e.g. the hos
           <% end %>
         </div>
 
-        <% primary_button_style = @post.user.seller_profile.email_primary_button_style %>
-        <% if @has_download_button %>
-          <div>
-            <p>
+        <% if @has_download_button || @has_comment_button %>
+          <% primary_button_style = @post.user.seller_profile.email_primary_button_style %>
+          <p class="actions">
+            <% if @has_download_button %>
               <a class="button primary" href="{{download_url}}" style="<%= primary_button_style %>">{{t_view_attachments_prompt}}</a>
-            </p>
-          </div>
-        <% end %>
-
-        <% if @has_comment_button %>
-          <div>
-            <p>
+            <% end %>
+            <% if @has_comment_button && @has_download_button %>
+              <a class="button" href="{{post_url}}#comments" target="_blank">{{t_post_a_comment}}</a>
+            <% elsif @has_comment_button %>
               <a class="button primary" href="{{post_url}}#comments" target="_blank" style="<%= primary_button_style %>">{{t_post_a_comment}}</a>
-            </p>
-          </div>
+            <% end %>
+          </p>
         <% end %>
       </div>
-
       <div class="footer">
-        <div class="paragraphs">
-          <p>
-            {{seller_update_reason}}
-            <a href="{{unsubscribe_url}}">{{t_unsubscribe}}</a>
-          </p>
-
-          <p><%= GumroadAddress.full %></p>
-          <% unless Rails.env.production? %>
-            <p>(⌐▨_▨) <%= Rails.env.capitalize %> (▨_▨¬)</p>
-          <% end %>
-        </div>
-
+        <p>
+          {{seller_update_reason}}
+          <a href="{{unsubscribe_url}}">{{t_unsubscribe}}</a>
+        </p>
+        <p><%= GumroadAddress.full %></p>
+        <% unless Rails.env.production? %>
+          <p>(⌐▨_▨) <%= Rails.env.capitalize %> (▨_▨¬)</p>
+        <% end %>
         <a class="wordmark" href="<%= @gumroad_url %>">
           {{t_powered_by}}
-          <img src="<%= image_url(@post.user.seller_profile.email_wordmark_image_path) %>" alt="Gumroad" style="width: 138px; height: 18px;" width="138" height="18">
+          <img src="<%= image_url(@post.user.seller_profile.email_wordmark_image_path) %>" alt="Gumroad" width="92" height="12">
         </a>
       </div>
+      <!--[if mso]></td></tr></table><![endif]-->
     </div>
   </body>
 </html>

@@ -19,13 +19,9 @@ import { Fieldset } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { MenuItem as MenuListItem } from "$app/components/ui/Menu";
 
-export const tiptapButtonClassName = classNames(
-  buttonVariants({ size: "default", color: "accent" }),
-  "-translate-1 shadow-[0.25rem_0.25rem_0_var(--color-black)]",
-);
+export const tiptapButtonClassName = buttonVariants({ size: "default", color: "accent" });
 
-export const emailPrimaryButtonStyle =
-  "background-color: #ff90e8; color: #000000; border-color: #000000; box-shadow: 0.25rem 0.25rem 0 #000000;";
+export const emailPrimaryButtonStyle = "background-color: #ff90e8; color: #000000; border-color: #ff90e8;";
 
 export const LinkDialog = ({
   editor,

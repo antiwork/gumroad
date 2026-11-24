@@ -1,0 +1,167 @@
+// Posts are the seller's own email. Their theme supplies the background, text colour and font on
+// <body>, so nothing here may paint a surface or set a colour that assumes a light page.
+.email.post {
+  padding: 24px 16px;
+  background-color: inherit;
+  color: inherit;
+  font-family: inherit;
+
+  .main {
+    padding: 0;
+    background-color: inherit;
+    border: none;
+    border-radius: 0;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    color: inherit;
+  }
+
+  .title {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  hr,
+  th,
+  td,
+  .card {
+    border-color: $color-post-border;
+  }
+
+  blockquote {
+    border-color: currentColor;
+  }
+
+  blockquote,
+  .muted,
+  .product-byline {
+    color: inherit;
+  }
+
+  // Spelled out to outrank the shared `table.product .product-price` and `.product-price s`.
+  table.product .product-price,
+  table.product .product-price s {
+    color: inherit;
+  }
+
+  // Inline code has no surface to sit on here, so the font alone marks it. A <pre> keeps the
+  // shared light box, which the highlighter's token colours are chosen for.
+  code {
+    padding: 0;
+    background-color: inherit;
+    border: none;
+  }
+
+  .button {
+    background-color: inherit;
+    border-color: currentColor;
+    color: inherit;
+  }
+
+  // Restated: the outline override above outranks the shared fills.
+  .button.primary {
+    background-color: $color-heading;
+    border-color: $color-heading;
+    color: $color-surface;
+  }
+
+  .button.accent {
+    background-color: $color-accent;
+    border-color: $color-accent;
+    color: $color-heading;
+  }
+
+  .footer {
+    margin-top: 32px;
+    padding-top: 24px;
+    border-top: 1px solid $color-post-border;
+    color: inherit;
+
+    .wordmark {
+      color: inherit;
+    }
+  }
+}
+
+// Seller-authored content. The markup comes from the editor and from years of stored posts, so
+// these rules follow what is there instead of prescribing it.
+.email .rich-text {
+  > * {
+    margin-top: 0;
+    margin-bottom: $gap-block;
+  }
+
+  > *:last-child {
+    margin-bottom: 0;
+  }
+
+  // The post's own title is an h2, so headings inside the body step down from it.
+  h1 {
+    margin-bottom: 8px;
+    font-size: 24px;
+    line-height: 32px;
+    letter-spacing: -0.01em;
+  }
+
+  h2 {
+    font-size: 20px;
+    line-height: 28px;
+    letter-spacing: 0;
+  }
+
+  h3 {
+    font-size: 18px;
+    line-height: 26px;
+  }
+
+  h5,
+  h6 {
+    margin: 0 0 4px;
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 24px;
+  }
+
+  h2,
+  h3 {
+    margin-top: 24px;
+    margin-bottom: 8px;
+  }
+
+  h2:first-child,
+  h3:first-child {
+    margin-top: 0;
+  }
+
+  // The editor wraps every list item's text in a paragraph.
+  li p {
+    margin: 0;
+  }
+
+  hr {
+    margin: $gap-section 0;
+  }
+
+  figure {
+    margin: 0 0 $gap-block;
+  }
+
+  // Uploaded images, and embeds, which reach email as a linked thumbnail in a paragraph.
+  > img,
+  > p img,
+  figure img {
+    display: block;
+    border-radius: $radius-control;
+  }
+
+  figcaption {
+    margin-top: 8px;
+    font-size: 14px;
+    line-height: 20px;
+    text-align: center;
+  }
+}

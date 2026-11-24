@@ -64,6 +64,10 @@ class ContactingCreatorMailerPreview < ActionMailer::Preview
     ContactingCreatorMailer.chargeback_notice(dispute_evidence&.purchase&.id)
   end
 
+  def chargeback_not_contested
+    ContactingCreatorMailer.chargeback_not_contested(Dispute.last&.id)
+  end
+
   def chargeback_won
     ContactingCreatorMailer.chargeback_won(Purchase.last&.id)
   end

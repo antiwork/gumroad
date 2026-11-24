@@ -1,9 +1,8 @@
-<h2><%= @subject %></h2>
+<%= header_section(@subject) %>
 
-<% if @post_purchase_custom_fields_attributes.present? %>
-  <%= render("customer_mailer/receipt/attributes", attributes: @post_purchase_custom_fields_attributes) %>
-<% end %>
+<%= render("customer_mailer/receipt/attributes", attributes: @post_purchase_custom_fields_attributes) %>
 
-<h3>Customer information</h3>
-
-<%= render("customer_mailer/receipt/attributes", attributes: @customer_information_attributes) %>
+<div>
+  <h3>Customer information</h3>
+  <%= render("customer_mailer/receipt/attributes", attributes: @customer_information_attributes) %>
+</div>

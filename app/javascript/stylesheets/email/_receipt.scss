@@ -1,0 +1,74 @@
+.email {
+  // Under the product row of a purchased item: its notes, key, button and details.
+  .item-details {
+    margin: $gap-block 0 0;
+  }
+
+  .license-key {
+    margin: 0 0 $gap-block;
+
+    // A licence key is 35 characters; at the default size it wraps mid-group on a phone.
+    .code {
+      font-size: 16px;
+      letter-spacing: 0;
+      line-height: 24px;
+    }
+  }
+
+  // Recommended products, two cards per row.
+  table.product-grid {
+    margin: 0 0 12px;
+    // Holds each card to its half whatever the length of the words in it.
+    table-layout: fixed;
+
+    > tbody > tr > td,
+    > tr > td {
+      width: 50%;
+      vertical-align: top;
+    }
+
+    > tbody > tr > td:first-child,
+    > tr > td:first-child {
+      padding-right: 6px;
+    }
+
+    > tbody > tr > td:last-child,
+    > tr > td:last-child {
+      padding-left: 6px;
+    }
+  }
+
+  table.product-grid:last-child {
+    margin-bottom: 0;
+  }
+
+  .product-card {
+    padding: 12px;
+
+    img {
+      display: block;
+      width: 100%;
+      border-radius: $radius-control;
+    }
+
+    .product-name {
+      margin: 12px 0 0;
+    }
+
+    .avatar {
+      width: 20px;
+      height: 20px;
+    }
+
+    .rating {
+      color: $color-muted;
+      font-weight: 400;
+    }
+  }
+
+  .product-card-price {
+    margin: 8px 0 0;
+    font-size: 14px;
+    line-height: 20px;
+  }
+}

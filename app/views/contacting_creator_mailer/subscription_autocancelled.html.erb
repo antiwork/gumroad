@@ -5,20 +5,12 @@
 <% end %>
 <div>
   <% if @subscription.is_installment_plan %>
-    <p>
-      An installment plan for <%= @subscription.link.name %> has been paused due to multiple failed payments. Your customer (<%= @subscription.email %>) will no longer be charged.
-    </p>
+    <p>An installment plan for <%= @subscription.link.name %> has been paused due to multiple failed payments. Your customer (<%= @subscription.email %>) will no longer be charged.</p>
   <% else %>
-    <p>
-      A subscription to <%= @subscription.link.name %> has been canceled due to multiple failed payments. Your customer (<%= @subscription.email %>) will no longer be charged.
-    </p>
+    <p>A subscription to <%= @subscription.link.name %> has been canceled due to multiple failed payments. Your customer (<%= @subscription.email %>) will no longer be charged.</p>
   <% end %>
   <% if @last_failed_purchase %>
     <p><%= "For reference, #{@last_failed_purchase.card_type == CardType::PAYPAL ? "PayPal" : "your card issuer"} gave us this error message for the last failure:" %></p>
-    <p>
-      <em>
-        <%= @last_failed_purchase.formatted_error_code %>
-      </em>
-    </p>
+    <blockquote><%= @last_failed_purchase.formatted_error_code %></blockquote>
   <% end %>
 </div>

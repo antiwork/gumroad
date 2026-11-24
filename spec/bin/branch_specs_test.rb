@@ -1057,8 +1057,8 @@ check(
 
 check(
   "email stylesheet still escalates (mailers plus receipt-preview renderer)",
-  base_files: { "app/javascript/stylesheets/_email.scss" => "old" },
-  head_files: { "app/javascript/stylesheets/_email.scss" => "new" },
+  base_files: { "app/javascript/stylesheets/email/_components.scss" => "old" },
+  head_files: { "app/javascript/stylesheets/email/_components.scss" => "new" },
   expect_escalate: true,
 )
 

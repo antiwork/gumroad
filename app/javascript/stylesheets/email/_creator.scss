@@ -1,0 +1,42 @@
+.email {
+  // A community's recap: <div class="card recap"><h3># <a>Name</a></h3> summary …
+  .recap h3 a {
+    text-decoration: none;
+  }
+
+  // A suggested bundle: product row, then its contents and a button.
+  .bundle table.product {
+    margin: 0 0 $gap-block;
+  }
+
+  // Year in review: icon stats in a product row's byline.
+  .product-stat {
+    margin-right: 12px;
+    white-space: nowrap;
+  }
+
+  .product-stat img {
+    width: 14px;
+    height: 14px;
+    vertical-align: -2px;
+  }
+
+  // A two-message exchange: <table class="chat" role="presentation"><tr>
+  //   <td class="chat-avatar"><img class="avatar"></td><td class="chat-message">…
+  .chat-avatar {
+    width: 36px;
+  }
+
+  table.chat .chat-message {
+    padding: 0 0 12px;
+  }
+
+  table.chat tr:last-child .chat-message {
+    padding-bottom: 0;
+  }
+
+  .chat-message ul {
+    padding: 0;
+    list-style: none;
+  }
+}

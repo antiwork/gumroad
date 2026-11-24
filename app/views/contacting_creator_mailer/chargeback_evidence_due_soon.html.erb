@@ -3,18 +3,14 @@
   <p>
     A customer of yours (<%= @disputable.customer_email %>) has disputed their purchase of <%= @disputable.multiple_purchases? ? "the following items" : @disputable.purchase_for_dispute_evidence.link.name %><%= @disputed_amounts_copy %>
   </p>
-  <% if @disputable.multiple_purchases? %>
-    <% @disputable.disputed_purchases.each do |purchase| %>
-      <p>
-        <%= link_to purchase.link.name, purchase.link.long_url %>
-      </p>
-    <% end %>
-  <% end %>
+  <%= render("disputed_products", disputable: @disputable) %>
   <% if @dispute_reason_copy %>
     <p>
       Reason given for the dispute: <%= @dispute_reason_copy %>.
     </p>
   <% end %>
+</div>
+<div class="callout warning">
   <p>
     <strong>
       <% if @small_dispute_ask %>
@@ -25,6 +21,8 @@
       You have <%= pluralize(@hours_left, "hour") %> left.
     </strong>
   </p>
+</div>
+<div>
   <% if @small_dispute_reason_copy %>
     <p>
       <%= @small_dispute_reason_copy %>

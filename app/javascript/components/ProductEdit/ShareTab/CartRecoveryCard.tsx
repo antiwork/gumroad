@@ -12,13 +12,19 @@ import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { LinkButton } from "$app/components/ui/LinkButton";
 import { Switch } from "$app/components/ui/Switch";
 
+// The email stylesheet carries no media queries (see layouts/mailers/_head.html.erb), and this pane
+// is narrower than a mail client, so the page padding around the card is dropped here. The card
+// padding repeats that file's phone value; the shell below repeats layouts/email.html.erb.
+const previewStyles = ".email { padding: 0; } .email .main { padding: 24px 20px; }";
+
 const EmailPreview = ({ message }: { message: string }) => {
   const [height, setHeight] = React.useState(320);
   const observer = React.useRef<ResizeObserver | null>(null);
   React.useEffect(() => () => observer.current?.disconnect(), []);
+  // Mirrors customer_mailer/abandoned_cart inside layouts/email, without the header and footer.
   const html = React.useMemo(
     () =>
-      `<!doctype html><html><head><meta name="viewport" content="width=device-width"><style>${emailStyles}</style></head><body><div class="email"><div class="main"><div>${sanitizeHtml(message)}</div></div></div></body></html>`,
+      `<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light only"><style>${emailStyles}${previewStyles}</style></head><body class="email-body"><div class="email"><div class="main"><div class="rich-text">${sanitizeHtml(message)}</div></div></div></body></html>`,
     [message],
   );
 

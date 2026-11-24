@@ -48,6 +48,13 @@ class CustomerMailerPreview < ActionMailer::Preview
     CustomerMailer.receipt(purchase&.id)
   end
 
+  # Turns the flag on for the seller it picks, so the preview shows their header and accent.
+  def receipt_seller_branded
+    purchase = Purchase.successful.not_recurring_charge.not_is_gift_sender_purchase.joins(seller: :avatar_attachment).last
+    Feature.activate_user(:seller_branded_receipt, purchase.seller) if purchase
+    CustomerMailer.receipt(purchase&.id)
+  end
+
   def receipt_custom
     purchase = Purchase.joins(:link).where("links.custom_receipt != ''").last
     CustomerMailer.receipt(purchase&.id)

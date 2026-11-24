@@ -1,0 +1,28 @@
+.email {
+  // Seller-written HTML (a price change note): spaced like a paragraph whatever it contains.
+  .seller-message {
+    margin: 0 0 $gap-block;
+  }
+
+  // Four covers across the top of a wishlist card.
+  table.thumbnails {
+    margin: 0 0 12px;
+
+    > tbody > tr > td,
+    > tr > td {
+      width: 25%;
+      padding: 0 4px;
+    }
+
+    img {
+      display: block;
+      width: 100%;
+      border-radius: $radius-thumbnail;
+    }
+  }
+
+  // No thumbnail cell under the strip, so line the name up with the covers' 4px gutter.
+  table.thumbnails + table.product .product-info {
+    padding-left: 4px;
+  }
+}

@@ -1,5 +1,5 @@
+<%= header_section("You can no longer accept payments on Gumroad") %>
 <div>
-  <h2>You can no longer accept payments on Gumroad</h2>
   <p>Our payments processor, Stripe, has reviewed your account and made a final decision to reject it. This decision was made by Stripe, not Gumroad, and unfortunately it cannot be appealed or reversed. Buyers can no longer purchase your products, and you won't receive any further verification requests from us.</p>
   <% if @balance_cents >= Payouts::REJECTED_ACCOUNT_MIN_AMOUNT_CENTS %>
     <% if @payouts_blocked_by_stripe %>

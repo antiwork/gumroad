@@ -1,0 +1,12 @@
+<%# The application as the requester wrote it. locals: affiliate_request %>
+<table class="details">
+  <tr>
+    <th>Name</th>
+    <td><%= affiliate_request.name %></td>
+  </tr>
+  <tr>
+    <th>Email</th>
+    <td><%= affiliate_request.email %></td>
+  </tr>
+</table>
+<blockquote>"<%= Rinku.auto_link(strip_tags(affiliate_request.promotion_text)) %>"</blockquote>

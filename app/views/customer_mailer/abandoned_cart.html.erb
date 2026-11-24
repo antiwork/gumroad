@@ -1,6 +1,9 @@
-<% @installments.each do |installment| %>
-  <div>
-    <h2><%= installment[:subject] %></h2>
+<% @installments.each_with_index do |installment, index| %>
+  <% unless index.zero? %>
+    <hr>
+  <% end %>
+  <%= header_section(installment[:subject]) %>
+  <div class="rich-text">
     <%= raw Rinku.auto_link(installment[:message]&.html_safe, :all, 'target="_blank" rel="nofollow"') %>
   </div>
 <% end %>

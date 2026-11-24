@@ -1,28 +1,29 @@
 <div>
-  <p><%= Rinku.auto_link(@message.html_safe, :all, 'target="_blank" rel="nofollow"'.html_safe) %></p>
-  <p>
-    <strong>Product: </strong>
-    <%= link_to @product.name, @product.long_url, target: "_blank" %>
-    <br>
-
-    <strong>New price: </strong>
-    <%= @new_price %>
-    <br>
-
-    <strong>Previous price: </strong>
-    <%= @previous_price %>
-    <br>
-
-    <strong>Next payment date: </strong>
-    <%= @next_payment_date %>
-    <br>
-
-    <strong>Payment method: </strong>
-    <%= @payment_method %>
-    <br>
-  </p>
-
-  <%= link_to "Manage your subscription", @edit_card_url, class: "button primary", target: "_blank" %>
+  <%# A div, not a p: the seller's message can carry its own block elements. %>
+  <div class="seller-message"><%= Rinku.auto_link(@message.html_safe, :all, 'target="_blank" rel="nofollow"'.html_safe) %></div>
+  <table class="details">
+    <tr>
+      <th>Product</th>
+      <td><%= link_to @product.name, @product.long_url, target: "_blank" %></td>
+    </tr>
+    <tr>
+      <th>New price</th>
+      <td><%= @new_price %></td>
+    </tr>
+    <tr>
+      <th>Previous price</th>
+      <td><%= @previous_price %></td>
+    </tr>
+    <tr>
+      <th>Next payment date</th>
+      <td><%= @next_payment_date %></td>
+    </tr>
+    <tr>
+      <th>Payment method</th>
+      <td><%= @payment_method %></td>
+    </tr>
+  </table>
+  <p><%= link_to "Manage your subscription", @edit_card_url, class: "button primary", target: "_blank" %></p>
 </div>
 
 <%= render("customer_mailer/product_questions_footer", seller_name: @seller_name) %>

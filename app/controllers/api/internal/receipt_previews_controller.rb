@@ -28,7 +28,8 @@ class Api::Internal::ReceiptPreviewsController < Api::Internal::BaseController
       layout: "email",
       assigns: {
         chargeable: purchase_preview,
-        receipt_presenter:
+        receipt_presenter:,
+        **receipt_presenter.seller_branding.to_h
       }
     )
 

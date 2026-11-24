@@ -1,4 +1,6 @@
 <div>
   <h2><%= heading %></h2>
-  <%= subheading %>
+  <% if subheading.present? %>
+    <div class="muted"><%= subheading %></div>
+  <% end %>
 </div>

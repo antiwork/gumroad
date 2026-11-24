@@ -1,27 +1,23 @@
 <%= header_section("#{@seller_presenter[:name]} responded to your review") %>
 
-<div class="review">
-  <div class="content">
-    <%= render("shared/mailers/review_rating", rating: @review_presenter[:rating]) %>
-    <% if @review_presenter[:message] %>
-      <p><%= "#{@review_presenter[:message]}" %></p>
-    <% end %>
-    <div class="byline">
-      <img class="user-avatar" src="<%= @review_presenter[:rater][:avatar_url] %>" alt="<%= @review_presenter[:rater][:name] %>">
-      <span><%= @review_presenter[:rater][:name] %></span>
-    </div>
-  </div>
+<div class="card">
+  <%= render("shared/mailers/review_rating", rating: @review_presenter[:rating]) %>
+  <% if @review_presenter[:message] %>
+    <p><%= "#{@review_presenter[:message]}" %></p>
+  <% end %>
+  <p class="byline">
+    <img class="avatar" src="<%= @review_presenter[:rater][:avatar_url] %>" alt="<%= @review_presenter[:rater][:name] %>" width="24" height="24">
+    <span><%= @review_presenter[:rater][:name] %></span>
+  </p>
 
-  <div class="content response">
+  <div class="card">
     <p><%= "#{@review_presenter[:response][:message]}" %></p>
-    <div class="byline">
-      <img class="user-avatar" src="<%= @seller_presenter[:avatar_url] %>" alt="<%= @seller_presenter[:name] %>">
+    <p class="byline">
+      <img class="avatar" src="<%= @seller_presenter[:avatar_url] %>" alt="<%= @seller_presenter[:name] %>" width="24" height="24">
       <span><%= @seller_presenter[:name] %></span>
-      <span class="pill small">Creator</span>
-    </div>
+      <span class="pill">Creator</span>
+    </p>
   </div>
 </div>
 
-<div>
-  <%= link_to "View product", @product.long_url, class: "button primary" %>
-</div>
+<p><%= link_to "View product", @product.long_url, class: "button primary" %></p>

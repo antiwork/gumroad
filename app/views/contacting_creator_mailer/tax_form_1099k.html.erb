@@ -1,5 +1,5 @@
+<%= header_section("Your 1099-K form for #{@year} is ready to download") %>
 <div>
-  <h2>Your 1099-K form for <%= @year %> is ready to download</h2>
   <p>The 1099-K is a purely informational form that summarizes the payments that were made to your account during <%= @year %> and is designed to help you report your taxes.</p>
   <% if @is_filed %>
     <p>Our payment processor, Stripe, files a copy electronically with the IRS.</p>

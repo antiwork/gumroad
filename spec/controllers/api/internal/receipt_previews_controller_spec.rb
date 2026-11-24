@@ -34,9 +34,20 @@ describe Api::Internal::ReceiptPreviewsController do
 
       expect(response).to be_successful
       footer_style = Nokogiri::HTML(response.parsed_body["html"]).at_css(".email > .footer")["style"]
-      expect(footer_style).to include("max-width: 448px")
+      expect(footer_style).to include("max-width: 600px")
       expect(footer_style).not_to include("#c0ffee")
       expect(internal_stylesheet).not_to have_been_requested
+    end
+
+    it "previews the seller's branding when their receipts carry it" do
+      seller.avatar.attach(io: File.open(Rails.root.join("spec", "support", "fixtures", "smilie.png")), filename: "smilie.png", content_type: "image/png")
+      Feature.activate_user(:seller_branded_receipt, seller)
+
+      get :show, params: { product_id: product.unique_permalink }
+
+      header = Nokogiri::HTML(response.parsed_body["html"]).at_css(".email > .header")
+      expect(header.at_css(".brand-name").text).to eq(seller.name_or_username)
+      expect(header.at_css("a.wordmark")).to be_nil
     end
 
     it "uses the free-product subject for a free product" do

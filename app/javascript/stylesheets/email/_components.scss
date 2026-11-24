@@ -1,0 +1,387 @@
+// The shared vocabulary. docs/emails.md shows the markup for each of these.
+
+.email {
+  // Buttons are inline-block links: padding on a display:block <a> paints but is not tappable in
+  // Gmail on iOS.
+  .button {
+    display: inline-block;
+    box-sizing: border-box;
+    padding: 11px 20px;
+    background-color: $color-surface;
+    border: 1px solid $color-control-border;
+    border-radius: $radius-control;
+    color: $color-heading;
+    font-family: inherit;
+    font-size: 16px;
+    font-weight: 500;
+    line-height: 24px;
+    text-align: center;
+    text-decoration: none;
+  }
+
+  .button.primary {
+    background-color: $color-heading;
+    border-color: $color-heading;
+    color: $color-surface;
+  }
+
+  .button.accent {
+    background-color: $color-accent;
+    border-color: $color-accent;
+    color: $color-heading;
+  }
+
+  .button.full {
+    width: 100%;
+  }
+
+  .actions .button {
+    margin: 0 8px 8px 0;
+  }
+
+  table.details {
+    // The gap around the table comes from its container, not from its outer rows.
+    tr:first-child > th,
+    tr:first-child > td {
+      padding-top: 0;
+    }
+
+    tr:last-child > th,
+    tr:last-child > td {
+      padding-bottom: 0;
+    }
+
+    td {
+      text-align: right;
+      word-break: break-word;
+    }
+
+    // Rows that are not a label/value pair: a group heading or an unlabelled value, colspan 2.
+    th.wide {
+      color: $color-heading;
+      font-weight: 600;
+    }
+
+    td.wide {
+      text-align: left;
+    }
+
+    // The closing row of a price breakdown.
+    tr.total th,
+    tr.total td {
+      color: $color-heading;
+      font-weight: 600;
+    }
+  }
+
+  table.list {
+    th,
+    td {
+      padding-right: 12px;
+    }
+
+    // Restated: a thead's only row is also a last row, which the base rule strips of its divider.
+    thead th {
+      padding-bottom: 8px;
+      border-bottom: 1px solid $color-border;
+      font-size: 13px;
+      line-height: 20px;
+    }
+
+    td {
+      word-break: break-word;
+    }
+
+    tr:last-child > td {
+      padding-bottom: 0;
+    }
+
+    th:last-child,
+    td:last-child {
+      padding-right: 0;
+      text-align: right;
+    }
+
+    // Numeric columns before the last one.
+    .number {
+      text-align: right;
+      white-space: nowrap;
+    }
+  }
+
+  .stat {
+    padding: 16px;
+    background-color: $color-subtle;
+    border-radius: $radius-box;
+    text-align: center;
+  }
+
+  .stat-value {
+    color: $color-heading;
+    font-size: 24px;
+    font-weight: 600;
+    line-height: 32px;
+  }
+
+  .stat-label {
+    color: $color-muted;
+    font-size: 13px;
+    line-height: 20px;
+  }
+
+  table.stats {
+    margin: 0 0 $gap-block;
+
+    > tbody > tr > td,
+    > tr > td {
+      width: 50%;
+      padding: 4px;
+      border: none;
+    }
+
+    // An 8px gutter between tiles, none outside them.
+    > tbody > tr > td:first-child,
+    > tr > td:first-child {
+      padding-left: 0;
+    }
+
+    > tbody > tr > td:last-child,
+    > tr > td:last-child {
+      padding-right: 0;
+    }
+  }
+
+  // A bordered box for a quote, a review, a product, a code.
+  .card {
+    padding: 16px;
+    border: 1px solid $color-border;
+    border-radius: $radius-box;
+  }
+
+  // Stacked cards, and the line that follows one.
+  .card + .card,
+  .card + p {
+    margin-top: 16px;
+  }
+
+  // A tinted notice. Variant: warning.
+  .callout {
+    padding: 14px 16px;
+    background-color: $color-info-bg;
+    border-radius: $radius-box;
+    font-size: 15px;
+    line-height: 22px;
+  }
+
+  .callout.warning {
+    background-color: $color-warning-bg;
+  }
+
+  // Centred opener: image or avatar, a big figure, one line of context.
+  .hero {
+    text-align: center;
+
+    img {
+      display: inline-block;
+      margin: 0 0 12px;
+    }
+
+    h1,
+    h2 {
+      margin-bottom: 4px;
+    }
+
+    p {
+      color: $color-muted;
+    }
+
+    // The line above the figure.
+    .eyebrow {
+      margin-bottom: 4px;
+    }
+
+    > *:last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  .avatar {
+    display: inline-block;
+    width: 24px;
+    height: 24px;
+    border-radius: $radius-pill;
+    vertical-align: middle;
+  }
+
+  .avatar.large {
+    width: 56px;
+    height: 56px;
+  }
+
+  // Who wrote a review or a reply: avatar, name, optional pill.
+  .byline {
+    font-size: 14px;
+    line-height: 24px;
+
+    .avatar {
+      margin-right: 6px;
+    }
+
+    .pill {
+      margin-left: 4px;
+    }
+  }
+
+  // <div class="stars"> holding five 20px star images.
+  .stars {
+    margin: 0 0 8px;
+    line-height: 20px;
+
+    img {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      vertical-align: top;
+    }
+  }
+
+  .video-thumbnail img {
+    display: block;
+    width: 100%;
+    border-radius: $radius-box;
+  }
+
+  // 16:9 without an image to give it height.
+  .video-placeholder {
+    height: 0;
+    padding-top: 56.25%;
+    background-color: $color-heading;
+    border-radius: $radius-box;
+  }
+
+  // A one-time code or licence key, large and easy to select.
+  .code {
+    padding: 16px;
+    background-color: $color-subtle;
+    border: 1px solid $color-border;
+    border-radius: $radius-box;
+    color: $color-heading;
+    font-family: $font-family-mono;
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    line-height: 28px;
+    text-align: center;
+    word-break: break-word;
+  }
+
+  .pill {
+    display: inline-block;
+    padding: 2px 10px;
+    background-color: $color-page;
+    border-radius: $radius-pill;
+    color: $color-text;
+    font-size: 13px;
+    line-height: 20px;
+  }
+
+  // A product row: thumbnail, name and byline, price.
+  table.product {
+    > tbody > tr > td,
+    > tr > td {
+      vertical-align: middle;
+    }
+  }
+
+  // Several product rows in one card or under one heading.
+  table.product + table.product {
+    margin-top: 12px;
+  }
+
+  .product-thumbnail {
+    width: 64px;
+
+    a {
+      text-decoration: none;
+    }
+
+    img {
+      display: block;
+      width: 64px;
+      height: 64px;
+      border-radius: $radius-thumbnail;
+      object-fit: cover;
+    }
+  }
+
+  table.product .product-info {
+    padding: 0 12px;
+  }
+
+  // No thumbnail cell before it.
+  table.product .product-info:first-child {
+    padding-left: 0;
+  }
+
+  .product-name {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 22px;
+
+    a {
+      text-decoration: none;
+    }
+  }
+
+  .product-byline {
+    margin: 2px 0 0;
+    color: $color-muted;
+    font-size: 14px;
+    line-height: 20px;
+
+    a {
+      text-decoration: none;
+    }
+
+    .avatar {
+      margin-right: 6px;
+    }
+  }
+
+  table.product .product-price {
+    color: $color-heading;
+    font-weight: 600;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  // A struck list price beside the discounted one.
+  .product-price s {
+    margin-right: 4px;
+    color: $color-muted;
+    font-weight: 400;
+  }
+
+  .muted {
+    color: $color-muted;
+  }
+
+  .small {
+    font-size: 14px;
+    line-height: 20px;
+  }
+
+  .nowrap {
+    white-space: nowrap;
+  }
+
+  .preserve-lines {
+    white-space: pre-wrap;
+  }
+
+  // For a raw URL or key printed as text, inside a table cell or wherever it must break anywhere.
+  .break-word {
+    word-break: break-word;
+  }
+}

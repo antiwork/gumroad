@@ -14,8 +14,8 @@ describe AffiliateRequestMailer do
       expect(mail.to).to eq([requester_email])
       expect(mail.subject).to eq("Your application request to #{creator.display_name} was submitted!")
       expect(mail.body.encoded).to include("#{creator.display_name} is now reviewing your application and once they approve you, you will receive a confirmation email, along with some helpful tips to get started as an affiliate.")
-      expect(mail.body.encoded).to include("<strong>Name:</strong> #{affiliate_request.name}")
-      expect(mail.body.encoded).to include("<strong>Email:</strong> #{requester_email}")
+      expect(mail.body.encoded.squish).to include("<th>Name</th> <td>#{affiliate_request.name}</td>")
+      expect(mail.body.encoded.squish).to include("<th>Email</th> <td>#{requester_email}</td>")
       expect(mail.body.encoded).to include("In the meantime, <a href=\"#{signup_url(email: requester_email)}\">create your Gumroad account</a> using email #{requester_email} and confirm it. You'll receive your affiliate links once your Gumroad account is active.")
     end
 
@@ -53,7 +53,7 @@ describe AffiliateRequestMailer do
         affiliate_percentage = affiliate.basis_points(product_id: product.id) / 100
         affiliate_product_url = affiliate.referral_url_for_product(product)
 
-        expect(mail.body.encoded.squish).to include(%Q(<strong>#{product.name}</strong> (#{affiliate_percentage}% commission) <br> <a clicktracking="off" href="#{affiliate_product_url}">#{affiliate_product_url}</a>))
+        expect(mail.body.encoded.squish).to include(%Q(<strong>#{product.name}</strong> <span class="muted">(#{affiliate_percentage}% commission)</span> <br> <a clicktracking="off" href="#{affiliate_product_url}">#{affiliate_product_url}</a>))
       end
       expect(mail.body.encoded.squish).to include(%Q(<a class="button primary" href="#{products_affiliated_index_url}">View all affiliated products</a>))
     end
@@ -70,8 +70,8 @@ describe AffiliateRequestMailer do
       expect(mail.to).to eq([requester_email])
       expect(mail.subject).to eq("Your affiliate request to #{creator.display_name} was not approved")
       expect(mail.body.encoded).to include("We are sorry, but your request to become an affiliate for #{creator.display_name} was not approved.")
-      expect(mail.body.encoded).to include("<strong>Name:</strong> #{affiliate_request.name}")
-      expect(mail.body.encoded).to include("<strong>Email:</strong> #{requester_email}")
+      expect(mail.body.encoded.squish).to include("<th>Name</th> <td>#{affiliate_request.name}</td>")
+      expect(mail.body.encoded.squish).to include("<th>Email</th> <td>#{requester_email}</td>")
     end
   end
 
@@ -99,8 +99,8 @@ describe AffiliateRequestMailer do
     it "sends email to creator" do
       expect(mail.to).to eq([creator.email])
       expect(mail.subject).to eq("#{affiliate_request.name} has applied to be an affiliate")
-      expect(mail.body.encoded).to include("<strong>Name:</strong> #{affiliate_request.name}")
-      expect(mail.body.encoded).to include("<strong>Email:</strong> #{requester_email}")
+      expect(mail.body.encoded.squish).to include("<th>Name</th> <td>#{affiliate_request.name}</td>")
+      expect(mail.body.encoded.squish).to include("<th>Email</th> <td>#{requester_email}</td>")
       expect(mail.body.encoded).to include(%Q("#{affiliate_request.promotion_text}"))
       expect(mail.body.encoded).to include(%Q(<a class="button primary" href="#{approve_affiliate_request_url(affiliate_request)}">Approve</a>))
       expect(mail.body.encoded).to include(%Q(<a class="button" href="#{ignore_affiliate_request_url(affiliate_request)}">Ignore</a>))
