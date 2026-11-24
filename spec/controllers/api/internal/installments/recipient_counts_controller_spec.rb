@@ -106,6 +106,22 @@ describe Api::Internal::Installments::RecipientCountsController do
       expect(response.parsed_body).to eq("recipient_count" => 3, "audience_count" => 5)
     end
 
+    it "excludes recent buyers and keeps never-buyers with the not_purchased_since filter" do
+      get :show, params: { installment_type: "audience", not_purchased_since: 3.days.ago.to_date.to_s }
+      expect(response).to be_successful
+      expect(response.parsed_body).to eq("recipient_count" => 3, "audience_count" => 5)
+    end
+
+    it "applies not_purchased_since to follower installments" do
+      get :show, params: { installment_type: "follower", not_purchased_since: 3.days.ago.to_date.to_s }
+      expect(response.parsed_body).to eq("recipient_count" => 2, "audience_count" => 5)
+    end
+
+    it "ignores an unparseable not_purchased_since" do
+      get :show, params: { installment_type: "audience", not_purchased_since: "not-a-date" }
+      expect(response.parsed_body).to eq("recipient_count" => 5, "audience_count" => 5)
+    end
+
     it "ignores out-of-range year in created_before filter without raising a database error" do
       get :show, params: { installment_type: "audience", created_before: "252026-05-06" }
       expect(response).to be_successful

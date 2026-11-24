@@ -40,6 +40,38 @@ describe "InstallmentFilters"  do
     end
   end
 
+  describe "not_purchased_since" do
+    let(:user) { create(:user, timezone: "Pacific Time (US & Canada)") }
+
+    %w[audience follower].each do |type|
+      it "is stored and converted to the seller's start of day for #{type} installments" do
+        installment = create(:"#{type}_installment", seller: user)
+        installment.add_and_validate_filters({ not_purchased_since: "2026-11-20" }, user)
+
+        expect(installment.json_filters[:not_purchased_since]).to eq(Time.find_zone!("Pacific Time (US & Canada)").local(2026, 11, 20))
+        expect(installment.audience_members_filter_params[:not_purchased_since]).to eq("2026-11-20T00:00:00-08:00")
+      end
+    end
+
+    %w[seller affiliate].each do |type|
+      it "is dropped for #{type} installments" do
+        installment = create(:"#{type}_installment", seller: user)
+        installment.add_and_validate_filters({ not_purchased_since: "2026-11-20" }, user)
+
+        expect(installment.not_purchased_since).to be_nil
+        expect(installment.audience_members_filter_params).not_to have_key(:not_purchased_since)
+      end
+    end
+
+    it "ignores unparseable and out-of-range dates" do
+      installment = create(:audience_installment, seller: user)
+      ["not-a-date", "252026-05-06"].each do |value|
+        installment.add_and_validate_filters({ not_purchased_since: value }, user)
+        expect(installment.not_purchased_since).to be_nil
+      end
+    end
+  end
+
   describe "#audience_members_filter_params with a 'has not clicked' filter" do
     let(:product) { create(:product, user: @creator) }
     let(:clicked_post) { create(:audience_installment, seller: @creator, link: product) }

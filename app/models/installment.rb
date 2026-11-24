@@ -1113,6 +1113,9 @@ class Installment < ApplicationRecord
     if (date = safe_parse_filter_date(created_before))
       params[:created_before] = date.in_time_zone(seller.timezone).end_of_day.iso8601
     end
+    if (date = safe_parse_filter_date(not_purchased_since))
+      params[:not_purchased_since] = date.in_time_zone(seller.timezone).iso8601
+    end
     params[:bought_from] = bought_from if bought_from.present?
     params[:affiliate_product_ids] = seller.products.where(unique_permalink: affiliate_products).ids if affiliate_products.present?
     if waitlisted_products.present?

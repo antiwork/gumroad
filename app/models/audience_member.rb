@@ -10,6 +10,7 @@ class AudienceMember < ApplicationRecord
     not_bought_product_ids not_bought_variant_ids
     paid_more_than_cents paid_less_than_cents
     created_after created_before
+    not_purchased_since
     bought_from
     active_customers_only minimum_license_uses
     affiliate_product_ids
@@ -118,6 +119,14 @@ class AudienceMember < ApplicationRecord
       created_at_relation = created_at_relation.where("#{max_created_at_column} > ?", params[:created_after]) if params[:created_after]
       created_at_relation = created_at_relation.where("#{min_created_at_column} < ?", params[:created_before]) if params[:created_before]
       created_at_sql = created_at_relation.to_sql
+    end
+
+    # Keeps never-buyers (NULL max_purchase_created_at). Not part of the per-record JSON_TABLE
+    # filter: it constrains the member's whole purchase history, not a single purchase row.
+    if params[:not_purchased_since]
+      not_purchased_since_sql = base_scope
+        .where("max_purchase_created_at IS NULL OR max_purchase_created_at < ?", params[:not_purchased_since])
+        .to_sql
     end
 
     if params[:bought_from]
@@ -320,6 +329,7 @@ class AudienceMember < ApplicationRecord
       not_bought_variants_sql,
       prices_sql,
       created_at_sql,
+      not_purchased_since_sql,
       country_sql,
       affiliates_sql,
       waitlisted_sql,

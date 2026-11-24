@@ -166,7 +166,7 @@ class SaveInstallmentService
 
     def installment_params
       params.require(:installment).permit(:name, :message, :installment_type, :link_id,
-                                          :paid_more_than_cents, :paid_less_than_cents, :created_after, :created_before,
+                                          :paid_more_than_cents, :paid_less_than_cents, :created_after, :created_before, :not_purchased_since,
                                           :bought_from, :active_customers_only, :minimum_license_uses,
                                           :shown_on_profile, :send_emails, :allow_comments, :not_clicked_post_id, :opened_post_id,
                                           bought_products: [], bought_variants: [], affiliate_products: [],

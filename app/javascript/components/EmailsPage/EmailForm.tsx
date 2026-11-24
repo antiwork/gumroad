@@ -300,6 +300,7 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
   );
   const [afterDate, setAfterDate] = React.useState(installment?.created_after ?? "");
   const [beforeDate, setBeforeDate] = React.useState(installment?.created_before ?? "");
+  const [notPurchasedSince, setNotPurchasedSince] = React.useState(installment?.not_purchased_since ?? "");
   const [fromCountry, setFromCountry] = React.useState(installment?.bought_from ?? "");
   const [activeCustomersOnly, setActiveCustomersOnly] = React.useState(installment?.active_customers_only ?? false);
   const [minimumLicenseUses, setMinimumLicenseUses] = React.useState<number | null>(
@@ -595,6 +596,7 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
     installment_type: recipientType,
     created_after: afterDate,
     created_before: beforeDate,
+    not_purchased_since: audienceType === "everyone" || audienceType === "followers" ? notPurchasedSince : "",
     bought_products:
       audienceType === "customers" || audienceType === "followers" ? boughtProducts.map(({ id }) => id) : null,
     bought_variants:
@@ -1443,6 +1445,23 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
                         <FieldsetDescription>11:59 {context.timezone}</FieldsetDescription>
                       </Fieldset>
                     </div>
+                  </CardContent>
+                ) : null}
+                {audienceType === "everyone" || audienceType === "followers" ? (
+                  <CardContent>
+                    <Fieldset>
+                      <FieldsetTitle>
+                        <Label htmlFor={`${uid}-not_purchased_since`}>Exclude customers who purchased since</Label>
+                      </FieldsetTitle>
+                      <Input
+                        type="date"
+                        id={`${uid}-not_purchased_since`}
+                        value={notPurchasedSince}
+                        disabled={isPublished}
+                        onChange={(event) => setNotPurchasedSince(event.target.value)}
+                      />
+                      <FieldsetDescription>00:00 {context.timezone}</FieldsetDescription>
+                    </Fieldset>
                   </CardContent>
                 ) : null}
                 {audienceType === "customers" ? (

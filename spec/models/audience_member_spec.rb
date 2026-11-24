@@ -250,6 +250,34 @@ RSpec.describe AudienceMember, :freeze_time do
       expect(filtered(created_after: 4.days.ago.iso8601, created_before: 1.days.ago.iso8601, bought_product_ids: [6])).to eq([member3])
     end
 
+    it "excludes members who purchased at or after not_purchased_since and keeps never-buyers" do
+      follower_only = create_member(follower: { "created_at" => 1.hour.ago.iso8601 })
+      old_buyer = create_member(purchases: [{ "product_id" => 1, "created_at" => 3.days.ago.iso8601 }])
+      boundary_buyer = create_member(purchases: [{ "product_id" => 1, "created_at" => 2.days.ago.iso8601 }])
+      recent_buyer = create_member(purchases: [{ "product_id" => 1, "created_at" => 1.day.ago.iso8601 }])
+      mixed_buyer = create_member(
+        follower: { "created_at" => 9.days.ago.iso8601 },
+        purchases: [
+          { "product_id" => 1, "created_at" => 5.days.ago.iso8601 },
+          { "product_id" => 2, "created_at" => 1.hour.ago.iso8601 },
+        ]
+      )
+      since = 2.days.ago.iso8601
+
+      expect(filtered(not_purchased_since: since)).to eq([follower_only, old_buyer])
+      expect(filtered(type: "follower", not_purchased_since: since)).to eq([follower_only])
+      expect(filtered(not_purchased_since: since, created_before: 4.days.ago.iso8601)).to eq([])
+      expect(filtered_with_ids(not_purchased_since: since)).to eq([follower_only, old_buyer])
+      expect([boundary_buyer, recent_buyer, mixed_buyer]).to all(satisfy { !filtered(not_purchased_since: since).include?(_1) })
+    end
+
+    it "does not apply not_purchased_since to another seller's members" do
+      create(:audience_member, seller: create(:user), purchases: [{ "product_id" => 1, "created_at" => 1.day.ago.iso8601 }])
+      mine = create_member(purchases: [{ "product_id" => 1, "created_at" => 5.days.ago.iso8601 }])
+
+      expect(filtered(not_purchased_since: 2.days.ago.iso8601)).to eq([mine])
+    end
+
     it "filters by country" do
       member1 = create_member(purchases: [{ "product_id" => 1, "country" => "United States" }])
       member2 = create_member(purchases: [{ "product_id" => 1, "country" => "Canada" }])
