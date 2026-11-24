@@ -22,17 +22,23 @@ class Discover::AutocompletePresenter
 
       return { products: search_results(Link.search_options(size: PRODUCT_RESULT_COUNT)), viewed: false } if user.blank? && browser_guid.blank?
 
+      # Page views live in one index per month. The time bound lets Elasticsearch skip the
+      # older indices instead of searching all of them on every call.
+      recently_viewed_window = { range: { timestamp: { gte: Discover::RecentlyViewedPresenter::VIEW_WINDOW.ago.iso8601 } } }
       recently_viewed_ids = ProductPageView.search(
         query: {
           bool: user.present? ? {
             must: { term: { user_id: user.id } },
+            filter: recently_viewed_window,
           } : {
             must: { term: { browser_guid: } },
             must_not: { exists: { field: "user_id" } },
+            filter: recently_viewed_window,
           }
         },
+        collapse: { field: :product_id },
         sort: { timestamp: :desc },
-        size: 5,
+        size: PRODUCT_RESULT_COUNT,
       ).map { _1["_source"]["product_id"] }
 
       if recently_viewed_ids.present?
