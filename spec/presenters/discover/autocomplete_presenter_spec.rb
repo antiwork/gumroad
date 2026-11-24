@@ -75,6 +75,34 @@ describe Discover::AutocompletePresenter do
         end
       end
 
+      context "when the user's only views are older than 30 days" do
+        before do
+          add_page_view(product2, 31.days.ago.iso8601, user_id: user.id)
+          ProductPageView.__elasticsearch__.refresh_index!
+        end
+
+        it "returns top products instead of the old views" do
+          result = presenter.props
+
+          expect(result[:products].map { _1[:name] }).to contain_exactly("Test Product", "Another Test Product", "Yet Another Test Product")
+          expect(result[:viewed]).to be(false)
+        end
+      end
+
+      context "when not logged in and this browser's only views are older than 30 days" do
+        before do
+          add_page_view(product2, 31.days.ago.iso8601, browser_guid:)
+          ProductPageView.__elasticsearch__.refresh_index!
+        end
+
+        it "returns top products instead of the old views" do
+          result = described_class.new(query:, user: nil, browser_guid:).props
+
+          expect(result[:products].map { _1[:name] }).to contain_exactly("Test Product", "Another Test Product", "Yet Another Test Product")
+          expect(result[:viewed]).to be(false)
+        end
+      end
+
       context "when not logged in but has viewed products in this browser" do
         before do
           add_page_view(product2, Time.current, browser_guid:)
