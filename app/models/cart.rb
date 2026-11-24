@@ -24,11 +24,10 @@ class Cart < ApplicationRecord
   ABANDONED_IF_UPDATED_BEFORE_AGO = 24.hours
   MAX_ALLOWED_CART_PRODUCTS = 50
 
-  # Bound on SQL IN-list length, matching ScheduleAbandonedCartEmailsJob: past roughly 10k ids
-  # MySQL's range optimizer exhausts range_optimizer_max_mem_size and silently falls back to a
-  # full table scan. A 500-cart batch can hold 25k distinct products (MAX_ALLOWED_CART_PRODUCTS
-  # each), which is well over that cliff.
-  PURCHASE_LOOKUP_IN_LIST_BATCH_SIZE = 5_000
+  # Bound on SQL IN-list length. At 50 product ids the optimizer stops using the email/purchaser
+  # index for a buyer with a large history and the statement runs past PURCHASE_LOOKUP_TIME_BUDGET;
+  # 49 ids runs in ~50ms. Stay well under that cliff (a full cart is MAX_ALLOWED_CART_PRODUCTS).
+  PURCHASE_LOOKUP_IN_LIST_BATCH_SIZE = 25
 
   # Statement budget for the ownership lookup, sized for the single cart the mailer asks about.
   # A bulk-sized budget is what let one statement run long enough to kill a run
