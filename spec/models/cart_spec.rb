@@ -287,7 +287,11 @@ describe Cart do
       expect(result[cart2.id]).to be_empty
     end
 
-    it "slices the product-id IN list so a large batch cannot fall off MySQL's range-optimizer cliff" do
+    it "keeps every product-id IN list under the size where MySQL stops using the email/purchaser index" do
+      expect(Cart::PURCHASE_LOOKUP_IN_LIST_BATCH_SIZE).to be < Cart::MAX_ALLOWED_CART_PRODUCTS
+    end
+
+    it "finds owned products across slices of the product-id IN list" do
       product = create(:product)
       buyer = create(:user)
       cart = create(:cart, user: buyer)
