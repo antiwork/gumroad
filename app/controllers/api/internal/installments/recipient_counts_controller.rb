@@ -16,6 +16,7 @@ class Api::Internal::Installments::RecipientCountsController < Api::Internal::Ba
       :installment_type,
       :created_after,
       :created_before,
+      :not_purchased_since,
       :not_clicked_post_id,
       :opened_post_id,
       bought_products: [],

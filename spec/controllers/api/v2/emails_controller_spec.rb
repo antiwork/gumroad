@@ -649,6 +649,18 @@ describe Api::V2::EmailsController do
         expect(@installment.waitlisted_products).to eq([product.unique_permalink])
       end
 
+      it "keeps the purchased-since exclusion when publishing an Everyone draft" do
+        @installment.update!(installment_type: Installment::AUDIENCE_TYPE, link: nil)
+        @installment.add_and_validate_filters({ not_purchased_since: "2026-11-20" }, @user)
+        @installment.save!
+
+        post @action, params: @params
+
+        expect(response.parsed_body["success"]).to be(true)
+        expect(@installment.reload.published?).to be(true)
+        expect(@installment.json_filters[:not_purchased_since]).to eq(Date.new(2026, 11, 20))
+      end
+
       it "keeps the opened and not-clicked filters when publishing a draft" do
         @installment.update!(installment_type: Installment::SELLER_TYPE, link: nil, opened_post_id: "post-1", not_clicked_post_id: "post-2")
         allow(AudienceMember).to receive(:filter_count).and_return(Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE)

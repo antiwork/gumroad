@@ -260,6 +260,7 @@ class Api::V2::EmailsController < Api::V2::BaseController
         paid_less_than_cents: installment.paid_less_than_cents,
         created_after: installment.created_after,
         created_before: installment.created_before,
+        not_purchased_since: installment.not_purchased_since,
         bought_from: installment.bought_from,
         active_customers_only: installment.active_customers_only,
         minimum_license_uses: installment.minimum_license_uses,

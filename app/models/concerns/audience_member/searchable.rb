@@ -179,6 +179,9 @@ module AudienceMember::Searchable
         filter << { range: { min_created_at_field => { lt: params[:created_before] } } } if params[:created_before]
       end
 
+      # `must_not` keeps members with no purchases, like the SQL twin's IS NULL branch.
+      must_not << { range: { max_purchase_created_at: { gte: params[:not_purchased_since] } } } if params[:not_purchased_since]
+
       if params[:bought_from]
         filter << { nested: { path: "purchases", query: { term: { "purchases.country" => params[:bought_from] } } } }
       end

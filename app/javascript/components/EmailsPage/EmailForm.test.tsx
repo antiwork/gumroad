@@ -655,6 +655,20 @@ describe('EmailForm "Has not yet bought"', () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(sent.payload?.installment).toMatchObject(expected));
   });
+
+  it("sends the purchased-since exclusion in the recipient count and the save payload", async () => {
+    renderForm({ ...draft, not_purchased_since: "2026-11-20" }, audienceContext);
+
+    const input = screen.getByLabelText<HTMLInputElement>("Exclude customers who purchased since");
+    expect(input.value).toBe("2026-11-20");
+    fireEvent.change(input, { target: { value: "2026-11-22" } });
+
+    await waitFor(() =>
+      expect(vi.mocked(getRecipientCount).mock.lastCall?.[0]).toMatchObject({ not_purchased_since: "2026-11-22" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(sent.payload?.installment).toMatchObject({ not_purchased_since: "2026-11-22" }));
+  });
 });
 
 describe('EmailForm "Has not clicked"', () => {

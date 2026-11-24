@@ -20,6 +20,7 @@ module WithFiltering
     attr_json_data_accessor :paid_less_than_cents
     attr_json_data_accessor :created_after
     attr_json_data_accessor :created_before
+    attr_json_data_accessor :not_purchased_since
     attr_json_data_accessor :bought_from
     attr_json_data_accessor :active_customers_only
     attr_json_data_accessor :minimum_license_uses
@@ -84,6 +85,9 @@ module WithFiltering
     # created "on and before" this timestamp:
     created_before_date = safe_parse_filter_date(params[:created_before])
     self.created_before = created_before_date ? created_before_date.in_time_zone(user.timezone).end_of_day : nil
+    # Members with a purchase at or after this timestamp are excluded.
+    not_purchased_since_date = (audience_type? || follower_type?) ? safe_parse_filter_date(params[:not_purchased_since]) : nil
+    self.not_purchased_since = not_purchased_since_date ? not_purchased_since_date.in_time_zone(user.timezone) : nil
     self.bought_from = seller_or_product_or_variant_type? ? params[:bought_from].presence : nil
     self.active_customers_only = if seller_or_product_or_variant_type?
       ActiveModel::Type::Boolean.new.cast(params[:active_customers_only])
@@ -254,6 +258,7 @@ module WithFiltering
     end
     json[:created_after] = convert_to_date(created_after) if created_after.present?
     json[:created_before] = convert_to_date(created_before) if created_before.present?
+    json[:not_purchased_since] = convert_to_date(not_purchased_since) if not_purchased_since.present?
     json[:bought_from] = bought_from if bought_from.present?
     json[:active_customers_only] = true if ActiveModel::Type::Boolean.new.cast(active_customers_only)
     if minimum_license_uses.present?

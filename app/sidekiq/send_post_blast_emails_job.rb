@@ -123,7 +123,7 @@ class SendPostBlastEmailsJob
     # product affiliation, today's openers), or the absence of one.
     UNREBUILDABLE_FILTER_KEYS = %i[
       minimum_license_uses active_customers_only bought_variant_ids not_bought_product_ids not_bought_variant_ids affiliate_product_ids
-      include_emails
+      include_emails not_purchased_since
     ].freeze
 
     # Blasts above this many recipients are split into slice jobs. Small blasts send
