@@ -109,8 +109,9 @@ class Settings::PaymentsController < Settings::BaseController
       end
     end
 
-    if Compliance::Countries::USA.common_name == compliance_info.legal_entity_country
-      zip_code = params.dig(:user, params.dig(:user, :is_business) ? :business_zip_code : :zip_code).presence
+    business_after_save, legal_country_after_save = account_type_and_legal_country_code_after_save(compliance_info)
+    if Compliance::Countries::USA.alpha2 == legal_country_after_save
+      zip_code = params.dig(:user, business_after_save ? :business_zip_code : :zip_code).presence
       if zip_code
         unless UsZipCodes.identify_state_code(zip_code).present?
           return redirect_with_error("You entered a ZIP Code that doesn't exist within your country.")
