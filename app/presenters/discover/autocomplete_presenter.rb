@@ -36,8 +36,9 @@ class Discover::AutocompletePresenter
             filter: recently_viewed_window,
           }
         },
+        collapse: { field: :product_id },
         sort: { timestamp: :desc },
-        size: 5,
+        size: PRODUCT_RESULT_COUNT,
       ).map { _1["_source"]["product_id"] }
 
       if recently_viewed_ids.present?
