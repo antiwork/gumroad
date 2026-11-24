@@ -375,6 +375,41 @@ describe ProductPresenter::Card do
                           "Expected no per-row bundle_products queries for bundle_id=#{bundle.id}, got #{hits.size}:\n#{hits.join("\n")}"
         end
       end
+      it "does not issue per-row installment plan queries while pricing cards for a buyer-local-currency visitor" do
+        seller = create(:user, disable_buyer_local_currency: false)
+        products = Array.new(2) { create(:product, user: seller, price_cents: 1000, price_currency_type: "usd") }
+        allow(GeoIp).to receive(:lookup).and_return(
+          GeoIp::Result.new(
+            country_name: "France",
+            country_code: "FR",
+            region_name: nil,
+            city_name: nil,
+            postal_code: nil,
+            latitude: nil,
+            longitude: nil
+          )
+        )
+        Feature.activate(:buyer_local_currency)
+        Feature.activate_user(Checkout::BuyerCurrencyEligibility::FEATURE_NAME, seller)
+        buyer_request = OpenStruct.new(remote_ip: "2.2.2.2", host: "example.com", host_with_port: "example.com",
+                                       cookie_jar: {}, params: {})
+        ids = products.map(&:id)
+        render_cards = lambda do
+          Link.includes(*ProductPresenter::ASSOCIATIONS_FOR_CARD).where(id: ids).to_a.each do |product|
+            described_class.new(product:).for_web(request: buyer_request, show_seller: true, compute_description: false, compute_inventory: false)
+          end
+        end
+
+        # Pre-warm the GeoIP and rate lookups so they are not counted as N+1.
+        render_cards.call
+
+        queries = capture_queries { render_cards.call }
+
+        # CurrencyHelper#buyer_currency_unquotable_product? reads the plan shape per card.
+        per_row = queries.grep(/FROM `product_installment_plans`.*WHERE `product_installment_plans`\.`link_id` = \d+/)
+        expect(per_row).to be_empty,
+                           "Expected no per-row product_installment_plans queries, got #{per_row.size}:\n#{per_row.join("\n")}"
+      end
     end
 
     context "membership product" do

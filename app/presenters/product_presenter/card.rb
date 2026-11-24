@@ -11,6 +11,9 @@ class ProductPresenter::Card
 
   ASSOCIATIONS = [
     :alive_prices, :product_review_stat, :skus,
+    # Read per card by CurrencyHelper#buyer_currency_unquotable_product?; without it every
+    # card in a grid costs one SELECT.
+    :installment_plan,
     {
       default_offer_code: :variants,
       tiers: :alive_prices,
