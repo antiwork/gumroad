@@ -1139,7 +1139,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       describe "creator enters an invalid zip code" do
         before do
           params.merge!(
-            business_zip_code: "9410494104",
+            zip_code: "9410494104",
           )
         end
 
@@ -1147,6 +1147,28 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
           put :update, params: { user: params }
           expect(response).to redirect_to(settings_payments_path)
           expect(response).to have_http_status :found
+          expect(session[:inertia_errors][:base]).to include("You entered a ZIP Code that doesn't exist within your country.")
+        end
+      end
+
+      describe "a stored US business switching to an individual outside the US" do
+        before do
+          user.alive_user_compliance_info.dup_and_save! do |info|
+            info.is_business = true
+            info.country = "Paraguay"
+            info.business_country = "United States"
+          end
+        end
+
+        it "validates the ZIP against the country the save leaves behind" do
+          put :update, params: { user: params.except(:is_business, :business_country, :business_zip_code).merge(is_business: false, zip_code: "001422") }, as: :json
+
+          expect(session[:inertia_errors]).to be_blank
+        end
+
+        it "still rejects an invalid US ZIP when the save keeps a US legal entity" do
+          put :update, params: { user: params.merge(is_business: true, business_country: "US", business_zip_code: "9410494104") }
+
           expect(session[:inertia_errors][:base]).to include("You entered a ZIP Code that doesn't exist within your country.")
         end
       end
