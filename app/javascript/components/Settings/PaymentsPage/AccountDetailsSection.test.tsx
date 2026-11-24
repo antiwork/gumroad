@@ -232,9 +232,22 @@ describe("AccountDetailsSection foreign representative tax ID", () => {
       country: "BO",
     });
     const input = screen.getByLabelText<HTMLInputElement>("Cédula de Identidad (CI)");
-    expect([input.minLength, input.maxLength]).toEqual([8, 8]);
+    expect([input.minLength, input.maxLength]).toEqual([7, 8]);
     fireEvent.change(input, { target: { value: "12345678" } });
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("accepts a seven-digit Bolivian Cédula de Identidad", () => {
+    renderSection(makeUser({ individual_tax_id_entered: false }), {
+      is_business: true,
+      business_country: "US",
+      country: "BO",
+    });
+    const input = screen.getByLabelText<HTMLInputElement>("Cédula de Identidad (CI)");
+    expect(input.minLength).toBe(7);
+    fireEvent.change(input, { target: { value: "1234567" } });
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(input.validity.tooShort).toBe(false);
   });
 
   it("floors the Guatemala NIT input at the validator's 7 characters", () => {

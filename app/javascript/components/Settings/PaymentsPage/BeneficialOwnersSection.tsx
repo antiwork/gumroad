@@ -248,9 +248,11 @@ const TAX_ID_CONFIGS: Record<string, TaxIdConfig> = {
     idSuffix: "dominican-republic-id-number",
   },
   BO: {
+    // 7 or 8 characters: Stripe takes a seven-digit Cédula de Identidad. Mirror of the bounds in
+    // personalTaxId.ts, measured against live BO custom accounts 2026-11-24 (UTC).
     label: "Cédula de Identidad (CI)",
     placeholder: "12345678",
-    minLength: 8,
+    minLength: 7,
     maxLength: 8,
     idSuffix: "bolivia-id-number",
   },
