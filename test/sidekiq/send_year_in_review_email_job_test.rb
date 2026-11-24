@@ -87,7 +87,7 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
     assert_stat_tiles mail, sales: 1, views: 2, unique_customers: 1, products_sold: 1
     assert_includes body, "You ranked #2 among all creators"
     assert_includes body, "Your top product"
-    assert_match(/Product 1 \( \S+ \) -+ Views 2 Sales 1 Total 1K/, body)
+    assert_match(/Product 1 \( \S+ \) -+ 2 views \S+ 1 sale \S+ \$1K/, body)
     assert_includes html_text(mail), "You earned a total of $1,000"
     assert_includes body, "You sold products in 1 country"
     assert_not_includes body, "Elsewhere"
@@ -117,7 +117,7 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
     body = sanitized_body(mail)
     assert_includes body, "You sold products in 1 country"
     assert_includes body, "United States 1 1 $0.50"
-    assert_match(/Fifty-cent fixture \( \S+ \) -+ Views 1 Sales 1 Total 0\.50/, body)
+    assert_match(/Fifty-cent fixture \( \S+ \) -+ 1 view \S+ 1 sale \S+ \$0\.50/, body)
     assert_includes html_text(mail), "You earned a total of $0.50"
   end
 
@@ -199,7 +199,7 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
       total = format("%.2f", net_cents / 100.0)
       assert_includes body, "You sold products in 1 country"
       assert_includes body, "United States 0 1 $#{total}"
-      assert_match(/Small-net fixture \( \S+ \) -+ Views 0 Sales 1 Total #{Regexp.escape(total)}/, body)
+      assert_match(/Small-net fixture \( \S+ \) -+ 0 views \S+ 1 sale \S+ \$#{Regexp.escape(total)}/, body)
     end
   end
 
@@ -395,7 +395,7 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
     body = sanitized_body(mail)
     assert_stat_tiles mail, sales: 13, views: 1, unique_customers: 13, products_sold: permalinks.size
     top_product_names.each do |name|
-      assert_match(/#{name} \( \S+ \) -+ Views \d+ Sales \d+ Total \d+/, body)
+      assert_match(/#{name} \( \S+ \) -+ \d+ views? \S+ \d+ sales? \S+ \$\d+/, body)
     end
     assert_includes html_text(mail), "You earned a total of $1,300"
     assert_includes body, "You sold products in 2 countries"
@@ -552,7 +552,7 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
       body = sanitized_body(mail)
       assert_stat_tiles mail, sales: 12, views: 24, unique_customers: 12, products_sold: permalinks.size
       seller.products.where(unique_permalink: permalinks.first(5)).pluck(:name).each do |name|
-        assert_match(/#{name} \( \S+ \) -+ Views \d+ Sales \d+ Total \d+/, body)
+        assert_match(/#{name} \( \S+ \) -+ \d+ views? \S+ \d+ sales? \S+ \$\d+/, body)
       end
       assert_includes html_text(mail), "You earned a total of $1,200"
       assert_includes body, "You sold products in 1 country"
