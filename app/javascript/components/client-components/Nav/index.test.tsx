@@ -21,6 +21,7 @@ vi.mock("@inertiajs/react", () => ({
     className,
     onClick,
     "aria-current": ariaCurrent,
+    "data-key": dataKey,
   }: {
     children?: React.ReactNode;
     prefetch?: unknown;
@@ -29,10 +30,18 @@ vi.mock("@inertiajs/react", () => ({
     className?: string;
     onClick?: (event: React.MouseEvent) => void;
     "aria-current"?: "page" | undefined;
+    "data-key"?: string;
   }) => {
     if (title !== undefined) linkPropsByText.set(title, { prefetch });
     return (
-      <a href={href} title={title} className={className} onClick={onClick} aria-current={ariaCurrent}>
+      <a
+        href={href}
+        title={title}
+        className={className}
+        onClick={onClick}
+        aria-current={ariaCurrent}
+        data-key={dataKey}
+      >
         {children}
       </a>
     );
@@ -394,12 +403,8 @@ describe("dashboard nav progressive disclosure", () => {
 
 describe("dashboard header nav", () => {
   const navs = () => screen.getAllByRole("navigation", { name: "Main" });
-  // Every link but the logo, which comes first.
-  const linkTexts = (nav: HTMLElement) =>
-    within(nav)
-      .getAllByRole("link")
-      .slice(1)
-      .map((link) => link.textContent);
+  // The destinations: the links that carry a key, in the order they are laid out.
+  const linkTexts = (nav: HTMLElement) => [...nav.querySelectorAll("a[data-key]")].map((link) => link.textContent);
 
   it("is not rendered unless the user is on the trial", () => {
     renderNav();

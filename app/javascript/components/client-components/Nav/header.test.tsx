@@ -308,6 +308,51 @@ describe("HeaderNav", () => {
   });
 });
 
+describe("HeaderNav layouts", () => {
+  const rows = (nav: HTMLElement) => {
+    const [top, links] = [...nav.children].filter((child): child is HTMLDivElement => child instanceof HTMLDivElement);
+    if (!top || !links) throw new Error("Expected two rows in the header");
+    return { top, links };
+  };
+
+  it("puts everything on one row as a bar", () => {
+    const { nav } = renderHeader({ layout: "bar" });
+
+    expect(nav.className.split(" ")).toContain("h-16");
+    expect(within(nav).getByRole("link", { name: "Products" })).toBeTruthy();
+  });
+
+  it.each(["subnav", "subnav-centered", "subnav-light", "search-left"] as const)(
+    "puts the links on their own row under the search in %s",
+    (layout) => {
+      const { nav } = renderHeader({ layout });
+
+      const { top, links } = rows(nav);
+      expect(within(top).getByRole("button", { name: "Search" })).toBeTruthy();
+      expect(within(top).queryByRole("link", { name: "Products" })).toBeNull();
+      expect(within(links).getByRole("link", { name: "Products" })).toBeTruthy();
+    },
+  );
+
+  // Search and the buttons beside it are one height in every layout.
+  it("gives search and the create button the same height", () => {
+    const { nav } = renderHeader();
+
+    expect(within(nav).getByRole("button", { name: "Search" }).className.split(" ")).toContain("h-12");
+    expect(within(nav).getByRole("link", { name: "New product" }).parentElement?.className.split(" ")).toContain(
+      "h-12",
+    );
+  });
+
+  it("marks the current page in the text colour on the light row, where the accent is too faint", () => {
+    const { nav } = renderHeader({ layout: "subnav-light" });
+
+    const current = within(nav).getByRole("link", { name: "Products" });
+    expect(current.className.split(" ")).toContain("font-bold");
+    expect(current.className.split(" ")).not.toContain("text-accent");
+  });
+});
+
 describe("useWrappedChildren", () => {
   const Row = ({ keys, onWrapped }: { keys: string[]; onWrapped: (wrapped: string[]) => void }) => {
     const [ref, wrapped] = useWrappedChildren(keys);

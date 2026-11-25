@@ -2,8 +2,10 @@ import { usePage } from "@inertiajs/react";
 import React from "react";
 
 import MetaTags, { type MetaTag } from "$app/layouts/components/MetaTags";
+import { classNames } from "$app/utils/classNames";
 
 import { Nav } from "$app/components/client-components/Nav";
+import { currentHeaderLayout, headerHeightClass } from "$app/components/client-components/Nav/headerLayout";
 import { CurrentSellerProvider, parseCurrentSeller } from "$app/components/CurrentSeller";
 import { type LoggedInUser, LoggedInUserProvider, parseLoggedInUser } from "$app/components/LoggedInUser";
 import Alert, { type AlertPayload } from "$app/components/server-components/Alert";
@@ -49,7 +51,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           id="inertia-shell"
           className={
             loggedInUser?.headerNav
-              ? "flex h-dvh flex-col lg:[--dashboard-header-height:4rem]"
+              ? classNames("flex h-dvh flex-col", headerHeightClass(currentHeaderLayout()))
               : "flex h-dvh flex-col lg:flex-row"
           }
         >
