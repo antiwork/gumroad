@@ -3,7 +3,7 @@
   <p>
     You made <%= formatted_dollar_amount(@revenue_cents) %> from <%= pluralize(@preorders_charged_successfully_count, "pre-order") %>.
     <%= @preorders_charged_successfully_count > 1 ? "Buyers have" : "The buyer has" %> been charged, and <%= @product.is_physical ? "they're ready to have #{@product.name} shipped to them." : "they have received the product." %>
-    You can view your new <%= "customers".pluralize(@preorders_charged_successfully_count) %> by <a href="<%= customers_url %>">clicking here</a>.
+    You can view your new <%= "customers".pluralize(@preorders_charged_successfully_count) %> by <%= link_to "clicking here", customers_url %>.
   </p>
   <% if @failed_preorder_emails.count > 0 %>
     <p>

@@ -1,9 +1,10 @@
+<%= header_section(@subject) %>
 <div>
-  <h2><%= @subject %></h2>
-
   <p>We could not publish <strong><%= @product.name %></strong> at the time you scheduled (<%= @scheduled_label %>). It is still unpublished.</p>
-
+</div>
+<div class="callout warning">
   <p><%= @schedule.failure_message %></p>
-
+</div>
+<div>
   <p><a href="<%= @editor_url %>">Open the editor</a> to fix this and publish it yourself.</p>
 </div>

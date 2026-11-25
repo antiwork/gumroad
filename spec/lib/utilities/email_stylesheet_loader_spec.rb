@@ -39,15 +39,26 @@ describe EmailStylesheetLoader, :skip_ssrf_stub do
 
       expect(SsrfFilter).not_to receive(:get)
       css = described_class.load(href)
-      expect(css).to include("--font-family:")
+      expect(css).to include(".email{")
       expect(css).not_to include("@layer")
     end
 
-    it "keeps the built stylesheet's custom properties through premailer" do
+    it "inlines the built stylesheet through premailer, with no custom property left to resolve" do
       path = Dir[Rails.root.join("public", ViteRuby.config.public_output_dir, "assets", "entrypoints", "email-*.css")].first
-      html = Premailer.new("<html><body><p>Hi</p></body></html>", with_html_string: true, css_string: described_class.load(path.delete_prefix(Rails.public_path.to_s))).to_inline_css
+      css = described_class.load(path.delete_prefix(Rails.public_path.to_s))
+      html = Premailer.new(%(<html><body><div class="email"><p>Hi</p></div></body></html>), with_html_string: true, css_string: css).to_inline_css
 
-      expect(Nokogiri::HTML(html).at("html")["style"]).to include("--font-family:", "--color:", "--body-bg:")
+      expect(Nokogiri::HTML(html).at_css(".email")["style"]).to include("font-family:", "color:", "background-color:")
+      expect(css).not_to include("var(", "--")
+    end
+
+    # The minifier writes `transparent` as #0000, and max-width queries as (width<=480px). Outlook
+    # and Gmail drop both.
+    it "builds without alpha hex colours or range-syntax media queries" do
+      css = File.read(Dir[Rails.root.join("public", ViteRuby.config.public_output_dir, "assets", "entrypoints", "email-*.css")].first)
+
+      expect(css.scan(/#(?:\h{8}|\h{4})(?!\h)/)).to eq([])
+      expect(css.scan(/@media[^{]*[<>]=?[^{]*/)).to eq([])
     end
 
     it "does not read files outside public/" do
@@ -95,7 +106,7 @@ describe EmailStylesheetLoader, :skip_ssrf_stub do
         stub_request(:get, "http://assets.example.org:3000/big.css").to_return(status: 200, body: "a" * (EmailStylesheetLoader::MAX_BYTES + 1))
         stub_request(:get, "http://assets.example.org:3000/declared.css").to_return(status: 200, body: "body { margin: 0; }", headers: { "Content-Length" => (EmailStylesheetLoader::MAX_BYTES + 1).to_s })
 
-        expect(described_class.load("/vite-dev/entrypoints/email.css")).to include("--font-family:")
+        expect(described_class.load("/vite-dev/entrypoints/email.css")).to eq(built)
         expect(described_class.load("/big.css")).to eq("")
         expect(described_class.load("/declared.css")).to eq("")
       end

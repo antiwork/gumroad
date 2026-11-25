@@ -3,13 +3,7 @@
   <p>
     We did not respond to the dispute on <%= @disputable.customer_email %>'s purchase of <%= @disputable.multiple_purchases? ? "the following items" : @disputable.purchase_for_dispute_evidence.link.name %><%= @disputed_amounts_copy %>
   </p>
-  <% if @disputable.multiple_purchases? %>
-    <% @disputable.disputed_purchases.each do |purchase| %>
-      <p>
-        <%= link_to purchase.link.name, purchase.link.long_url %>
-      </p>
-    <% end %>
-  <% end %>
+  <%= render("disputed_products", disputable: @disputable) %>
   <p>
     The dispute will be lost.
     <% case @balance_debit %>

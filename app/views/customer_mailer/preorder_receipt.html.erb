@@ -1,11 +1,13 @@
 <%= header_section("You pre-ordered #{@product.name}!") %>
-<div>
-  <% if @product.is_physical %>
+
+<% if @product.is_physical %>
+  <div>
     <p>You have successfully pre-ordered <%= @product.name %>. You'll be charged on <%= displayable_release_at_date_and_time(@product.preorder_link.release_at, @product.user.timezone) %>, and shipment will occur soon after.</p>
     <p>If you need to update your address, contact the creator immediately with your updated address by replying to this email.</p>
-    <p>
-      <strong>Shipping address</strong>
-    </p>
+  </div>
+
+  <div>
+    <h3>Shipping address</h3>
     <p>
       <%= @shipping_info["full_name"] %>
       <br>
@@ -15,7 +17,9 @@
       <br>
       <%= @shipping_info["country"] %>
     </p>
-  <% else %>
+  </div>
+<% else %>
+  <div>
     <p>You have successfully pre-ordered <%= @product.name %>. The product is set to release on <%= displayable_release_at_date_and_time(@product.preorder_link.release_at, @product.user.timezone) %>.</p>
-  <% end %>
-</div>
+  </div>
+<% end %>

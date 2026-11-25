@@ -1,0 +1,18 @@
+.email {
+  // Products with their referral links: <ul class="link-list"><li><strong>Name</strong> … <br><a>
+  .link-list {
+    padding: 0;
+    list-style: none;
+
+    li {
+      margin: 0;
+      padding: 10px 0;
+      border-bottom: 1px solid $color-border;
+      word-break: break-word;
+    }
+
+    li:last-child {
+      border-bottom: none;
+    }
+  }
+}

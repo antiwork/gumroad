@@ -1,30 +1,21 @@
 <% recommended_products_info = receipt_presenter.recommended_products_info %>
 <% if recommended_products_info.present? %>
-  <% products = recommended_products_info.products %>
-  <% product_rows = products.each_slice(2).to_a %>
   <div>
     <h3><%= recommended_products_info.title %></h3>
-    <table class="reset two-product-card-table" role="presentation" border="0" cellpadding="0" cellspacing="0">
-      <tbody>
-        <% product_rows.each_with_index do |row_products, row_index| %>
-          <tr class="<%= "product-card-row-with-gap" if row_index < product_rows.size - 1 %>">
-            <% row_products.each_with_index do |product, column_index| %>
-              <% product_index = row_index * 2 + column_index %>
-              <td class="<%= "product-card-cell-with-gap" if product_index < products.size - 1 %>">
-                <table class="reset product-card-table" align="center" role="presentation" border="0" cellpadding="0" cellspacing="0">
-                  <tbody>
-                    <tr>
-                      <td>
-                        <%= render("customer_mailer/receipt/product_card", product: product) %>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </td>
-            <% end %>
-          </tr>
-        <% end %>
-      </tbody>
-    </table>
+    <%# One table per row, so the gap between rows is a margin rather than a spacer cell. %>
+    <% recommended_products_info.products.each_slice(2) do |row_products| %>
+      <table class="product-grid" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <% row_products.each do |product| %>
+            <td width="50%">
+              <%= render("customer_mailer/receipt/product_card", product: product) %>
+            </td>
+          <% end %>
+          <% if row_products.one? %>
+            <td width="50%"></td>
+          <% end %>
+        </tr>
+      </table>
+    <% end %>
   </div>
 <% end %>

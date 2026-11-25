@@ -1,58 +1,39 @@
 <% charge_info = @receipt_presenter.charge_info %>
-<div class="receipt">
-  <div class="info-row">
-    <span class="info-label">Order ID:</span>
-    <span class="info-value"><%= charge_info.order_id %></span>
-  </div>
-  <div class="info-row with-top-margin">
-    <span class="info-label">Order date:</span>
-    <span class="info-value"><%= charge_info.formatted_created_at %></span>
-  </div>
-</div>
+<%= header_section("You've received a gift!") %>
 
 <div>
-  <h2>You've received a gift!</h2>
-
   <p>Hi! <% if @chargeable.try(:gifter_hidden_from_recipient?) %>Someone<% else %><%= mail_to(@chargeable.gifter_email) %><% end %> bought this as a gift for you. We hope you like it!</p>
 
   <% if @chargeable.gift_note.present? %>
-    <div>
-      <div class="promo" role="status">
-        <div>
-          <table class="reset" role="presentation" border="0" cellpadding="0" cellspacing="0">
-            <tbody>
-              <tr>
-                <td>
-                  <%= image_tag("illustrations/gift.png", alt: "Gift", width: 32, height: 28) %>
-                </td>
-                <td>
-                  <%= @chargeable.gift_note %>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
+    <div class="callout preserve-lines" role="status"><%= @chargeable.gift_note %></div>
   <% end %>
+</div>
 
+<div>
   <% @receipt_presenter.items_infos.each do |item_info| %>
-    <div class="item">
+    <div class="card">
       <%= render("customer_mailer/receipt/item", item_info: item_info) %>
     </div>
   <% end %>
 
   <% if @receipt_presenter.giftee_manage_subscription.note.present? %>
-    <p>
-      <%= @receipt_presenter.giftee_manage_subscription.note %>
-    </p>
+    <p><%= @receipt_presenter.giftee_manage_subscription.note %></p>
   <% end %>
 
   <% if charge_info.product_questions_note.present? %>
-    <div>
-      <%= charge_info.product_questions_note %>
-    </div>
+    <p><%= charge_info.product_questions_note %></p>
   <% end %>
 </div>
 
 <%= render("customer_mailer/receipt/sections/shipping", receipt_presenter: @receipt_presenter) %>
+
+<table class="details">
+  <tr>
+    <th>Order ID:</th>
+    <td><%= charge_info.order_id %></td>
+  </tr>
+  <tr>
+    <th>Order date:</th>
+    <td><%= charge_info.formatted_created_at %></td>
+  </tr>
+</table>

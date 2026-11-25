@@ -1871,7 +1871,7 @@ describe PurchasesController, :vcr do
 
           expect(response).to be_successful
           footer_style = Nokogiri::HTML(response.body).at_css(".email > .footer")["style"]
-          expect(footer_style).to include("max-width: 448px")
+          expect(footer_style).to include("max-width: 600px")
           expect(footer_style).not_to include("#c0ffee")
           expect(internal_stylesheet).not_to have_been_requested
         end
@@ -1942,7 +1942,7 @@ describe PurchasesController, :vcr do
 
         # Only the item cards: "More from this creator" can recommend the other product.
         def receipt_item_names
-          Nokogiri::HTML(response.body).css(".item h4").map { _1.text.squish }
+          Nokogiri::HTML(response.body).css("table.product h4").map { _1.text.squish }
         end
 
         before do
@@ -1993,7 +1993,7 @@ describe PurchasesController, :vcr do
           get :receipt, params: { id: purchase.external_id, email: "test@example.com" }
 
           expect(response).to be_successful
-          expect(Nokogiri::HTML(response.body).css(".item h4").map { _1.text.squish }).to eq(["Paid edition"])
+          expect(Nokogiri::HTML(response.body).css("table.product h4").map { _1.text.squish }).to eq(["Paid edition"])
         end
       end
 
@@ -2011,7 +2011,7 @@ describe PurchasesController, :vcr do
           get :receipt, params: { id: purchase.external_id, email: "test@example.com" }
 
           expect(response).to be_successful
-          expect(Nokogiri::HTML(response.body).css(".item h4").map { _1.text.squish }).to eq(["Declined edition"])
+          expect(Nokogiri::HTML(response.body).css("table.product h4").map { _1.text.squish }).to eq(["Declined edition"])
         end
       end
 

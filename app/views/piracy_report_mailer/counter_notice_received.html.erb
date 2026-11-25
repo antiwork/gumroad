@@ -14,7 +14,7 @@
     share the work. The law lets the site put the page back 10 to 14 business days after it got the counter-notice.
     The full counter-notice is below.
   </p>
-  <pre style="white-space: pre-wrap; font-family: inherit; margin: 16px 0; padding-left: 16px; border-left: 2px solid currentColor;"><%= @report.counter_notice_body %></pre>
+  <blockquote class="preserve-lines"><%= @report.counter_notice_body %></blockquote>
   <p>
     <%= link_to "View your report", @report_url, class: "button primary" %>
   </p>

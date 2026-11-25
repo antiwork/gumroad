@@ -84,14 +84,11 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
     assert_equal [seller.email], mail.to
     assert_equal "Your 2022 in review", mail.subject
     body = sanitized_body(mail)
-    assert_includes body, "Views 2"
-    assert_includes body, "Sales 1"
-    assert_includes body, "Unique customers 1"
-    assert_includes body, "Products sold 1"
+    assert_stat_tiles mail, sales: 1, views: 2, unique_customers: 1, products_sold: 1
     assert_includes body, "You ranked #2 among all creators"
     assert_includes body, "Your top product"
-    assert_match(/Product 1 \( \S+ \) -+ Views 2 Sales 1 Total 1K/, body)
-    assert_includes body, "You earned a total of $1,000"
+    assert_match(/Product 1 \( \S+ \) -+ 2 views \S+ 1 sale \S+ \$1K/, body)
+    assert_includes html_text(mail), "You earned a total of $1,000"
     assert_includes body, "You sold products in 1 country"
     assert_not_includes body, "Elsewhere"
     assert_includes body, "United States 2 1 $1K"
@@ -116,11 +113,12 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
       SendYearInReviewEmailJob.new.perform(seller.id, date.year)
     end
 
-    body = sanitized_body(ActionMailer::Base.deliveries.last)
+    mail = ActionMailer::Base.deliveries.last
+    body = sanitized_body(mail)
     assert_includes body, "You sold products in 1 country"
     assert_includes body, "United States 1 1 $0.50"
-    assert_match(/Fifty-cent fixture \( \S+ \) -+ Views 1 Sales 1 Total 0\.50/, body)
-    assert_includes body, "You earned a total of $0.50"
+    assert_match(/Fifty-cent fixture \( \S+ \) -+ 1 view \S+ 1 sale \S+ \$0\.50/, body)
+    assert_includes html_text(mail), "You earned a total of $0.50"
   end
 
   test "country stats retain fractional cents, signed values and existing ordering" do
@@ -201,7 +199,7 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
       total = format("%.2f", net_cents / 100.0)
       assert_includes body, "You sold products in 1 country"
       assert_includes body, "United States 0 1 $#{total}"
-      assert_match(/Small-net fixture \( \S+ \) -+ Views 0 Sales 1 Total #{Regexp.escape(total)}/, body)
+      assert_match(/Small-net fixture \( \S+ \) -+ 0 views \S+ 1 sale \S+ \$#{Regexp.escape(total)}/, body)
     end
   end
 
@@ -221,11 +219,11 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
     mail = CreatorMailer.year_in_review(seller:, year: 2027, analytics_data:).message
     html = Nokogiri::HTML((mail.html_part || mail).decoded)
     body = html.text.gsub(/\s+/, " ")
-    product_card = html.css(".product-checkout-cell").sole
+    product_row = html.css("table.product").sole
 
     assert_includes body, "United States 1 1 $-0.09"
-    assert_equal "Signed-net fixture", product_card.at_css("h4").text.strip
-    assert_equal %w[1 1 -0.09], product_card.css(".product-stats > span").map { |span| span.text.strip }
+    assert_equal "Signed-net fixture", product_row.at_css("h4.product-name").text.strip
+    assert_equal "1 view · 1 sale · $-0.09", product_stats(product_row)
     assert_includes body, "Romania 1 1 $1.2K"
     assert_includes body, "Canada 1 1 $1"
     assert_includes body, "Elsewhere 0 0 $0"
@@ -244,12 +242,12 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
     mail = CreatorMailer.year_in_review(seller:, year: 2027, analytics_data:).message
     html = Nokogiri::HTML((mail.html_part || mail).decoded)
     body = html.text.gsub(/\s+/, " ")
-    product_card = html.css(".product-checkout-cell").sole
+    product_row = html.css("table.product").sole
 
     assert_includes body, "United States 1 1 €0.89"
     assert_includes body, "You earned a total of €0.89"
-    assert_equal "Native-currency fixture", product_card.at_css("h4").text.strip
-    assert_equal %w[1 1 0.99], product_card.css(".product-stats > span").map { |span| span.text.strip }
+    assert_equal "Native-currency fixture", product_row.at_css("h4.product-name").text.strip
+    assert_equal "1 view · 1 sale · $0.99", product_stats(product_row)
   end
 
   test "perform renders the AI-generated buy list" do
@@ -395,14 +393,11 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
     assert_equal [seller.email], mail.to
     assert_equal "Your 2022 in review", mail.subject
     body = sanitized_body(mail)
-    assert_includes body, "Views 1"
-    assert_includes body, "Sales 13"
-    assert_includes body, "Unique customers 13"
-    assert_includes body, "Products sold #{permalinks.size}"
+    assert_stat_tiles mail, sales: 13, views: 1, unique_customers: 13, products_sold: permalinks.size
     top_product_names.each do |name|
-      assert_match(/#{name} \( \S+ \) -+ Views \d+ Sales \d+ Total \d+/, body)
+      assert_match(/#{name} \( \S+ \) -+ \d+ views? \S+ \d+ sales? \S+ \$\d+/, body)
     end
-    assert_includes body, "You earned a total of $1,300"
+    assert_includes html_text(mail), "You earned a total of $1,300"
     assert_includes body, "You sold products in 2 countries"
     assert_not_includes body, "United States"
     assert_includes body, "Romania 1 1 $100"
@@ -446,6 +441,26 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
         .sanitize(mail.body.encoded.gsub("=\r\n", ""))
         .gsub("\r\n", " ")
         .gsub(/\s{2,}/, " ")
+    end
+
+    # The HTML part as a reader sees it. sanitized_body leaves the part
+    # quoted-printable, so text that spans two elements (a tile's value and its
+    # label, the total under its eyebrow) is only contiguous here.
+    def html_text(mail)
+      Nokogiri::HTML(mail.html_part.decoded).at_css("body").text.squish
+    end
+
+    # The four tiles print the value above its label, so they read "12 Sales".
+    # Matched as one run so each number is pinned to its own label.
+    def assert_stat_tiles(mail, sales:, views:, unique_customers:, products_sold:)
+      assert_match(
+        /(?<![\d,.])#{sales} Sales #{views} Views #{unique_customers} Unique customers #{products_sold} Products sold/,
+        html_text(mail)
+      )
+    end
+
+    def product_stats(product_row)
+      product_row.at_css(".product-byline").text.squish
     end
 
     # The download link for the seller's annual report. Asserted against the
@@ -535,14 +550,11 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
     def assert_us_seller_stats(mail, seller, permalinks, date)
       assert_equal "Your 2022 in review", mail.subject
       body = sanitized_body(mail)
-      assert_includes body, "Views 24"
-      assert_includes body, "Sales 12"
-      assert_includes body, "Unique customers 12"
-      assert_includes body, "Products sold #{permalinks.size}"
+      assert_stat_tiles mail, sales: 12, views: 24, unique_customers: 12, products_sold: permalinks.size
       seller.products.where(unique_permalink: permalinks.first(5)).pluck(:name).each do |name|
-        assert_match(/#{name} \( \S+ \) -+ Views \d+ Sales \d+ Total \d+/, body)
+        assert_match(/#{name} \( \S+ \) -+ \d+ views? \S+ \d+ sales? \S+ \$\d+/, body)
       end
-      assert_includes body, "You earned a total of $1,200"
+      assert_includes html_text(mail), "You earned a total of $1,200"
       assert_includes body, "You sold products in 1 country"
       assert_not_includes body, "United States"
       assert_includes body, "Elsewhere 24 12 $1.2K"

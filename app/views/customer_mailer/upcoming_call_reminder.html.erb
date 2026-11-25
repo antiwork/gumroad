@@ -1,7 +1,5 @@
 <%= header_section @subject %>
 
-<div>
-  <div class="item">
-    <%= render("customer_mailer/receipt/item", item_info: @item_info) %>
-  </div>
+<div class="card">
+  <%= render("customer_mailer/receipt/item", item_info: @item_info) %>
 </div>

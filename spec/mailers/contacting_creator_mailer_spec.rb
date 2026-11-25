@@ -1232,9 +1232,10 @@ describe ContactingCreatorMailer do
 
       it "links this purchase's receipt, without the buyer's email or the download token" do
         body = ContactingCreatorMailer.notify(purchase.id).body.decoded
-        link = Nokogiri::HTML(body).at_xpath("//h4[starts-with(normalize-space(), \"Buyer's\")]/ancestor::tr[1]//a")
+        link = Nokogiri::HTML(body).at_xpath("//th[starts-with(normalize-space(), \"Buyer's\")]/ancestor::tr[1]//a")
 
         expect(link).to be_present
+        expect(link.text).to eq("View receipt")
         expect(URI(link["href"]).path).to eq(receipt_location(purchase))
         expect(URI(link["href"]).query).to be_nil
         expect(body).not_to include(purchase.url_redirect.token)
@@ -3423,6 +3424,7 @@ describe ContactingCreatorMailer do
       expect(mail.body.encoded).to have_link(review.link.name, href: review.link.long_url)
       expect(mail.body.encoded).to have_text(review.message)
       expect(mail.body.encoded).to have_selector("[aria-label='1 star']")
+      expect(Nokogiri::HTML(mail.body.encoded).css(".stars img").map { _1["alt"] }).to eq(["1 star", "", "", "", ""])
       expect(mail.body.encoded).to have_selector("img[src='#{ActionController::Base.helpers.image_path("email/solid-star.png")}']", count: 1)
       expect(mail.body.encoded).to have_selector("img[src='#{ActionController::Base.helpers.image_path("email/outline-star.png")}']", count: 4)
       expect(mail.body.encoded).to have_link("View all reviews", href: review.link.long_url)

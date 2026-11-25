@@ -2,12 +2,10 @@
 <div>
   <% if @tracking_link %>
     <p>Your order of <%= @product.name %> is en route and should arrive soon.</p>
-    <p>
-      <%= link_to(@tracking_link[:label], @tracking_link[:url], class: "button primary") %>
-      <% if @tracking_link[:host].present? %>
-        <span>Destination: <%= @tracking_link[:host] %></span>
-      <% end %>
-    </p>
+    <p><%= link_to(@tracking_link[:label], @tracking_link[:url], class: "button primary") %></p>
+    <% if @tracking_link[:host].present? %>
+      <p class="small muted">Destination: <%= @tracking_link[:host] %></p>
+    <% end %>
   <% else %>
     <p>Your order of <%= @product.name %> has been shipped and should arrive soon.</p>
   <% end %>

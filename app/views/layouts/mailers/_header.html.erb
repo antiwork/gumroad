@@ -1,0 +1,16 @@
+<%# brand: nil for Gumroad's own mark, or { name:, url:, logo_url: } to put a seller's name on a
+    buyer-facing email. %>
+<div class="header">
+  <% if brand.present? %>
+    <a class="brand" href="<%= brand[:url] %>" target="_blank">
+      <% if brand[:logo_url].present? %>
+        <img class="avatar brand-logo" src="<%= brand[:logo_url] %>" alt="" width="40" height="40">
+      <% end %>
+      <span class="brand-name"><%= brand[:name] %></span>
+    </a>
+  <% else %>
+    <a class="wordmark" href="<%= root_url %>">
+      <img src="<%= image_url("email/wordmark_logo.png") %>" alt="Gumroad" width="123" height="16">
+    </a>
+  <% end %>
+</div>

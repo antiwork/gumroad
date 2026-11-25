@@ -1,0 +1,74 @@
+# Emails
+
+Every email Gumroad sends is plain semantic HTML inside one layout, styled by one small stylesheet that Premailer inlines at send time.
+
+- Layout: `app/views/layouts/email.html.erb` (header, one white rounded card, footer). `app/views/posts/post_email.html.erb` is the same shell for seller posts, without route helpers.
+- Stylesheet: `app/javascript/stylesheets/email/` (`_tokens`, `_base`, `_components`, then one partial per group of emails). It is self-contained: literal colours, no CSS variables, no `rem`, no web fonts, no imports from the app's styles.
+- Light only. The client owns the page in dark mode, so the email declares `color-scheme: light only` and ships no dark rules. The exception is a seller's post, which is painted in their theme, light or dark: nothing in `_post.scss` may assume a light page.
+
+## Writing a template
+
+Write the content, not the chrome. A typical email is:
+
+```erb
+<%= header_section("Your payout is on the way") %>
+
+<div>
+  <p>We sent $120 to your bank account.</p>
+  <p><%= link_to "View payouts", balance_url, class: "button primary" %></p>
+</div>
+```
+
+Rules of thumb:
+
+- Top-level elements in the card are sections, spaced 24px apart. Group related paragraphs in one `<div>`.
+- One primary button per email. Put it in its own `<p>`. The emails that already print the raw URL under their button ("Or you can click here: …") keep that line as `<p class="small muted break-word">`; new emails do not need one.
+- No inline `style=""` unless the value is data (a seller's accent colour). If you need a new look, add a class to the stylesheet.
+- Keep the HTML valid: no `<ul>`, `<div>` or `<p>` inside a `<p>`.
+- Layout tables carry `role="presentation"`. A table without it is data and gets row dividers.
+- Images need `width`, `height` and `alt`.
+- Buttons stay `display: inline-block`, at any width: Gmail on iOS only makes the text of a `display: block` link tappable.
+- Selectors must stay simple (class, child, sibling, `:first-child`, `:last-child`): Premailer matches each one to inline it.
+- No `transparent`: the CSS build minifies it to `#0000`, which Outlook and Gmail drop. Use `background-color: inherit`.
+- Remove a border with `border: none`, never `border: 0`: over an earlier `1px solid` rule the latter inlines as a zero-width solid border, which Outlook on Windows still draws.
+- Mobile overrides (under 480px) live in the `<style>` block in `app/views/layouts/mailers/_head.html.erb`, the only place a media query may go: the CSS build rewrites `max-width` queries into range syntax that Gmail and Outlook drop. Each override needs `!important` to beat what Premailer inlined. Buttons go full width there and headings step down a size; `table.stats` and `table.product-grid` stay two-up.
+
+## Vocabulary
+
+| Need             | Markup                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Title            | `header_section("Title", "optional muted subheading")` renders `<div><h2>`                                                                                                                                                                                                                                                                                                                                                   |
+| Section title    | `<h3>`                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Button           | `<a class="button primary">` (black), `<a class="button">` (outline), `<a class="button accent">` (pink). `button full` spans the card                                                                                                                                                                                                                                                                                       |
+| Download button  | `render("shared/download_button", link: product, url_redirect:, button_style: nil)` renders a `button primary full`; `button_style:` is an inline style from `SellerProfile#email_primary_button_style`                                                                                                                                                                                                                      |
+| Two buttons      | `<p class="actions">` wrapping both links                                                                                                                                                                                                                                                                                                                                                                                    |
+| Label/value rows | `<table class="details"><tr><th>Label</th><td>Value</td></tr></table>`. Columns size to their content; put `class="nowrap"` on a label or value that must stay on one line. `<tr class="total">` for the closing row; `<th class="wide" colspan="2">` for a group heading and `<td class="wide" colspan="2">` for a value with no label                                                                                      |
+| Columns          | `<table class="list">` with `<thead>`; last column right-aligns, and `class="number"` right-aligns a numeric column before it. Keep it to two or three short columns: it does not stack on a phone                                                                                                                                                                                                                           |
+| Big numbers      | `<table class="stats" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">` with `<td><div class="stat"><div class="stat-value">…</div><div class="stat-label">…</div></div></td>`, two per row                                                                                                                                                                                                      |
+| Notice           | `<div class="callout">`, or `callout warning`                                                                                                                                                                                                                                                                                                                                                                                |
+| Bordered box     | `<div class="card">` for quotes, reviews, anything set apart. Consecutive cards, and a `<p>` after one, space themselves                                                                                                                                                                                                                                                                                                     |
+| Centred opener   | `<div class="hero">` with an image or avatar, an optional `<p class="eyebrow">` title, `<h1>` figure, `<p>` context, and the button. An email that opens with a hero puts its title there, not in `header_section`                                                                                                                                                                                                           |
+| Product row      | `render("shared/mailers/product", product: { name:, url:, thumbnail_url: }, byline: capture { … }, price: "$10")` renders `table.product` with `product-thumbnail`, `product-info` (`product-name`, `product-byline`) and `product-price` cells. Without `url:` nothing is linked; `thumbnail_alt:` overrides the name as the image's alt; an `<s>` in the price is the struck list price. Consecutive rows space themselves |
+| Code or key      | `<div class="code">` for a one-time code or licence key; `<pre><code>` for blocks; `<code>` inline                                                                                                                                                                                                                                                                                                                           |
+| Avatar           | `<img class="avatar">` (24px) or `avatar large` (56px)                                                                                                                                                                                                                                                                                                                                                                       |
+| Review           | `render("shared/mailers/review_rating", rating: 4)` renders `<div class="stars">`, with the rating as the first star's alt; `<p class="byline">` holds the author's avatar, name and an optional `pill`                                                                                                                                                                                                                      |
+| Video            | `render("shared/mailers/video_file_thumbnail", video_file:)` renders `<figure class="video-thumbnail">`, with a black `video-placeholder` when there is no image                                                                                                                                                                                                                                                             |
+| Small things     | `muted`, `small`, `nowrap`, `preserve-lines`, `break-word` (a raw URL or key inside a table cell; text elsewhere already wraps), `pill`                                                                                                                                                                                                                                                                                      |
+
+## Seller branding
+
+Setting `@email_brand = { name:, url:, logo_url: }` in a mailer action replaces Gumroad's wordmark in the header with the seller's avatar and name, and moves "Powered by Gumroad" to the footer. A seller's accent colour goes on a button as the inline style from `SellerProfile#email_primary_button_style`; `shared/_download_button` takes it as `button_style:`.
+
+Receipts are the one email that does this today, behind the `seller_branded_receipt` flag: the accent goes on the button for every flagged seller, and the header is theirs only when they have an avatar. `ReceiptPresenter#seller_branding` decides, for the mailer and for the product editor's receipt preview alike. Grouped, gift and light receipts stay Gumroad's.
+
+## Outlook on Windows
+
+It ignores `max-width` and padding on anything but a table cell, so `layouts/email.html.erb` wraps the header, card and footer in a conditional (`<!--[if mso]>`) 600px table whose middle cell carries the card's padding and border, and names a font it knows. Keep that cell's padding and colours in step with `.main`.
+
+## Preheader
+
+Set `@preheader` in a mailer action to choose the preview line an inbox shows beside the subject, as `OneOffMailer#email_using_installment` does. It is rendered hidden at the top of the body; without it the client takes the first words of the email.
+
+## Checking your work
+
+`lib/mailer_previews` holds the previews; open `/rails/mailers` in development, and add one with any new email. Specs assert on copy and links, so prefer `have_link`, `have_text` and `body.sanitized` over selectors tied to markup.

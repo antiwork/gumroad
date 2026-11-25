@@ -1,0 +1,11 @@
+@import "tokens";
+@import "base";
+@import "components";
+// One partial per group of emails, for the few pieces that are not shared. Shared pieces belong in
+// _components.scss. Order matters: later partials override earlier ones at equal specificity.
+@import "receipt";
+@import "buyer";
+@import "seller";
+@import "creator";
+@import "affiliate";
+@import "post";

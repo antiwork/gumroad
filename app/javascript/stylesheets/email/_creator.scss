@@ -1,0 +1,30 @@
+.email {
+  // A community's recap: <div class="card recap"><h3># <a>Name</a></h3> summary …
+  .recap h3 a {
+    text-decoration: none;
+  }
+
+  // A suggested bundle: product row, then its contents and a button.
+  .bundle table.product {
+    margin: 0 0 $gap-block;
+  }
+
+  // A two-message exchange: <table class="chat" role="presentation"><tr>
+  //   <td class="chat-avatar"><img class="avatar"></td><td class="chat-message">…
+  .chat-avatar {
+    width: 36px;
+  }
+
+  table.chat .chat-message {
+    padding: 0 0 12px;
+  }
+
+  table.chat tr:last-child .chat-message {
+    padding-bottom: 0;
+  }
+
+  .chat-message ul {
+    padding: 0;
+    list-style: none;
+  }
+}

@@ -1,23 +1,18 @@
+<%# locals: item_info:, button_style: nil %>
 <% item_props = item_info.props %>
-<%= render("shared/mailers/product_as_checkout_cell", product: item_props[:product]) do %>
-  <div class="section">
-    <% seller = item_props.dig(:product, :seller) %>
-    <% seller_name = seller[:name] %>
-    <% seller_profile_url = seller[:profile_url] %>
-    <div class="footer" title="<%= seller_name %>">
-      <%= link_to(image_tag(seller[:avatar_url], alt: "Avatar of #{seller_name}", class: "user-avatar", width: 18), seller_profile_url, target: "_blank") %>
-      <span>
-        <%= link_to(seller_name, seller_profile_url, target: "_blank") %>
-      </span>
-    </div>
-  </div>
+<% seller = item_props.dig(:product, :seller) %>
+<%# The seller-branded header already carries this avatar and name. %>
+<% byline = capture do %>
+  <% if @email_brand.blank? %>
+    <%= link_to(image_tag(seller[:avatar_url], alt: "Avatar of #{seller[:name]}", class: "avatar", width: 24, height: 24), seller[:profile_url], target: "_blank") %>
+    <%= link_to(seller[:name], seller[:profile_url], target: "_blank") %>
+  <% end %>
 <% end %>
+<%= render("shared/mailers/product", product: item_props[:product], byline:) %>
 
-<div class="details">
+<% details = capture do %>
   <% item_props[:notes].each do |note| %>
-    <p style="font-weight: bold">
-      <%= note %>
-    </p>
+    <p><strong><%= note %></strong></p>
   <% end %>
 
   <% if item_props[:custom_receipt_note].present? %>
@@ -25,23 +20,24 @@
   <% end %>
 
   <% if item_props[:license_key].present? %>
-    <h4>License key</h4>
-    <pre style="text-align: center; white-space: pre-wrap;">
-      <code><%= item_props[:license_key] %></code>
-    </pre>
+    <div class="license-key">
+      <h4>License key</h4>
+      <div class="code"><%= item_props[:license_key] %></div>
+    </div>
   <% end %>
 
   <% if item_props[:show_download_button] %>
     <% purchase = item_info.purchase %>
     <% url_redirect = purchase.is_commission_completion_purchase? ? purchase.commission.deposit_purchase.url_redirect : purchase.url_redirect %>
-    <%= render("shared/download_button", link: item_info.product, url_redirect: url_redirect) %>
+    <%= render("shared/download_button", link: item_info.product, url_redirect: url_redirect, button_style: local_assigns[:button_style]) %>
   <% end %>
 
   <%= render("customer_mailer/receipt/attributes", attributes: item_props[:gift_attributes]) %>
   <%= render("customer_mailer/receipt/attributes", attributes: item_props[:general_attributes]) %>
   <% if item_props[:manage_subscription_note].present? %>
-    <div>
-      <%= item_props[:manage_subscription_note] %>
-    </div>
+    <p><%= item_props[:manage_subscription_note] %></p>
   <% end %>
-</div>
+<% end %>
+<% if details.to_s.strip.present? %>
+  <div class="item-details"><%= details %></div>
+<% end %>

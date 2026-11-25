@@ -377,7 +377,7 @@ class Installment < ApplicationRecord
       lexer = (language.present? ? LANGUAGE_LEXERS[language] : Rouge::Lexer.guesses(source: content).first) || Rouge::Lexers::PlainText
       tokens = lexer.lex(content)
       formatter = Rouge::Formatters::HTMLInline.new(CustomRougeTheme.mode(:light))
-      node.parent.replace(%(<pre style="white-space: revert; overflow: auto; border: 1px solid currentColor; border-radius: 4px; background-color: #fff;"><code style="max-width: unset; border-width: 0; width: 100vw; background-color: #fff;">#{formatter.format(tokens)}</code></pre>))
+      node.parent.replace(%(<pre><code>#{formatter.format(tokens)}</code></pre>))
     end
 
     doc.search("upsell-card").each do |card|

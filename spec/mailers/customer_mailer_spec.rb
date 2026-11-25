@@ -26,6 +26,10 @@ describe CustomerMailer do
       expect(mail[:reply_to].value).to eq("bob@gumroad.com")
     end
 
+    it "titles the HTML document with the subject" do
+      expect(Nokogiri::HTML(mail.body.decoded).at_css("head title").text).to eq("You bought #{@purchase.link.name}!")
+    end
+
     context "with a free purchase from a new seller (gp#4366)" do
       let(:seller) { create(:user, email: "new-seller@example.com", name: "Alex") }
       let(:product) { create(:product, user: seller, price_cents: 0, name: "Starter Pack") }
@@ -460,18 +464,10 @@ describe CustomerMailer do
           expect(mail.body.sanitized).to have_text("$9.99")
 
           html = Nokogiri::HTML(mail.body.decoded)
-          rows = html.css("table.two-product-card-table > tbody > tr")
+          rows = html.css("table.product-grid tr")
           expect(rows.map { _1.xpath("./td").size }).to eq([2, 2])
-          expect(rows.map { _1["class"].to_s.split }).to eq([["product-card-row-with-gap"], []])
-          cell_classes = rows.flat_map { _1.xpath("./td") }.map { _1["class"].to_s.split }
-          expected_cell_classes = [
-            ["product-card-cell-with-gap"],
-            ["product-card-cell-with-gap"],
-            ["product-card-cell-with-gap"],
-            [],
-          ]
-          expect(cell_classes).to eq(expected_cell_classes)
-          expect(html.css("table.product-card-table").map { _1["align"] }).to eq(["center"] * 4)
+          expect(rows.map { _1.css(".product-card").size }).to eq([2, 2])
+          expect(html.css(".product-card h4 a").map { _1["href"] }).to all(be_present)
           expect(html.css(".rating").map { _1.text.squish }).to eq(["★ 4.5 (2)"])
         end
       end
@@ -806,55 +802,119 @@ describe CustomerMailer do
       expect(link).to be_present
       expect(link.text).to include("View content")
       expect(link["href"]).to eq(purchase.url_redirect.download_page_url)
-      expect(link["style"]).to match(/display:\s*inline-block/)
-      expect(link["style"]).to match(/box-sizing:\s*border-box/)
-      wrapper = link.ancestors("table").find { |table| table["role"] == "presentation" }
-      expect(wrapper).to be_present
-      expect(wrapper["class"].to_s.split).to include("reset")
-      # Email CSS only resets `table.reset > tbody > *`. Nokogiri HTML4 does not
-      # invent an implicit tbody, so Premailer would leave the generic row
-      # border and cell padding on this wrapper without an explicit one.
-      expect(body).to match(/<table class="reset"[^>]*>\s*<tbody[^>]*>\s*<tr[^>]*>/)
-      row = wrapper.at_css("> tbody > tr")
-      cell = row&.at_css("> td")
-      expect(row).to be_present
-      expect(cell).to be_present
+      # A table wrapper would bring row borders and cell padding with it; the anchor is the whole button.
+      expect(link.ancestors("table")).to be_empty
 
-      inlined = Premailer::Rails::CustomizedPremailer.new(body).to_inline_css
-      inlined_doc = Nokogiri::HTML(inlined)
-      inlined_link = inlined_doc.at_css("a.button.primary")
-      inlined_wrapper = inlined_link.ancestors("table").find { |table| table["role"] == "presentation" }
-      inlined_tbody = inlined_wrapper.at_css("> tbody")
-      inlined_row = inlined_wrapper.at_css("> tbody > tr")
-      inlined_cell = inlined_row.at_css("> td")
-      expect(inlined_cell["style"].to_s).to match(/padding:\s*0/)
-      expect(inlined_row["style"].to_s).to match(/border-style:\s*none/)
-      tbody_displays = inlined_tbody["style"].to_s.scan(/display:\s*([^;]+)/).flatten.map(&:strip)
-      expect(tbody_displays.last).to match(/\A(table-row-group|revert)\z/)
-      expect(inlined_wrapper["style"].to_s).to match(/width:\s*100%/)
-      expect(inlined_cell["style"].to_s).to match(/width:\s*100%/)
-      cell_displays = inlined_cell["style"].to_s.scan(/display:\s*([^;]+)/).flatten.map(&:strip)
-      expect(cell_displays.last).to match(/\A(table-cell|revert)\z/)
+      inlined_link = Nokogiri::HTML(Premailer::Rails::CustomizedPremailer.new(body).to_inline_css).at_css("a.button.primary")
+      declaration = ->(property) { inlined_link["style"].to_s.scan(/(?:\A|;)\s*#{property}:\s*([^;]+)/).flatten.last&.strip }
+      # Not block: Gmail on iOS only makes the text of a display:block link tappable.
+      expect(declaration.("display")).to eq("inline-block")
+      expect(declaration.("box-sizing")).to eq("border-box")
+      expect(declaration.("width")).to eq("100%")
+      expect(declaration.("padding")).to match(/\A[1-9]\d*px [1-9]\d*px\z/)
     end
 
-    it "wraps a long product name onto up to three lines and keeps the seller row on one line" do
+    it "shows a long product name in full, with the seller on its own row beneath it" do
       product = create(:product, name: "Petit et léger: Un retour vers le jardin vert | JRD-241117-11")
       purchase = create(:purchase, link: product)
       mail = CustomerMailer.receipt(purchase.id)
       body = mail.html_part&.decoded || mail.body.decoded
 
-      cell = Nokogiri::HTML(Premailer::Rails::CustomizedPremailer.new(body).to_inline_css).at_css(".item .product-checkout-cell")
-      declaration = ->(node, property) { node["style"].to_s.scan(/(?:\A|;)\s*#{property}:\s*([^;]+)/).flatten.last&.strip }
-      name = cell.at_css("h4")
-      seller_row = cell.at_css(".footer").parent
+      item = Nokogiri::HTML(Premailer::Rails::CustomizedPremailer.new(body).to_inline_css).at_css("table.product")
+      name = item.at_css("h4.product-name")
+      seller_row = item.at_css(".product-byline")
 
       expect(name.text.strip).to eq(product.name)
-      expect(declaration.(name, "white-space")).to eq("normal")
-      expect(declaration.(name, "font-size")).to eq("14px")
-      expect(declaration.(name, "max-height")).to eq("54.6px")
-      expect(declaration.(name, "-webkit-line-clamp")).to eq("3")
-      expect(declaration.(seller_row, "white-space")).to eq("nowrap")
-      expect(declaration.(seller_row, "max-height")).to eq("22px")
+      expect(name["style"].to_s).not_to match(/nowrap|ellipsis|overflow:\s*hidden|max-height/)
+      expect(name.at_css("a")["href"]).to eq(product.long_url)
+      expect(seller_row.text.strip).to eq(product.user.name_or_username)
+      expect(seller_row.previous_element).to eq(name)
+    end
+
+    describe "seller branding" do
+      let(:seller) { create(:named_seller, :with_avatar, name: "Maya Studio") }
+      let(:product) { create(:product, user: seller) }
+      let(:purchase) { create(:purchase, link: product, seller:).tap(&:create_url_redirect!) }
+      let(:html) { Nokogiri::HTML(mail.html_part&.decoded || mail.body.decoded) }
+      let(:header) { html.at_css(".email > .header") }
+      let(:footer) { html.at_css(".email > .footer") }
+      let(:button) { html.at_css("a.button.primary") }
+
+      before { seller.seller_profile.update!(highlight_color: "#0057b8") }
+
+      shared_examples "a Gumroad-branded receipt" do
+        it "keeps Gumroad's wordmark in the header and the default button" do
+          expect(header.at_css("a.wordmark")["href"]).to eq(root_url)
+          expect(header.at_css("img")["alt"]).to eq("Gumroad")
+          expect(header.text).not_to include("Maya Studio")
+          expect(button.text).to eq("View content")
+          expect(button["style"]).to be_nil
+          expect(footer.text).not_to include("Powered by")
+        end
+      end
+
+      context "when the seller_branded_receipt flag is off" do
+        subject(:mail) { CustomerMailer.receipt(purchase.id) }
+
+        it_behaves_like "a Gumroad-branded receipt"
+      end
+
+      context "when the seller_branded_receipt flag is on" do
+        before { Feature.activate_user(:seller_branded_receipt, seller) }
+
+        context "with an avatar" do
+          subject(:mail) { CustomerMailer.receipt(purchase.id) }
+
+          it "puts the seller's avatar and name in the header, their accent on the button and Gumroad in the footer" do
+            brand = header.at_css("a.brand")
+            expect(brand["href"]).to eq(seller.profile_url)
+            expect(brand.at_css(".brand-name").text).to eq("Maya Studio")
+            expect(brand.at_css("img.brand-logo")["src"]).to eq(seller.avatar_url)
+            expect(header.at_css("a.wordmark")).to be_nil
+
+            expect(button["style"]).to eq("background-color: #0057b8; color: #ffffff; border-color: #0057b8;")
+
+            powered_by = footer.at_css("a.wordmark")
+            expect(powered_by.text).to include("Powered by")
+            expect(powered_by["href"]).to eq(root_url)
+            expect(powered_by.at_css("img")["alt"]).to eq("Gumroad")
+          end
+
+          it "leaves the seller out of the product row, since the header already names them" do
+            expect(html.at_css("table.product .product-byline")).to be_nil
+          end
+
+          it "keeps a border visible on a button whose accent matches the card" do
+            seller.seller_profile.update!(highlight_color: "#ffffff")
+
+            expect(button["style"]).to start_with("background-color: #ffffff; color: #000000; border-color: #")
+            expect(button["style"]).not_to include("border-color: #ffffff")
+          end
+        end
+
+        context "without an avatar" do
+          subject(:mail) { CustomerMailer.receipt(purchase.id) }
+
+          before { seller.avatar.purge }
+
+          it "keeps Gumroad's wordmark in the header and still puts the seller's accent on the button" do
+            expect(header.at_css("a.wordmark")["href"]).to eq(root_url)
+            expect(header.at_css("img")["alt"]).to eq("Gumroad")
+            expect(header.text).not_to include("Maya Studio")
+            expect(footer.text).not_to include("Powered by")
+            expect(html.at_css("table.product .product-byline").text.strip).to eq("Maya Studio")
+
+            expect(button.text).to eq("View content")
+            expect(button["style"]).to eq("background-color: #0057b8; color: #ffffff; border-color: #0057b8;")
+          end
+        end
+
+        context "for a grouped receipt" do
+          subject(:mail) { CustomerMailer.grouped_receipt([purchase.id]) }
+
+          it_behaves_like "a Gumroad-branded receipt"
+        end
+      end
     end
 
     it "discloses sales tax when it was taxed" do
@@ -951,6 +1011,15 @@ describe CustomerMailer do
 
         expect(mail.body.sanitized).to include("30-day money back guarantee")
         expect(mail.body.sanitized).to include("This is the fine print.")
+      end
+
+      it "keeps a policy without fine print as an ordinary row, not a group heading" do
+        purchase.purchase_refund_policy.update!(fine_print: nil)
+        html = Nokogiri::HTML(CustomerMailer.receipt(purchase.id).body.decoded)
+
+        label = html.css("table.details th").find { _1.text.strip == "30-day money back guarantee" }
+        expect(label["class"]).to be_nil
+        expect(label["colspan"]).to be_nil
       end
     end
 
@@ -1327,7 +1396,7 @@ describe CustomerMailer do
     it "stays on the designed receipt while the flag is off for the seller" do
       mail = CustomerMailer.receipt(nil, charge.id)
 
-      expect(mail.body.decoded).to include("class=\"button primary\"")
+      expect(mail.body.decoded).to have_css("a.button.primary", text: "View content", count: 2)
     end
 
     it "sends a plain receipt with text links, the same items and total, when the flag is on for the seller" do
@@ -1338,7 +1407,7 @@ describe CustomerMailer do
       expect(body).to include("Book One", "Upsell Two", "Total:")
       expect(body).to include(purchase_one.url_redirect.download_page_url, purchase_two.url_redirect.download_page_url)
       expect(body).not_to include("<img")
-      expect(body).not_to include("class=\"button primary\"")
+      expect(body).not_to have_css("a.button")
     end
 
     it "keeps presenter links clickable instead of escaping them" do
@@ -1361,7 +1430,7 @@ describe CustomerMailer do
     it "does not apply to another seller's receipt" do
       Feature.activate_user(:graphics_light_receipt, create(:user))
 
-      expect(CustomerMailer.receipt(nil, charge.id).body.decoded).to include("class=\"button primary\"")
+      expect(CustomerMailer.receipt(nil, charge.id).body.decoded).to have_css("a.button.primary", text: "View content", count: 2)
     end
   end
 
@@ -1383,8 +1452,10 @@ describe CustomerMailer do
     it "colours the button with the seller accent when the flag is on, keeping details and footer" do
       Feature.activate_user(:seller_branded_receipt, seller)
 
-      expect(body).to include(".button.primary { background-color: #0057b8 !important; color: #ffffff !important; }")
-      expect(body).to include("Order ID:", "Powered by")
+      button = Nokogiri::HTML(body).at_css("a.button.primary")
+      expect(button.text).to eq("View content")
+      expect(button["style"]).to eq("background-color: #0057b8; color: #ffffff; border-color: #0057b8;")
+      expect(body).to include("Order ID:", "Unsubscribe")
     end
 
     it "does not brand another seller's receipt" do
@@ -1790,10 +1861,10 @@ describe CustomerMailer do
       expect(mail.body).to have_selector("[aria-label='4 stars']")
       expect(mail.body).to have_selector("img[src='#{ActionController::Base.helpers.image_path("email/solid-star.png")}']", count: 4)
       expect(mail.body).to have_selector("img[src='#{ActionController::Base.helpers.image_path("email/outline-star.png")}']", count: 1)
-      expect(mail.body).to have_selector(".content p", text: "Here is a review.")
-      expect(mail.body).to have_selector(".content .byline", text: "Harry")
-      expect(mail.body).to have_selector(".content.response p", text: "Here is a response.")
-      expect(mail.body).to have_selector(".content.response .byline", text: "Olivander")
+      expect(mail.body).to have_selector(".card > p", text: "Here is a review.")
+      expect(mail.body).to have_selector(".card > .byline", text: "Harry")
+      expect(mail.body).to have_selector(".card .card > p", text: "Here is a response.")
+      expect(mail.body).to have_selector(".card .card > .byline", text: "Olivander")
       expect(mail.body).to have_link("View product", href: product.long_url)
     end
 
@@ -1985,7 +2056,7 @@ describe CustomerMailer do
                               link: free_product, seller: new_seller, email: "buyer@example.com")
 
         mail = CustomerMailer.grouped_receipt([kept.id] + blocked.map(&:id))
-        items = Nokogiri::HTML(mail.body.decoded).css(".item .product-checkout-cell h4").map { _1.text.strip }
+        items = Nokogiri::HTML(mail.body.decoded).css("table.product h4.product-name").map { _1.text.strip }
 
         expect(mail.to).to eq(["buyer@example.com"])
         expect(items).to include("Recipe Pack")
@@ -2033,7 +2104,7 @@ describe CustomerMailer do
       create(:charge, purchases:, seller:)
 
       items = Nokogiri::HTML(CustomerMailer.grouped_receipt([older.id] + purchases.map(&:id)).body.decoded)
-        .css(".item .product-checkout-cell h4").map(&:text).map(&:strip)
+        .css("table.product h4.product-name").map(&:text).map(&:strip)
 
       expect(items).to include("Older item")
     end
@@ -2047,7 +2118,7 @@ describe CustomerMailer do
       mail = CustomerMailer.grouped_receipt([older.id] + failed.map(&:id))
 
       expect(mail.message).not_to be_a(ActionMailer::Base::NullMail)
-      expect(Nokogiri::HTML(mail.body.decoded).css(".item .product-checkout-cell h4").map(&:text).map(&:strip)).to include("Older item")
+      expect(Nokogiri::HTML(mail.body.decoded).css("table.product h4.product-name").map(&:text).map(&:strip)).to include("Older item")
     end
 
     it "sets Reply-To to the product's support email" do
@@ -2110,7 +2181,7 @@ describe CustomerMailer do
       mail = CustomerMailer.grouped_receipt(purchases.map(&:id) + [test_purchase.id, failed_purchase.id])
       body = mail.body.decoded
 
-      receipt_items = Nokogiri::HTML(body).css(".item .product-checkout-cell h4").map(&:text).map(&:strip)
+      receipt_items = Nokogiri::HTML(body).css("table.product h4.product-name").map(&:text).map(&:strip)
       expect(receipt_items).to contain_exactly("Receipt sample bundle", product.name, product.name)
     end
 

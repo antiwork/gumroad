@@ -47,7 +47,7 @@ describe PostSendgridApi, :freeze_time do
     end
 
     it "still inlines the email's own stylesheet" do
-      expect(html_doc(sent_email_content).at_css(".email > .footer")["style"]).to include("margin: 32px auto 16px")
+      expect(html_doc(sent_email_content).at_css(".email > .footer")["style"]).to include("max-width: 600px", "text-align: center")
     end
   end
 
@@ -59,7 +59,8 @@ describe PostSendgridApi, :freeze_time do
 
     it "includes them as CSS" do
       expect(sent_email_content).to include("body {\nbackground-color: #000000; color: #ffffff; font-family: \"Roboto Mono\", \"ABC Favorit\", monospace;\n}")
-      expect(sent_email_content).to include("body {\nheight: auto; min-height: 100%;\n}")
+      # The seller's body rule has to outrank the stylesheet's fallback colour and font.
+      expect(html_doc(sent_email_content).at_css("body")["style"]).to include("background-color: #000000", "color: #ffffff", %(font-family: "Roboto Mono"))
     end
   end
 

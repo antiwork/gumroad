@@ -1,37 +1,54 @@
-<!-- IMPORTANT: If you modify this file, you may also need to modify app/views/posts/post_email.html.erb -->
+<%# posts/post_email.html.erb is this shell without route helpers. Keep the two in step. %>
 <!DOCTYPE html>
-<html>
+<html lang="en" xmlns:o="urn:schemas-microsoft-com:office:office">
   <head>
-    <title><%= @subject %></title>
-    <meta content="text/html; charset=UTF-8" http-equiv="Content-Type">
-    <meta name="viewport" content="initial-scale = 1.0, width=device-width">
+    <title><%= @subject.presence || try(:message)&.subject %></title>
+    <%= render("layouts/mailers/head") %>
+    <%# Outlook on Windows ignores padding on a div and falls back to Times New Roman when the first
+        font in a stack is unknown to it, so the card's padding moves to a table cell (below) and
+        the font is named outright. A post keeps the seller's font. %>
+    <% unless @installment.present? %>
+      <!--[if mso]>
+        <style>
+          body, table, td, th, div, p, a, span, li, h1, h2, h3, h4 { font-family: "Segoe UI", Arial, sans-serif !important; }
+          .main { border: none !important; }
+          .button { text-decoration: underline !important; }
+        </style>
+      <![endif]-->
+    <% end %>
     <%= yield :style %>
     <%= vite_entrypoint_stylesheet_tag "email" %>
   </head>
-  <body>
-    <div class="email <%= @installment.present? ? 'post' : (@announcement ? 'announcement' : '') %>">
+  <body class="email-body">
+    <%= render("shared/preheader_text", text: @preheader) if @preheader.present? %>
+    <div class="email <%= "post" if @installment.present? %>">
+      <%# Outlook on Windows ignores max-width, so it gets a fixed-width table instead. %>
+      <!--[if mso]><table role="presentation" align="center" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+      <% unless @installment.present? %>
+        <%= render("layouts/mailers/header", brand: @email_brand) %>
+      <% end %>
+      <!--[if mso]></td></tr><tr><td<% unless @installment.present? %> style="padding: 32px; background-color: #ffffff; border: 1px solid #e4e4df;"<% end %>><![endif]-->
       <div class="main">
         <%= yield %>
       </div>
+      <!--[if mso]></td></tr><tr><td><![endif]-->
       <div class="footer">
-        <div class="paragraphs">
-          <%= render(@footer_template) if @footer_template %>
-          <p><%= GumroadAddress.full %></p>
-
-          <% if @unsub_link.present? %>
-            <p>
-              <a href="<%= @unsub_link %>">Unsubscribe</a>
-            </p>
-          <% end %>
-          <% unless Rails.env.production? %>
-            <p>(⌐▨_▨) <%= Rails.env.capitalize %> (▨_▨¬)</p>
-          <% end %>
-        </div>
-        <a class="wordmark" href="<%= root_url %>">
-          Powered by
-          <img src="<%= image_url("email/wordmark_logo.png") %>" alt="Gumroad" style="width: 138px; height: 18px;" width="138" height="18">
-        </a>
+        <%= render(@footer_template) if @footer_template %>
+        <% if @unsub_link.present? %>
+          <p><a href="<%= @unsub_link %>">Unsubscribe</a></p>
+        <% end %>
+        <p><%= GumroadAddress.full %></p>
+        <% unless Rails.env.production? %>
+          <p>(⌐▨_▨) <%= Rails.env.capitalize %> (▨_▨¬)</p>
+        <% end %>
+        <% if @installment.present? || @email_brand.present? %>
+          <a class="wordmark" href="<%= root_url %>">
+            Powered by
+            <img src="<%= image_url("email/wordmark_logo.png") %>" alt="Gumroad" width="92" height="12">
+          </a>
+        <% end %>
       </div>
+      <!--[if mso]></td></tr></table><![endif]-->
     </div>
   </body>
 </html>

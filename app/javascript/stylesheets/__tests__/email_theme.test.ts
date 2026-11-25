@@ -15,20 +15,43 @@ const compile = (name: string) => {
   }).css;
 };
 
-// A client that reports a dark preference paints the message background itself, so the app's dark
-// tokens land as light text and hairlines on top of it. The email bundle must not ship them.
+// Premailer inlines this stylesheet into style attributes, and mail clients read nothing else:
+// they do not resolve custom properties, scale rem, load web fonts or understand cascade layers,
+// and in dark mode they repaint the message themselves. So the bundle has to stay self-contained.
 describe("email stylesheet", () => {
   const css = compile("email");
 
   it("does not follow the client's dark preference", () => {
     expect(css).not.toContain("prefers-color-scheme");
-    expect(css).not.toContain("#242423");
   });
 
-  it("keeps the light tokens the email layout reads", () => {
-    expect(css).toContain("--body-bg: #ffffff");
-    expect(css).toContain("--color: 0 0 0");
-    expect(css).toContain("--border-alpha: 1");
+  it("uses literal values instead of custom properties", () => {
+    expect(css).not.toContain("var(");
+    expect(css).not.toMatch(/(^|[\s{;])--[\w-]+\s*:/u);
+  });
+
+  it("sizes everything in px", () => {
+    expect(css).not.toMatch(/\drem\b/u);
+  });
+
+  it("ships no web fonts", () => {
+    expect(css).not.toContain("@font-face");
+    expect(css).not.toContain("@import");
+  });
+
+  it("is not wrapped in cascade layers", () => {
+    expect(css).not.toContain("@layer");
+  });
+
+  // Outlook on Windows frames a side that is `solid` at zero width, and `border: 0` over an earlier
+  // `1px solid` inlines as exactly that. `none` clears the style.
+  it("removes a border by style, not by width", () => {
+    expect(css).not.toMatch(/border(-(top|right|bottom|left))?:\s*0\s*[;}]/u);
+  });
+
+  // A post sits on the seller's themed <body>, so it may not paint a surface of its own.
+  it("leaves a post's background to the seller's theme", () => {
+    expect(css).toMatch(/\.email\.post\s*\{[^}]*background-color:\s*inherit/u);
   });
 });
 

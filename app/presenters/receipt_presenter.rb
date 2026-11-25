@@ -3,6 +3,9 @@
 class ReceiptPresenter
   include BuyerPresentmentDisplay
 
+  # $color-surface in the email stylesheet.
+  EMAIL_CARD_COLOR = "#ffffff"
+
   attr_reader :for_email
 
   # chargeable is either a Purchase or a Charge
@@ -45,6 +48,18 @@ class ReceiptPresenter
 
   def footer_info
     @_footer_info ||= ReceiptPresenter::FooterInfo.new(chargeable)
+  end
+
+  # The seller's accent for the receipt's button and, when they have an avatar, their avatar and
+  # name for the email header; nil for a receipt that stays Gumroad's. Without an avatar the
+  # header would show the default one, so it keeps Gumroad's wordmark.
+  def seller_branding
+    seller = chargeable.seller
+    return unless Feature.active?(:seller_branded_receipt, seller)
+
+    branding = { button_style: seller.seller_profile.email_primary_button_style(surface: EMAIL_CARD_COLOR) }
+    branding[:email_brand] = { name: seller.name_or_username, url: seller.profile_url, logo_url: seller.avatar_url } if seller.avatar.attached?
+    branding
   end
 
   def giftee_manage_subscription

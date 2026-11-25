@@ -1,24 +1,19 @@
+<%# locals: attributes: [{ label:, value: }], headings: false. A value with no label spans the row.
+    With headings, a label with no value is a group heading; elsewhere it is a field left empty. %>
 <% if attributes.present? %>
-  <table class="table-stack" border="0" cellpadding="0" cellspacing="0">
-    <tbody>
-      <% attributes.each do |attribute| %>
-        <tr>
-          <td>
-            <% if attribute[:label].present? %>
-              <span class="attribute-label"><%= attribute[:label] %></span>
-              <br>
-            <% end %>
-            <% if attribute[:value].is_a?(Array) %>
-              <% attribute[:value].each do |item| %>
-                <%= auto_link(item.to_s, html: { target: "_blank" }) %>
-                <br>
-              <% end %>
-            <% else %>
-              <%= auto_link(attribute[:value].to_s, html: { target: "_blank" }) %>
-            <% end %>
-          </td>
-        </tr>
-      <% end %>
-    </tbody>
+  <table class="details" border="0" cellpadding="0" cellspacing="0">
+    <% attributes.each do |attribute| %>
+      <% value = safe_join(Array(attribute[:value]).map { |item| auto_link(item.to_s, html: { target: "_blank" }) }, tag.br + " ") %>
+      <tr>
+        <% if attribute[:label].blank? %>
+          <td class="wide" colspan="2"><%= value %></td>
+        <% elsif value.blank? && local_assigns[:headings] %>
+          <th class="wide" colspan="2"><%= attribute[:label] %></th>
+        <% else %>
+          <th><%= attribute[:label] %></th>
+          <td><%= value %></td>
+        <% end %>
+      </tr>
+    <% end %>
   </table>
 <% end %>

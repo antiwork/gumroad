@@ -1,5 +1,5 @@
+<%= header_section("Your 1099-MISC form for #{@year} is ready to download") %>
 <div>
-  <h2>Your 1099-MISC form for <%= @year %> is ready to download</h2>
   <p>The 1099-MISC is a purely informational form that summarizes the commissions you earned as an affiliate during <%= @year %> and is designed to help you report your taxes.</p>
   <p>Our payment processor, Stripe, files a copy electronically with the IRS.</p>
   <p><%= link_to("Download form", download_tax_form_url(year: @year, form_type: "us_1099_misc"), class: "button primary") %></p>

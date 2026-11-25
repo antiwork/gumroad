@@ -1,0 +1,29 @@
+// Literal values only. Premailer inlines these into style attributes, and mail clients do not
+// resolve custom properties.
+$font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+$font-family-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+
+$color-text: #1a1a1a;
+$color-heading: #000000;
+$color-muted: #6b6b66;
+$color-border: #e4e4df;
+$color-control-border: #c8c8c2;
+// Dividers in a post, where the page behind them is the seller's and may be light or dark.
+$color-post-border: #9a9a95;
+$color-page: #f4f4f0;
+$color-surface: #ffffff;
+$color-subtle: #f8f8f5;
+$color-accent: #ff90e8;
+
+$color-info-bg: #f4f4f0;
+$color-warning-bg: #fff6d6;
+
+$radius-card: 16px;
+$radius-box: 12px;
+$radius-control: 8px;
+$radius-thumbnail: 10px;
+$radius-pill: 999px;
+
+$width: 600px;
+$gap-section: 24px;
+$gap-block: 16px;

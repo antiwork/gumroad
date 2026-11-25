@@ -7,6 +7,6 @@
     <li>Error: <%= @error_class %>: <%= @error_message %></li>
   </ul>
   <p>Re-run once the underlying issue is resolved (safe to re-run — users whose payouts were already created are skipped):</p>
-  <p><code>PerformPayoutsUpToDelayDaysAgoWorker.perform_async(<%= @payout_processor_type.inspect %><%= @bank_account_types.present? ? ", #{@bank_account_types.inspect}" : "" %>)</code></p>
+  <pre><code>PerformPayoutsUpToDelayDaysAgoWorker.perform_async(<%= @payout_processor_type.inspect %><%= @bank_account_types.present? ? ", #{@bank_account_types.inspect}" : "" %>)</code></pre>
   <p>See Sentry and the Sidekiq dead set for the full backtrace. Verify recovery by comparing the day's <code>payments</code> count for this bucket against recent weeks' runs.</p>
 </div>

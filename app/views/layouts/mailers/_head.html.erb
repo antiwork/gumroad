@@ -1,0 +1,34 @@
+<meta content="text/html; charset=UTF-8" http-equiv="Content-Type">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="x-apple-disable-message-reformatting">
+<meta name="color-scheme" content="light only">
+<meta name="supported-color-schemes" content="light only">
+<!--[if mso]>
+  <noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript>
+<![endif]-->
+<%# Apple Mail turns addresses and dates into blue links; this hands them back the text's own
+    look. Premailer would drop a rule that matches nothing at send time, hence the ignore. %>
+<style data-premailer="ignore">
+  a[x-apple-data-detectors] { color: inherit !important; font: inherit !important; text-decoration: none !important; }
+</style>
+<%# Written here, not in the stylesheet: the CSS build rewrites max-width queries into range syntax
+    (width<=480px), which Gmail and Outlook drop. Premailer leaves media queries in place, so each
+    override needs !important to beat the declarations it inlined. %>
+<style>
+  @media only screen and (max-width: 480px) {
+    .email { padding: 16px 8px !important; }
+    .email.post { padding: 24px 16px !important; }
+    .email .main { padding: 24px 20px !important; border-radius: 12px !important; }
+    .email.post .main { padding: 0 !important; }
+    .email h1 { font-size: 28px !important; line-height: 36px !important; }
+    .email h2 { font-size: 22px !important; line-height: 28px !important; }
+    .email .rich-text h1 { font-size: 24px !important; line-height: 32px !important; }
+    .email .rich-text h2 { font-size: 20px !important; line-height: 28px !important; }
+    .email .button { display: inline-block !important; width: 100% !important; }
+    .email .actions .button { margin: 0 0 8px !important; }
+    .email .stat { padding: 12px 8px !important; }
+    .email .product-card { padding: 8px !important; }
+    .email .product-card .product-name { font-size: 14px !important; line-height: 20px !important; }
+    .email .product-price s { display: block !important; margin: 0 !important; }
+  }
+</style>

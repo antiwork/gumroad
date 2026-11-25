@@ -77,6 +77,4 @@ export const useReceiptPreview = () => {
   return preview;
 };
 
-export const ReceiptPreview = ({ html }: { html: string }) => (
-  <div className="dark:[&_.wordmark_img]:invert" dangerouslySetInnerHTML={{ __html: html }} />
-);
+export const ReceiptPreview = ({ html }: { html: string }) => <div dangerouslySetInnerHTML={{ __html: html }} />;

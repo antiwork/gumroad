@@ -5,7 +5,7 @@ require "spec_helper"
 describe AffiliateMailer do
   # Pins each figure to its labelled row, so a swapped or unsigned amount fails the test.
   def email_rows(mail)
-    mail.body.encoded.scan(%r{<td>\s*<h4>(.*?)</h4>\s*</td>\s*<td>(.*?)</td>}m)
+    mail.body.encoded.scan(%r{<th>(.*?)</th>\s*<td>(.*?)</td>}m)
         .each_with_object({}) { |(label, value), rows| rows[CGI.unescapeHTML(label.strip)] = CGI.unescapeHTML(value.strip) }
   end
 

@@ -24,12 +24,14 @@ describe("Tiptap button styling", () => {
   it("renders inserted buttons as always-visible accent CTAs", () => {
     expect(tiptapButtonClassName).toContain("bg-accent-with-text");
     expect(tiptapButtonClassName).toContain("text-accent-foreground");
-    expect(tiptapButtonClassName).toContain("-translate-1");
-    expect(tiptapButtonClassName).toContain("shadow-[0.25rem_0.25rem_0_var(--color-black)]");
+    // No resting offset or hard shadow: the email it is sent as has neither.
+    expect(
+      tiptapButtonClassName.split(" ").filter((name) => name === "-translate-1" || name.startsWith("shadow-")),
+    ).toEqual([]);
     expect(tiptapButtonClassName).not.toContain("bg-primary text-primary-foreground");
   });
 
-  it("serializes buttons with email-safe pink fill and persistent depth", async () => {
+  it("serializes buttons with an email-safe pink fill and matching border", async () => {
     const initialValue = {
       type: "doc",
       content: [

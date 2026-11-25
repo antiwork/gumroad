@@ -25,8 +25,6 @@ class CreatorMailer < ApplicationMailer
   end
 
   def gumroad_day_fee_saved(seller_id:, to_email: nil)
-    @announcement = true
-
     seller = User.find(seller_id)
     email = to_email.presence || seller.email
 
