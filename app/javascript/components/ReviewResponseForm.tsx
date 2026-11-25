@@ -61,6 +61,11 @@ export const ReviewResponseForm = ({
     setIsLoading(false);
   };
 
+  const startEditing = () => {
+    setMessage(originalMessage ?? "");
+    setIsEditing(true);
+  };
+
   if (!loggedInUser?.policies.product_review_response.update) return null;
 
   return (
@@ -86,7 +91,7 @@ export const ReviewResponseForm = ({
         </form>
       ) : (
         <div className="flex w-full gap-3">
-          <Button {...buttonProps} onClick={() => setIsEditing(true)} className="flex-1">
+          <Button {...buttonProps} onClick={startEditing} className="flex-1">
             {originalMessage ? "Edit" : "Add response"}
           </Button>
           {originalMessage ? (
