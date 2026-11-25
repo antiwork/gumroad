@@ -97,13 +97,13 @@ export const ShareImageInput = ({
           />
           <Button
             color="primary"
-            size="icon"
             className="absolute top-2 right-2"
             aria-label="Remove share image"
             disabled={disabled}
             onClick={() => onChange(null)}
           >
             <Trash className="size-5" />
+            Remove
           </Button>
         </figure>
       )}
