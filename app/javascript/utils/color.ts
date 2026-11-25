@@ -134,6 +134,15 @@ export const getContrastColor = (background: string) => {
   return contrastRatio(luminance, 1) > contrastRatio(luminance, 0) ? "#FFFFFF" : "#000000";
 };
 
+// Must match SellerProfile::BORDER_ALPHAS: the server styles the live store, this styles its previews.
+const STORE_BORDER_ALPHA_UNDER_DARK_TEXT = "0.11";
+const STORE_BORDER_ALPHA_UNDER_LIGHT_TEXT = "0.35";
+
+export const getStoreBorderAlpha = (backgroundColor: string) =>
+  getContrastColor(backgroundColor) === "#FFFFFF"
+    ? STORE_BORDER_ALPHA_UNDER_LIGHT_TEXT
+    : STORE_BORDER_ALPHA_UNDER_DARK_TEXT;
+
 /**
  * Mixes a hex colour `step`/255 of the way toward black (for white text) or toward white (for black
  * text). Exported only so a test can show the chosen step is minimal by checking the step below it

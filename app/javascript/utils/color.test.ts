@@ -6,6 +6,7 @@ import {
   getAccessibleAccent,
   getContrastColor,
   getContrastRatio,
+  getStoreBorderAlpha,
   hexToRgb,
   shiftAccentBrightness,
 } from "$app/utils/color";
@@ -13,6 +14,19 @@ import {
 // The shared server/browser fixture. It lives under spec/ because the Ruby suite asserts the same
 // file — see the "matches the server implementation" test below.
 import accentContrastPairs from "../../../spec/fixtures/accent_contrast_pairs.json";
+
+// SellerProfile::BORDER_ALPHAS is the server's copy (spec/models/seller_profile_spec.rb pins it).
+describe("getStoreBorderAlpha", () => {
+  it("uses the light-mode hairline on a store with dark text", () => {
+    expect(getStoreBorderAlpha("#ffffff")).toBe("0.11");
+    expect(getStoreBorderAlpha("#fde68a")).toBe("0.11");
+  });
+
+  it("uses the dark-mode hairline on a store with light text", () => {
+    expect(getStoreBorderAlpha("#000000")).toBe("0.35");
+    expect(getStoreBorderAlpha("#16161d")).toBe("0.35");
+  });
+});
 
 describe("getContrastColor", () => {
   it("picks black on a bright accent that HSL lightness misjudged as dark", () => {

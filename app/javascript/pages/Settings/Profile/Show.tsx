@@ -370,8 +370,8 @@ export default function SettingsPage() {
               "--color-body": "var(--body-bg)",
               "--color-background": "rgb(var(--filled))",
               "--color-foreground": "rgb(var(--color))",
-              "--border-alpha": "1",
               "--color-border": "rgb(var(--color) / var(--border-alpha))",
+              "--color-indicator": "rgb(var(--indicator, var(--color)))",
               "--color-accent": "rgb(var(--accent))",
               "--color-accent-foreground": "rgb(var(--contrast-accent))",
               "--color-accent-with-text": "rgb(var(--accent-with-text))",
@@ -653,7 +653,7 @@ export default function SettingsPage() {
                   label="Button hover effect"
                 />
                 <FieldsetDescription>
-                  Buttons lift and show a shadow when a visitor points at them. Turn this off for static buttons.
+                  Turn this on to make buttons lift and show a shadow when a visitor points at them.
                 </FieldsetDescription>
               </Fieldset>
             </section>

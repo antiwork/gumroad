@@ -4,7 +4,7 @@ import { Link, NavigationType, useBlocker, useMatches, useNavigate } from "react
 
 import { setProductPublished } from "$app/data/publish_product";
 import { classNames } from "$app/utils/classNames";
-import { getAccessibleAccent, getContrastColor, hexToRgb } from "$app/utils/color";
+import { getAccessibleAccent, getContrastColor, getStoreBorderAlpha, hexToRgb } from "$app/utils/color";
 import { ResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
@@ -164,6 +164,7 @@ export const Layout = ({
           "--contrast-accent": hexToRgb(accentColors.text),
           "--filled": hexToRgb(currentSeller.profileBackgroundColor),
           "--color": hexToRgb(getContrastColor(currentSeller.profileBackgroundColor)),
+          "--border-alpha": getStoreBorderAlpha(currentSeller.profileBackgroundColor),
         }
       : {};
 
@@ -468,6 +469,7 @@ export const Layout = ({
                         "--color-background": "rgb(var(--filled))",
                         "--color-foreground": "rgb(var(--color))",
                         "--color-border": "rgb(var(--color) / var(--border-alpha))",
+                        "--color-indicator": "rgb(var(--indicator, var(--color)))",
                         "--color-accent": "rgb(var(--accent))",
                         "--color-accent-foreground": "rgb(var(--contrast-accent))",
                         "--color-accent-with-text": "rgb(var(--accent-with-text))",

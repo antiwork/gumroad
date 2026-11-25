@@ -120,9 +120,9 @@ vi.mock("$app/utils/stripe_loader", () => ({ getCheckoutStripeInstance: vi.fn() 
 vi.mock("$app/utils/styles", () => ({
   getCssVariable: (name: string) =>
     ({
-      "gray-3": "0.5",
+      "gray-3": "0.65",
       "neutral-accent": "255 144 232",
-      "neutral-border-alpha": prefersDark ? "0.35" : "1",
+      "neutral-border-alpha": prefersDark ? "0.5" : "0.45",
       "neutral-color": prefersDark ? "221 221 221" : "0 0 0",
       "neutral-danger": "220 52 30",
       "neutral-filled": prefersDark ? "0 0 0" : "255 255 255",
@@ -232,14 +232,15 @@ describe("PaymentElementInput", () => {
     ]);
     expect(elementsRender.options?.appearance?.variables).toMatchObject({
       colorText: "rgb(0,0,0)",
-      colorTextPlaceholder: "rgb(0,0,0, 0.5)",
+      colorTextPlaceholder: "rgb(0,0,0, 0.65)",
       colorBackground: "rgb(248,239,227)",
       colorDanger: "rgb(155,28,18)",
       colorPrimary: "rgb(0,0,0)",
       fontFamily: sellerTheme.font_family,
       focusOutline: "2px solid rgb(0,154,73)",
     });
-    expect(elementsRender.options?.appearance?.rules?.[".Input"]?.borderColor).toBe("rgb(0,0,0)");
+    // The field border, not the full text colour: the same 3:1 tier as the native inputs beside it.
+    expect(elementsRender.options?.appearance?.rules?.[".Input"]?.borderColor).toBe("rgb(0,0,0, 0.45)");
   });
 
   it("draws the focus ring and selected-method marker from the floored indicator, not the saved accent", () => {
@@ -317,13 +318,15 @@ describe("PaymentElementInput", () => {
     expect(elementsMounts.unmounts).toBe(0);
     expect(elementsRender.options?.appearance?.variables).toMatchObject({
       colorText: "rgb(0,0,0)",
-      colorTextPlaceholder: "rgb(0,0,0, 0.5)",
+      colorTextPlaceholder: "rgb(0,0,0, 0.65)",
       colorBackground: "rgb(255,255,255)",
       colorDanger: "rgb(220,52,30)",
       colorPrimary: "rgb(0,0,0)",
       fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
       focusOutline: "2px solid rgb(255,144,232)",
+      borderRadius: "8px",
     });
+    expect(elementsRender.options?.appearance?.rules?.[".Input"]?.borderColor).toBe("rgb(0,0,0, 0.45)");
   });
 
   it("uses the immutable neutral dark tokens", () => {
@@ -337,10 +340,10 @@ describe("PaymentElementInput", () => {
 
     expect(elementsRender.options?.appearance?.variables).toMatchObject({
       colorText: "rgb(221,221,221)",
-      colorTextPlaceholder: "rgb(221,221,221, 0.5)",
+      colorTextPlaceholder: "rgb(221,221,221, 0.65)",
       colorBackground: "rgb(0,0,0)",
     });
-    expect(elementsRender.options?.appearance?.rules?.[".Input"]?.borderColor).toBe("rgb(221,221,221, 0.35)");
+    expect(elementsRender.options?.appearance?.rules?.[".Input"]?.borderColor).toBe("rgb(221,221,221, 0.5)");
   });
 
   it("remounts when the currency genuinely changes", () => {

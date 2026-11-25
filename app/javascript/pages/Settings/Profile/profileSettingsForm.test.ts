@@ -83,6 +83,12 @@ describe("profile settings synchronization", () => {
     expect(changedProfileSettings(rebased, incoming)).toEqual({ bio: "Local bio edit" });
   });
 
+  // The preview must not inherit the dashboard's border strength: a dark store has light text.
+  it("sets the preview's border strength from the store's own text colour", () => {
+    expect(profileThemeColors("#ffffff", "#ff90e8")).toMatchObject({ "--border-alpha": "0.11" });
+    expect(profileThemeColors("#000000", "#ff90e8")).toMatchObject({ "--border-alpha": "0.35" });
+  });
+
   it("matches the live primary-button foreground for saturated backgrounds", () => {
     expect(profileThemeColors("#ff0000", "#ff90e8")).toMatchObject({
       "--color": "0 0 0",

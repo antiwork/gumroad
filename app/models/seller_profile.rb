@@ -5,10 +5,13 @@ class SellerProfile < ApplicationRecord
 
   FONT_CHOICES = ["ABC Favorit", "Inter", "Domine", "Merriweather", "Roboto Slab", "Roboto Mono"]
   DANGER_COLOR_CHOICES = ["#dc341e", "#9b1c12", "#ffb4ab"]
-  # "small" matches Gumroad's stock radius. Checkout also passes these values to Stripe's
+  # "medium" matches Gumroad's stock radius. Checkout also passes these values to Stripe's
   # Appearance API, which cannot read CSS variables, so keep them literal lengths.
   BORDER_RADIUS_CHOICES = { "none" => "0rem", "small" => "0.25rem", "medium" => "0.5rem", "large" => "1rem" }.freeze
   BUTTON_HOVER_OFFSETS = { "lift" => "0.25rem", "none" => "0rem" }.freeze
+  # Border strength as an alpha of the store's text colour: the app's light-mode hairline under
+  # dark text, its dark-mode hairline under light text. Mirrored by getStoreBorderAlpha in color.ts.
+  BORDER_ALPHAS = { ContrastColor::BLACK => "0.11", ContrastColor::WHITE => "0.35" }.freeze
   ALLOWED_SHARE_IMAGE_CONTENT_TYPES = ["image/png", "image/jpeg", "image/jpg"].freeze
   MAXIMUM_SHARE_IMAGE_FILE_SIZE = 5.megabytes
 
@@ -47,8 +50,8 @@ class SellerProfile < ApplicationRecord
     self.font ||= "ABC Favorit"
     self.background_color ||= "#ffffff"
     self.highlight_color ||= "#ff90e8"
-    self.border_radius ||= "small"
-    self.button_hover ||= "lift"
+    self.border_radius ||= "medium"
+    self.button_hover ||= "none"
   end
 
   # Fingerprint only the pages/sections editor's state. Theme saves update this row too, so using
@@ -179,6 +182,10 @@ class SellerProfile < ApplicationRecord
 
   def button_hover_offset_css
     BUTTON_HOVER_OFFSETS.fetch(button_hover)
+  end
+
+  def border_alpha_css
+    BORDER_ALPHAS.fetch(text_color_on_background)
   end
 
   def font_css_source

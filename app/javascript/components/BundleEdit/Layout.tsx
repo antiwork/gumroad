@@ -2,7 +2,7 @@ import { Link as LinkIcon } from "@boxicons/react";
 import { Link, usePage } from "@inertiajs/react";
 import * as React from "react";
 
-import { getAccessibleAccent, getContrastColor, hexToRgb } from "$app/utils/color";
+import { getAccessibleAccent, getContrastColor, getStoreBorderAlpha, hexToRgb } from "$app/utils/color";
 
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
@@ -114,6 +114,7 @@ export const BundleEditLayout = ({
         "--contrast-accent": hexToRgb(accentColors.text),
         "--filled": hexToRgb(currentSeller.profileBackgroundColor),
         "--color": hexToRgb(getContrastColor(currentSeller.profileBackgroundColor)),
+        "--border-alpha": getStoreBorderAlpha(currentSeller.profileBackgroundColor),
       }
     : {};
 
@@ -251,6 +252,7 @@ export const BundleEditLayout = ({
                   "--color-background": "rgb(var(--filled))",
                   "--color-foreground": "rgb(var(--color))",
                   "--color-border": "rgb(var(--color) / var(--border-alpha))",
+                  "--color-indicator": "rgb(var(--indicator, var(--color)))",
                   "--color-accent": "rgb(var(--accent))",
                   "--color-accent-foreground": "rgb(var(--contrast-accent))",
                   "--color-accent-with-text": "rgb(var(--accent-with-text))",

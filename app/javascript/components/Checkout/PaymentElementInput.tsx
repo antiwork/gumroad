@@ -426,7 +426,8 @@ const StripePaymentElementProvider = ({
   const fontFamily =
     checkoutTheme?.font_family ?? `${font.name}, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
   const stripeFonts = useCheckoutStripeFonts(font);
-  const borderRadius = checkoutTheme?.border_radius ?? "4px";
+  // The stock --radius, as a literal: Stripe cannot read CSS variables.
+  const borderRadius = checkoutTheme?.border_radius ?? "8px";
 
   const options = React.useMemo<StripeElementsOptions>(
     () => ({

@@ -30,9 +30,9 @@ vi.mock("$app/utils/stripe_loader", () => ({ getStripeInstance: vi.fn() }));
 vi.mock("$app/utils/styles", () => ({
   getCssVariable: (name: string) =>
     ({
-      "gray-3": "0.5",
+      "gray-3": "0.65",
       "neutral-accent": "255 144 232",
-      "neutral-border-alpha": prefersDark ? "0.35" : "1",
+      "neutral-border-alpha": prefersDark ? "0.5" : "0.45",
       "neutral-color": prefersDark ? "221 221 221" : "0 0 0",
       "neutral-danger": "220 52 30",
       "neutral-filled": prefersDark ? "0 0 0" : "255 255 255",
@@ -94,8 +94,8 @@ describe("CreditCardInput", () => {
     expect(stripeRender.cardOptions?.style?.base).toEqual({
       fontFamily: theme.font_family,
       color: "rgb(0,0,0)",
-      iconColor: "rgb(0,0,0, 0.5)",
-      "::placeholder": { color: "rgb(0,0,0, 0.5)" },
+      iconColor: "rgb(0,0,0, 0.65)",
+      "::placeholder": { color: "rgb(0,0,0, 0.65)" },
     });
 
     rerender(
@@ -106,8 +106,8 @@ describe("CreditCardInput", () => {
     expect(stripeRender.cardOptions?.style?.base).toEqual({
       fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
       color: "rgb(0,0,0)",
-      iconColor: "rgb(0,0,0, 0.5)",
-      "::placeholder": { color: "rgb(0,0,0, 0.5)" },
+      iconColor: "rgb(0,0,0, 0.65)",
+      "::placeholder": { color: "rgb(0,0,0, 0.65)" },
     });
   });
 });

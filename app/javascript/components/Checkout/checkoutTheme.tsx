@@ -1,7 +1,7 @@
 import { type StripeElementStyleVariant, type StripeElementsOptions } from "@stripe/stripe-js";
 import * as React from "react";
 
-import { getContrastColor, hexToRgb } from "$app/utils/color";
+import { getContrastColor, getStoreBorderAlpha, hexToRgb } from "$app/utils/color";
 import { getCssVariable } from "$app/utils/styles";
 
 import { useIsDarkTheme } from "$app/components/useIsDarkTheme";
@@ -78,14 +78,19 @@ export const useShouldInvertNativePayPalButton = () => {
 
 const rgb = (hex: string) => hexToRgb(hex).split(" ").join(",");
 
+// Stripe's iframe cannot read CSS variables, so these restate --gray-3 and the --color-control formula.
+const PLACEHOLDER_ALPHA = 0.65;
+const fieldBorderAlpha = (backgroundColor: string) =>
+  Math.max(Number(getStoreBorderAlpha(backgroundColor)) + 0.15, 0.45);
+
 export const getCheckoutThemeColors = (theme: CheckoutTheme) => {
   const text = rgb(theme.text_color);
 
   return {
     text: `rgb(${text})`,
-    placeholder: `rgb(${text}, 0.5)`,
+    placeholder: `rgb(${text}, ${PLACEHOLDER_ALPHA})`,
     background: `rgb(${rgb(theme.background_color)})`,
-    border: `rgb(${text})`,
+    border: `rgb(${text}, ${fieldBorderAlpha(theme.background_color)})`,
     accent: `rgb(${rgb(theme.accent_color)})`,
     indicator: `rgb(${rgb(theme.indicator_color)})`,
     danger: `rgb(${rgb(theme.danger_color)})`,

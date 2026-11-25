@@ -16,6 +16,7 @@ declare module "react" {
     "--color-foreground"?: string;
     "--border-alpha"?: string;
     "--color-border"?: string;
+    "--color-indicator"?: string;
     "--color-accent"?: string;
     "--color-accent-foreground"?: string;
     "--color-accent-with-text"?: string;

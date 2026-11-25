@@ -132,15 +132,22 @@ describe SellerProfile do
     end
 
     it "sets the radius and button hover tokens, with stock values by default" do
-      expect(subject.custom_styles).to include("--radius: 0.25rem;--button-hover-offset: 0.25rem")
+      expect(subject.custom_styles).to include("--radius: 0.5rem;--button-hover-offset: 0rem")
 
       subject.update!(border_radius: "large")
       expect(Rails.cache.exist?(subject.custom_style_cache_name)).to eq(false)
       expect(subject.custom_styles).to include("--radius: 1rem")
 
-      subject.update!(button_hover: "none")
+      subject.update!(button_hover: "lift")
       expect(Rails.cache.exist?(subject.custom_style_cache_name)).to eq(false)
-      expect(subject.custom_styles).to include("--button-hover-offset: 0rem")
+      expect(subject.custom_styles).to include("--button-hover-offset: 0.25rem")
+    end
+
+    it "draws borders as a hairline of the store's text colour" do
+      expect(subject.custom_styles).to include("--color: 255 255 255").and include("--border-alpha: 0.35")
+
+      subject.update!(background_color: "#ffffff")
+      expect(subject.custom_styles).to include("--color: 0 0 0").and include("--border-alpha: 0.11")
     end
 
     it "keeps cached CSS until the theme update commits" do
