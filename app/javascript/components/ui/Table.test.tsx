@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -80,5 +80,41 @@ describe("sortable table headers", () => {
     expect(changeSort).toHaveBeenCalledWith({ key: "source", direction: "desc" });
     expect(screen.getByRole("cell").textContent).toContain("Source");
     expect(screen.getByRole("cell").querySelector("button")).toBeNull();
+  });
+});
+
+describe("Table rows as cards on a phone", () => {
+  it("titles the card with the first cell and pairs the rest two to a line", () => {
+    render(
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Email</TableHead>
+            <TableHead>Price</TableHead>
+            <TableHead />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow>
+            <TableCell>ada@example.com</TableCell>
+            <TableCell>$5</TableCell>
+            <TableCell>
+              <button type="button">Refund</button>
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>,
+    );
+    const cell = (text: string) => screen.getByText(text).closest("td");
+
+    // The title: a full line, bold, and its column name kept for screen readers only.
+    expect(cell("ada@example.com")?.className).toContain("basis-full");
+    expect(cell("ada@example.com")?.className).toContain("max-lg:font-bold");
+    expect(within(cell("ada@example.com") ?? document.body).getByText("Email").className).toContain("sr-only");
+    // A labelled value: half a line, under its visible column name.
+    expect(cell("$5")?.className).toContain("basis-[calc(50%-0.5rem)]");
+    expect(within(cell("$5") ?? document.body).getByText("Price").className).not.toContain("sr-only");
+    // The row's buttons have no column name, and take a full line.
+    expect(cell("Refund")?.className).toContain("basis-full");
   });
 });
