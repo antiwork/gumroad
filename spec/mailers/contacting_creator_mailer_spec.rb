@@ -1638,7 +1638,7 @@ describe ContactingCreatorMailer do
       expect(mail.body.encoded).to include "Affiliate email"
       expect(mail.body.encoded).to include affiliate_user.form_email
       expect(mail.body.encoded).to include "Affiliate commission"
-      expect(mail.body.encoded).to include "$0.50 (5%)"
+      expect(mail.body.sanitized).to include "$0.50 (5%)"
 
       expect_push_alert(seller.id, mail.subject)
     end
@@ -1656,7 +1656,7 @@ describe ContactingCreatorMailer do
       expect(mail.body.encoded).to include "Affiliate email"
       expect(mail.body.encoded).to include affiliate_user.form_email
       expect(mail.body.encoded).to include "Affiliate commission"
-      expect(mail.body.encoded).to include "$1 (10%)"
+      expect(mail.body.sanitized).to include "$1 (10%)"
 
       expect_push_alert(seller.id, mail.subject)
     end
@@ -1693,7 +1693,14 @@ describe ContactingCreatorMailer do
         expect(mail.body.encoded).to include "Collaborator email"
         expect(mail.body.encoded).to include collaborator.affiliate_user.form_email
         expect(mail.body.encoded).to include "Collaborator commission"
-        expect(mail.body.encoded).to include "$10 (50%)"
+        expect(mail.body.sanitized).to include "$10 (50%)"
+      end
+
+      # A commission held whole on one line is wider than a 320px phone leaves beside its label.
+      it "keeps only the commission's amount on one line, so the percentage can wrap" do
+        mail = ContactingCreatorMailer.notify(purchase.id)
+        expect(mail.body.encoded).to have_css(".nowrap", text: "$10", exact_text: true)
+        expect(mail.body.encoded).not_to have_css(".nowrap", text: "(50%)")
       end
     end
 
@@ -1915,12 +1922,20 @@ describe ContactingCreatorMailer do
           mail = ContactingCreatorMailer.notify(call.purchase.id)
 
           expect(mail.body.encoded).to include("Call schedule")
-          expect(mail.body.encoded).to include("07:30 AM - 08:30 AM PDT")
+          expect(mail.body.sanitized).to include("07:30 AM - 08:30 AM PDT")
           expect(mail.body.encoded).to include("Monday, May 15th, 2023")
           expect(mail.body.encoded).to include("Duration")
           expect(mail.body.encoded).to include("60 minutes")
           expect(mail.body.encoded).not_to include("Quantity")
           expect(mail.body.encoded).not_to include("Variant")
+        end
+
+        # The whole range on one line is wider than a 320px phone leaves beside its label.
+        it "lets the time range wrap between its two times" do
+          mail = ContactingCreatorMailer.notify(call.purchase.id)
+
+          expect(mail.body.encoded).to have_css(".nowrap", text: "07:30 AM", exact_text: true)
+          expect(mail.body.encoded).to have_css(".nowrap", text: "08:30 AM PDT", exact_text: true)
         end
       end
 
@@ -1935,7 +1950,7 @@ describe ContactingCreatorMailer do
           mail = ContactingCreatorMailer.notify(call.purchase.id)
 
           expect(mail.body.encoded).to include("Call schedule")
-          expect(mail.body.encoded).to include("10:30 PM - 01:30 AM PDT")
+          expect(mail.body.sanitized).to include("10:30 PM - 01:30 AM PDT")
           expect(mail.body.sanitized).to include("Monday, May 15th, 2023 - Tuesday, May 16th, 2023")
           expect(mail.body.encoded).to include("Duration")
           expect(mail.body.encoded).to include("3 hours")
