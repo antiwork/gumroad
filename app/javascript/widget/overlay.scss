@@ -13,21 +13,10 @@
   gap: spacer(2);
   cursor: pointer;
   border: $border;
-  border-radius: border-radius(1);
+  border-radius: border-radius(2);
   font-family: inherit;
-  @include transition(transform);
   padding: spacer(3) spacer(4);
   @include font-size(2);
-
-  &:hover {
-    transform: translate(-$button-hover-transform-length, -$button-hover-transform-length);
-    box-shadow: box-shadow(1);
-  }
-
-  &:active {
-    transform: translate(0, 0);
-    box-shadow: none;
-  }
 }
 
 a.gumroad-button {
