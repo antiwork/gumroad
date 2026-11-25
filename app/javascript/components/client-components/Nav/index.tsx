@@ -35,7 +35,6 @@ import { initTeamMemberReadOnlyAccess } from "$app/utils/team_member_read_only";
 
 import NavbarFooter from "$app/components/client-components/Nav/footer";
 import { HeaderNav } from "$app/components/client-components/Nav/header";
-import { currentHeaderLayout } from "$app/components/client-components/Nav/headerLayout";
 import { CloseOnNavigate } from "$app/components/CloseOnNavigate";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain, useDiscoverUrl } from "$app/components/DomainSettings";
@@ -391,7 +390,6 @@ export const Nav = (props: Props) => {
           actions={actions}
           homeHref={Routes.root_url()}
           onOpenSearch={omnibar.show}
-          layout={currentHeaderLayout()}
         />
       ) : null}
       <OmnibarDialog open={omnibar.open} onClose={omnibar.hide} pages={pages} actions={actions} />

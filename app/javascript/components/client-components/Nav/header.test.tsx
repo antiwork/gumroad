@@ -308,33 +308,22 @@ describe("HeaderNav", () => {
   });
 });
 
-describe("HeaderNav layouts", () => {
+describe("HeaderNav rows", () => {
   const rows = (nav: HTMLElement) => {
     const [top, links] = [...nav.children].filter((child): child is HTMLDivElement => child instanceof HTMLDivElement);
     if (!top || !links) throw new Error("Expected two rows in the header");
     return { top, links };
   };
 
-  it("puts everything on one row as a bar", () => {
-    const { nav } = renderHeader({ layout: "bar" });
+  it("puts the links on their own row under the search", () => {
+    const { nav } = renderHeader();
 
-    expect(nav.className.split(" ")).toContain("h-16");
-    expect(within(nav).getByRole("link", { name: "Products" })).toBeTruthy();
+    const { top, links } = rows(nav);
+    expect(within(top).getByRole("button", { name: "Search" })).toBeTruthy();
+    expect(within(top).queryByRole("link", { name: "Products" })).toBeNull();
+    expect(within(links).getByRole("link", { name: "Products" })).toBeTruthy();
   });
 
-  it.each(["subnav", "subnav-centered", "subnav-light", "search-left"] as const)(
-    "puts the links on their own row under the search in %s",
-    (layout) => {
-      const { nav } = renderHeader({ layout });
-
-      const { top, links } = rows(nav);
-      expect(within(top).getByRole("button", { name: "Search" })).toBeTruthy();
-      expect(within(top).queryByRole("link", { name: "Products" })).toBeNull();
-      expect(within(links).getByRole("link", { name: "Products" })).toBeTruthy();
-    },
-  );
-
-  // Search and the buttons beside it are one height in every layout.
   it("gives search and the create button the same height", () => {
     const { nav } = renderHeader();
 
@@ -344,12 +333,13 @@ describe("HeaderNav layouts", () => {
     );
   });
 
-  it("marks the current page in the text colour on the light row, where the accent is too faint", () => {
-    const { nav } = renderHeader({ layout: "subnav-light" });
+  // On a very wide screen an uncapped field would run most of the way across it.
+  it("caps the search field's width", () => {
+    const { nav } = renderHeader();
 
-    const current = within(nav).getByRole("link", { name: "Products" });
-    expect(current.className.split(" ")).toContain("font-bold");
-    expect(current.className.split(" ")).not.toContain("text-accent");
+    expect(within(nav).getByRole("button", { name: "Search" }).parentElement?.className.split(" ")).toContain(
+      "max-w-3xl",
+    );
   });
 });
 
