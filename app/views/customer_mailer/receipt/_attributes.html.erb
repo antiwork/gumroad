@@ -1,7 +1,8 @@
-<%# locals: attributes: [{ label:, value: }], headings: false. A value with no label spans the row.
+<%# locals: attributes: [{ label:, value: }], headings: false, table_class: nil (added to "details").
+    A value with no label spans the row.
     With headings, a label with no value is a group heading; elsewhere it is a field left empty. %>
 <% if attributes.present? %>
-  <table class="details" border="0" cellpadding="0" cellspacing="0">
+  <table class="<%= class_names("details", local_assigns[:table_class]) %>" border="0" cellpadding="0" cellspacing="0">
     <% attributes.each do |attribute| %>
       <% value = safe_join(Array(attribute[:value]).map { |item| auto_link(item.to_s, html: { target: "_blank" }) }, tag.br + " ") %>
       <% if attribute[:label].present? && strip_tags(value).length > ReceiptPresenter::LONG_ATTRIBUTE_VALUE_LENGTH %>

@@ -183,14 +183,15 @@
 
   // A tinted panel for a quote, a review, a product, a code. It always sits inside the bordered
   // main card, so it takes a fill and no visible border of its own.
-  // Outlook on Windows paints a div's fill behind its paragraphs only. There the fill is dropped
-  // (mso-shading) and the border, which is the fill's colour everywhere else, turns grey.
+  // Outlook on Windows paints a div's fill behind its paragraphs only, so the fill is dropped
+  // there (mso-shading). It also draws a div's right border past the card's edge, so the panel
+  // has no visible border there either: its border is the fill's colour, which cannot be seen on
+  // the white card. In Outlook a panel is its inset alone.
   .card {
     padding: 15px;
     background-color: $color-subtle;
     border: 1px solid $color-subtle;
     border-radius: $radius-box;
-    mso-border-alt: solid $color-border 1pt;
     mso-shading: $color-surface;
   }
 
