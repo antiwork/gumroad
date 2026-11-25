@@ -113,9 +113,12 @@ class SellerProfile < ApplicationRecord
   # Email clients cannot read the CSS variables in custom_styles, so filled email buttons get the
   # accent as literal colours.
   # The border is the accent itself unless that has vanished into the surface behind the button.
+  # mso-border-alt repeats it for Outlook on Windows, where the button's padding is drawn as a
+  # border (see `.button.primary` in the email stylesheet).
   def email_primary_button_style(surface: background_color)
     colors = accessible_accent
-    "background-color: #{colors[:accent]}; color: #{colors[:text]}; border-color: #{ContrastColor.visible_indicator(colors[:accent], surface)};"
+    border = ContrastColor.visible_indicator(colors[:accent], surface)
+    "background-color: #{colors[:accent]}; color: #{colors[:text]}; border-color: #{border}; mso-border-alt: solid #{border} 8pt;"
   end
 
   # The theme again, for the post's own wrapper: a client that drops <body> (a forward, some Android

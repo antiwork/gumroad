@@ -43,7 +43,9 @@ body {
 
   .header {
     // Side padding is the card's padding plus its border, so the mark sits on the content's edge.
-    padding: 0 33px 20px;
+    // The gap under it is a margin: Outlook on Windows ignores padding on a div.
+    margin: 0 auto 20px;
+    padding: 0 33px;
 
     a {
       text-decoration: none;

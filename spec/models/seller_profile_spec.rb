@@ -261,7 +261,7 @@ describe SellerProfile do
     end
 
     it "fills an email button with the accent and borders it with the accent too" do
-      expect(subject.email_primary_button_style).to eq("background-color: #19ff1d; color: #000000; border-color: #19ff1d;")
+      expect(subject.email_primary_button_style).to eq("background-color: #19ff1d; color: #000000; border-color: #19ff1d; mso-border-alt: solid #19ff1d 8pt;")
     end
 
     it "gives an email button a visible border when its accent matches the surface behind it" do
@@ -269,7 +269,7 @@ describe SellerProfile do
 
       expect(profile.email_primary_button_style).to start_with("background-color: #ffffff; color: #000000; border-color: #")
       expect(profile.email_primary_button_style).not_to include("border-color: #ffffff")
-      expect(profile.email_primary_button_style(surface: "#000000")).to end_with("border-color: #ffffff;")
+      expect(profile.email_primary_button_style(surface: "#000000")).to end_with("border-color: #ffffff; mso-border-alt: solid #ffffff 8pt;")
     end
 
     it "repeats the theme for a post email's wrapper, with a font list that is safe inside a style attribute" do

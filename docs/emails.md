@@ -30,6 +30,8 @@ Rules of thumb:
 - Buttons stay `display: inline-block`, at any width: Gmail on iOS only makes the text of a `display: block` link tappable.
 - Selectors must stay simple (class, child, sibling, `:first-child`, `:last-child`): Premailer matches each one to inline it.
 - No `transparent`: the CSS build minifies it to `#0000`, which Outlook and Gmail drop. Use `background-color: inherit`.
+- No `inherit` or `currentColor` in a rule that is inlined for the shared emails: Outlook on Windows reads `font-family: inherit` as a font of that name (Times New Roman), paints a link with `color: inherit` blue, and draws no border for `currentColor`. Name the value. Posts may use them, because `posts/post_email.html.erb` names the theme's text colour after the stylesheet.
+- Outlook on Windows ignores padding on a `<div>` (use a margin) and paints a fill behind text only. `.button.primary`, `.button.accent` and `.card` carry `mso-` properties that redraw them for Outlook; a new filled component needs the same, and a check in Outlook.
 - Remove a border with `border: none`, never `border: 0`: over an earlier `1px solid` rule the latter inlines as a zero-width solid border, which Outlook on Windows still draws.
 - Mobile overrides (under 480px) live in the `<style>` block in `app/views/layouts/mailers/_head.html.erb`, the only place a media query may go: the CSS build rewrites `max-width` queries into range syntax that Gmail and Outlook drop. Each override needs `!important` to beat what Premailer inlined. Buttons go full width there and headings step down a size; `table.stats` and `table.product-grid` stay two-up.
 

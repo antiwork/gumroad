@@ -871,7 +871,7 @@ describe CustomerMailer do
             expect(brand.at_css("img.brand-logo")["src"]).to eq(seller.avatar_url)
             expect(header.at_css("a.wordmark")).to be_nil
 
-            expect(button["style"]).to eq("background-color: #0057b8; color: #ffffff; border-color: #0057b8;")
+            expect(button["style"]).to eq("background-color: #0057b8; color: #ffffff; border-color: #0057b8; mso-border-alt: solid #0057b8 8pt;")
 
             powered_by = footer.at_css("a.wordmark")
             expect(powered_by.text).to include("Powered by")
@@ -904,7 +904,7 @@ describe CustomerMailer do
             expect(html.at_css("table.product .product-byline").text.strip).to eq("Maya Studio")
 
             expect(button.text).to eq("View content")
-            expect(button["style"]).to eq("background-color: #0057b8; color: #ffffff; border-color: #0057b8;")
+            expect(button["style"]).to eq("background-color: #0057b8; color: #ffffff; border-color: #0057b8; mso-border-alt: solid #0057b8 8pt;")
           end
         end
 
@@ -1470,7 +1470,7 @@ describe CustomerMailer do
 
       button = Nokogiri::HTML(body).at_css("a.button.primary")
       expect(button.text).to eq("View content")
-      expect(button["style"]).to eq("background-color: #0057b8; color: #ffffff; border-color: #0057b8;")
+      expect(button["style"]).to eq("background-color: #0057b8; color: #ffffff; border-color: #0057b8; mso-border-alt: solid #0057b8 8pt;")
       expect(body).to include("Order ID:", "Unsubscribe")
     end
 

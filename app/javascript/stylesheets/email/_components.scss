@@ -19,16 +19,23 @@
     text-decoration: none;
   }
 
+  // Outlook on Windows paints a link's fill behind its text only, and leaves the padding empty.
+  // For Outlook alone, the padding becomes a border in the fill's colour. An outline button needs
+  // nothing: its border already sits around the padding there.
   .button.primary {
     background-color: $color-heading;
     border-color: $color-heading;
     color: $color-surface;
+    mso-padding-alt: 0;
+    mso-border-alt: solid $color-heading 8pt;
   }
 
   .button.accent {
     background-color: $color-accent;
     border-color: $color-accent;
     color: $color-heading;
+    mso-padding-alt: 0;
+    mso-border-alt: solid $color-accent 8pt;
   }
 
   .button.full {
@@ -175,11 +182,16 @@
   }
 
   // A tinted panel for a quote, a review, a product, a code. It always sits inside the bordered
-  // main card, so it takes a fill and no border of its own.
+  // main card, so it takes a fill and no visible border of its own.
+  // Outlook on Windows paints a div's fill behind its paragraphs only. There the fill is dropped
+  // (mso-shading) and the border, which is the fill's colour everywhere else, turns grey.
   .card {
-    padding: 16px;
+    padding: 15px;
     background-color: $color-subtle;
+    border: 1px solid $color-subtle;
     border-radius: $radius-box;
+    mso-border-alt: solid $color-border 1pt;
+    mso-shading: $color-surface;
   }
 
   // Stacked cards, and the line that follows one.

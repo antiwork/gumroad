@@ -46,6 +46,14 @@
     border-color: $color-post-border;
   }
 
+  // No fill: the page behind it is the seller's and may be dark. The Outlook-only values follow,
+  // so the shared white shading is not painted over a dark theme.
+  .card {
+    background-color: inherit;
+    mso-border-alt: solid $color-post-border 1pt;
+    mso-shading: auto;
+  }
+
   blockquote {
     border-color: currentColor;
   }
