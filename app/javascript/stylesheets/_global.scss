@@ -44,9 +44,10 @@
     color: full-color(color);
   }
 
-  // The emails' heading scale: 36, 24 and 18px in bold, tighter at the top. h4 and h5 are
-  // body-sized and hold body copy across the app, so they stay regular.
-  $heading-sizes: (2.25rem, 1.5rem, 1.125rem, 1rem, 0.875rem);
+  // Bold headings on the emails' scale below the title: 24 and 18px. h1 keeps the web's 40px,
+  // which the product page's long-title steps are measured from. h4 and h5 are body-sized and
+  // hold body copy across the app, so they stay regular.
+  $heading-sizes: (2.5rem, 1.5rem, 1.125rem, 1rem, 0.875rem);
   $heading-line-heights: (1.2, 1.3, 1.4, 1.5, 1.4);
   $heading-tracking: (-0.02em, -0.01em, normal, normal, normal);
   $heading-weights: (bold, bold, bold, normal, normal);

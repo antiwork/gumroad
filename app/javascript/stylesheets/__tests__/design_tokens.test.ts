@@ -133,8 +133,9 @@ describe("design tokens", () => {
     return rule;
   };
 
-  it("sets headings in bold on the emails' scale", () => {
-    expect(heading(1)).toMatch(/font-size:\s*2\.25rem;[\s\S]*font-weight:\s*bold/u);
+  // h1 stays 40px: spec/requests/products/show/title_size_spec.rb measures the product title from it.
+  it("sets headings in bold, on the emails' scale below the title", () => {
+    expect(heading(1)).toMatch(/font-size:\s*2\.5rem;[\s\S]*font-weight:\s*bold/u);
     expect(heading(2)).toMatch(/font-size:\s*1\.5rem;[\s\S]*font-weight:\s*bold/u);
     expect(heading(3)).toMatch(/font-size:\s*1\.125rem;[\s\S]*font-weight:\s*bold/u);
   });
