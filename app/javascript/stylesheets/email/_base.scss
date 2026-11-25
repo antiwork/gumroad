@@ -120,8 +120,9 @@ body {
   h2,
   h3,
   h4 {
+    // No font-family here, not even `inherit`: Outlook on Windows reads an inlined `inherit` as a
+    // font of that name and falls back to Times New Roman. A heading inherits the font anyway.
     color: $color-heading;
-    font-family: inherit;
     font-weight: 600;
   }
 
@@ -150,9 +151,26 @@ body {
     line-height: 24px;
   }
 
+  // A link's colour is named for each context. Outlook on Windows drops an inlined
+  // `color: inherit` and paints the link blue, and its own link style outranks a <style> rule.
   a {
-    color: inherit;
+    color: $color-text;
     text-decoration: underline;
+  }
+
+  h1 a,
+  h2 a,
+  h3 a,
+  h4 a {
+    color: $color-heading;
+  }
+
+  th a,
+  .muted a,
+  .footer a,
+  .hero p a,
+  .product-byline a {
+    color: $color-muted;
   }
 
   strong,

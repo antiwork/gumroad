@@ -26,6 +26,9 @@
       <!--[if mso]><table role="presentation" align="center" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
       <% unless @installment.present? %>
         <%= render("layouts/mailers/header", brand: @email_brand) %>
+        <%# The header's bottom padding is lost in Outlook, on the div and on its cell alike, so the
+            gap above the card is a row of its own. %>
+        <!--[if mso]></td></tr><tr><td height="20" style="font-size: 1px; line-height: 20px;">&nbsp;<![endif]-->
       <% end %>
       <!--[if mso]></td></tr><tr><td<% unless @installment.present? %> style="padding: 32px; background-color: #ffffff; border: 1px solid #e4e4df;"<% end %>><![endif]-->
       <div class="main">

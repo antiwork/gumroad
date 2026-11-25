@@ -25,6 +25,20 @@
     text-decoration: none;
   }
 
+  // Every link follows the seller's text colour, whatever the shared rules name for its context.
+  a,
+  h1 a,
+  h2 a,
+  h3 a,
+  h4 a,
+  th a,
+  .muted a,
+  .footer a,
+  .hero p a,
+  .product-byline a {
+    color: inherit;
+  }
+
   hr,
   th,
   td,

@@ -11,7 +11,7 @@
     border: 1px solid $color-control-border;
     border-radius: $radius-control;
     color: $color-heading;
-    font-family: inherit;
+    // No font-family, for the reason given on the headings in _base.scss.
     font-size: 16px;
     font-weight: 500;
     line-height: 24px;
