@@ -18,8 +18,13 @@ export const DashboardNavProfilePopover = ({
   user: User | null;
   placement?: "sidebar" | "header";
 }) => {
-  // The nav outlives a visit, so the menu closes itself once a row is chosen.
+  // The nav outlives a visit, so the menu closes itself once a row is chosen. Not for an account
+  // row: switching reloads the page, and until then the menu stays to show what was chosen.
   const [open, setOpen] = React.useState(false);
+  const closeOnChoice = (event: React.MouseEvent) => {
+    if (event.target instanceof Element && event.target.closest("[role=menuitemradio]")) return;
+    setOpen(false);
+  };
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -56,12 +61,12 @@ export const DashboardNavProfilePopover = ({
           arrowClassName="fill-white"
           collisionPadding={0}
           matchTriggerWidth
-          onClick={() => setOpen(false)}
+          onClick={closeOnChoice}
         >
           {children}
         </PopoverContent>
       ) : (
-        <PopoverContent side="bottom" align="end" className="min-w-56 px-2 py-1" onClick={() => setOpen(false)}>
+        <PopoverContent side="bottom" align="end" className="min-w-56 px-2 py-1" onClick={closeOnChoice}>
           {children}
         </PopoverContent>
       )}
