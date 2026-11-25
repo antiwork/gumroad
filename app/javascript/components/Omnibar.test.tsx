@@ -52,13 +52,13 @@ afterEach(() => {
 });
 
 const pages = [
-  { key: "products", title: "Products", href: "/products" },
-  { key: "sales", title: "Sales", href: "/customers", keywords: "customers refunds" },
-  { key: "payouts", title: "Payouts", href: "/payouts" },
-  { key: "community", title: "Community", href: "/communities", onSelect: rememberReferrer },
-  { key: "discover", title: "Discover", href: "https://discover.example.com/" },
+  { id: "products", title: "Products", href: "/products" },
+  { id: "sales", title: "Sales", href: "/customers", keywords: "customers refunds" },
+  { id: "payouts", title: "Payouts", href: "/payouts" },
+  { id: "community", title: "Community", href: "/communities", onSelect: rememberReferrer },
+  { id: "discover", title: "Discover", href: "https://discover.example.com/" },
 ];
-const actions = [{ key: "new-product", title: "New product", href: "/products/new", keywords: "create" }];
+const actions = [{ id: "new-product", title: "New product", href: "/products/new", keywords: "create" }];
 
 const Harness = () => {
   const omnibar = useOmnibar();

@@ -19,7 +19,7 @@ export type OmnibarGroup = { title: string; items: OmnibarItem[] };
 // A place or an action the bar offers without asking the server. `onSelect` runs before the visit,
 // for a destination whose nav link does more than navigate.
 export type OmnibarShortcut = {
-  key: string;
+  id: string;
   title: string;
   href: string;
   keywords?: string;
@@ -45,7 +45,7 @@ export const matchesQuery = (query: string, ...values: (string | null | undefine
 const shortcutItems = (kind: "page" | "action", shortcuts: OmnibarShortcut[], query: string): OmnibarItem[] =>
   shortcuts
     .filter((shortcut) => matchesQuery(query, shortcut.title, shortcut.keywords))
-    .map(({ key, title, href, onSelect }) => ({ id: `${kind}:${key}`, kind, title, href, onSelect }));
+    .map(({ id, title, href, onSelect }) => ({ id: `${kind}:${id}`, kind, title, href, onSelect }));
 
 /**
  * The bar's rows, in the order they are shown. A row only ever appears below the rows already on

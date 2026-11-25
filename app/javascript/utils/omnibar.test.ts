@@ -11,11 +11,11 @@ import {
 } from "$app/utils/omnibar";
 
 const pages = [
-  { key: "products", title: "Products", href: "/products" },
-  { key: "sales", title: "Sales", href: "/customers", keywords: "customers refunds" },
-  { key: "payouts", title: "Payouts", href: "/payouts", keywords: "balance bank" },
+  { id: "products", title: "Products", href: "/products" },
+  { id: "sales", title: "Sales", href: "/customers", keywords: "customers refunds" },
+  { id: "payouts", title: "Payouts", href: "/payouts", keywords: "balance bank" },
 ];
-const actions = [{ key: "new-product", title: "New product", href: "/products/new", keywords: "create add" }];
+const actions = [{ id: "new-product", title: "New product", href: "/products/new", keywords: "create add" }];
 const searchLinks = {
   sales: (query: string) => `/customers?query=${encodeURIComponent(query)}`,
   products: (query: string) => `/products?query=${encodeURIComponent(query)}`,
@@ -85,7 +85,7 @@ describe("buildOmnibarGroups", () => {
     const onSelect = () => undefined;
     const groups = buildOmnibarGroups({
       query: "",
-      pages: [{ key: "community", title: "Community", href: "/communities", onSelect }],
+      pages: [{ id: "community", title: "Community", href: "/communities", onSelect }],
       actions: [],
       results: {},
       searchLinks,

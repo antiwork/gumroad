@@ -320,38 +320,40 @@ export const Nav = (props: Props) => {
 
   const omnibar = useOmnibar();
   // The search bar offers every destination, including the ones still under "Everything else".
+  // Shortcuts carry `id`, not `key`: dashboard_nav_spec.rb reads every `key: "…"` line in this
+  // file as a nav item the server must know.
   const pages: OmnibarShortcut[] = [
     ...visibleItems.map(({ key, text, href, keywords, onClick }) => ({
-      key,
+      id: key,
       title: text,
       href,
       keywords,
       onSelect: onClick,
     })),
     {
-      key: "settings",
+      id: "settings",
       title: "Settings",
       href: Routes.settings_main_url(routeParams),
       keywords: "account preferences",
     },
-    { key: "help", title: "Help", href: Routes.help_center_root_url(routeParams), keywords: "support docs" },
+    { id: "help", title: "Help", href: Routes.help_center_root_url(routeParams), keywords: "support docs" },
   ];
   const policies = loggedInUser?.policies;
   const actions: OmnibarShortcut[] = [
     {
-      key: "new-product",
+      id: "new-product",
       title: "New product",
       href: Routes.new_product_url(routeParams),
       allowed: policies?.product.create,
     },
     {
-      key: "new-email",
+      id: "new-email",
       title: "New email",
       href: Routes.new_email_url(routeParams),
       allowed: policies?.installment.create,
     },
     {
-      key: "new-workflow",
+      id: "new-workflow",
       title: "New workflow",
       href: Routes.new_workflow_url(routeParams),
       allowed: policies?.workflow.create,
