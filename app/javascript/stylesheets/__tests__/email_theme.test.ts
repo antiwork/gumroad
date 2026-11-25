@@ -83,6 +83,19 @@ describe("email stylesheet", () => {
     // A fixed one-line label keeps its own width, so the receipt's header rows do not move.
     expect(declarationsFor(css, ".email table.details th.nowrap")).toMatch(/min-width:\s*0/u);
   });
+
+  // An opening hero's title is an <h1> and its amount a <p>, so each look has to come from the
+  // class, not from the element.
+  it("styles a hero's title and figure by class", () => {
+    const title = declarationsFor(css, ".email .hero .eyebrow");
+    expect(title).toMatch(/font-size:\s*16px/u);
+    expect(title).toMatch(/font-weight:\s*400/u);
+    expect(title).toMatch(/(^|[;\s])color:\s*#6b6b66/u);
+    const figure = declarationsFor(css, ".email .hero .figure");
+    expect(figure).toMatch(/font-size:\s*36px/u);
+    expect(figure).toMatch(/font-weight:\s*600/u);
+    expect(figure).toMatch(/(^|[;\s])color:\s*#000000/u);
+  });
 });
 
 describe("app stylesheet", () => {

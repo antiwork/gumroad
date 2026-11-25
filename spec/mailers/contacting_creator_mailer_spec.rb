@@ -1304,6 +1304,14 @@ describe ContactingCreatorMailer do
       expect_push_alert(seller.id, mail.subject)
     end
 
+    # Someone moving through the email by heading should hear what it is, not a bare amount.
+    it "makes the title the email's heading, with the amount as text under it" do
+      mail = ContactingCreatorMailer.notify(purchase.id)
+
+      expect(Nokogiri::HTML(mail.body.encoded).css("h1, h2, h3, h4").map { _1.text.squish }).to eq(["You made a sale!"])
+      expect(mail.body.sanitized).to include("You made a sale! #{purchase.formatted_display_price} #{product.name}")
+    end
+
     it "displays the resolved tiered offer code discount" do
       product = create(:product, user: seller, price_cents: 2_00)
       offer_code = create(:tiered_offer_code, :for_existing_customers, name: "Renewal discount", products: [product], ownership_products: [product], user: seller)

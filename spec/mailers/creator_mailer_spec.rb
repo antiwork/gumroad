@@ -146,6 +146,14 @@ describe CreatorMailer do
         expect(body).to have_text("Elsewhere 5 1.5K $10", normalize_ws: true)
         expect(body).to have_text("You earned a total of $50", normalize_ws: true)
       end
+
+      # The total is a big number in the middle of the email, not the title of a section.
+      it "keeps the headings to the email's title and its sections" do
+        mail = CreatorMailer.year_in_review(seller:, year:, analytics_data:)
+
+        headings = Nokogiri::HTML(mail.body.encoded).css("h1, h2, h3, h4").map { "#{_1.name}: #{_1.text.squish}" }
+        expect(headings).to eq(["h2: Your year on Gumroad in review", "h3: You sold products in 5 countries"])
+      end
     end
 
     context "when the seller is earning in GBP" do
