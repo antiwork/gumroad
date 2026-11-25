@@ -366,7 +366,9 @@ class Installment < ApplicationRecord
     TextScrubber.format(message).squish.truncate(255)
   end
 
-  def message_with_inline_syntax_highlighting_and_upsells
+  # button_surface is the colour the message is printed on, when that is not the seller's own
+  # background: a button's border has to show against it.
+  def message_with_inline_syntax_highlighting_and_upsells(button_surface: nil)
     return message if message.blank?
 
     doc = Nokogiri::HTML.fragment(message)
@@ -412,7 +414,8 @@ class Installment < ApplicationRecord
 
     # The editor saves buttons with Gumroad pink inline, so the seller's accent replaces it here.
     if seller.present?
-      button_style = seller.seller_profile.email_primary_button_style
+      seller_profile = seller.seller_profile
+      button_style = seller_profile.email_primary_button_style(surface: button_surface || seller_profile.background_color)
       doc.search("a.tiptap__button").each { _1["style"] = button_style }
     end
 
@@ -425,7 +428,8 @@ class Installment < ApplicationRecord
     default_checkout_url = Rails.application.routes.url_helpers.checkout_url(host: UrlService.domain_with_protocol)
     checkout_url ||= default_checkout_url
 
-    doc = Nokogiri::HTML.fragment(message_with_inline_syntax_highlighting_and_upsells)
+    # An abandoned-cart email prints the message on the email's white card.
+    doc = Nokogiri::HTML.fragment(message_with_inline_syntax_highlighting_and_upsells(button_surface: ReceiptPresenter::EMAIL_CARD_COLOR))
     doc.search("#{PRODUCT_LIST_PLACEHOLDER_TAG_NAME}").each do |node|
       node.replace(
         ApplicationController.renderer.render(
