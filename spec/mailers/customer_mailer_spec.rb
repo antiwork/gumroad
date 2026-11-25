@@ -1427,6 +1427,23 @@ describe CustomerMailer do
       expect(body).to have_link("View every item in this order", href: receipt_purchase_url(purchase_one.external_id, host: UrlService.domain_with_protocol))
     end
 
+    it "declares its language and titles the document with the subject" do
+      Feature.activate_user(:graphics_light_receipt, seller)
+      mail = CustomerMailer.receipt(nil, charge.id)
+      document = Nokogiri::HTML(mail.body.decoded)
+
+      expect(document.at_css("html")["lang"]).to eq("en")
+      expect(document.at_css("head title").text).to eq(mail.subject)
+    end
+
+    it "sets the page colour its black text sits on and asks clients to keep it light" do
+      Feature.activate_user(:graphics_light_receipt, seller)
+      document = Nokogiri::HTML(CustomerMailer.receipt(nil, charge.id).body.decoded)
+
+      expect(document.at_css("body")["style"]).to include("color: #000;", "background-color: #ffffff;")
+      expect(document.at_css("meta[name='color-scheme']")["content"]).to eq("light only")
+    end
+
     it "does not apply to another seller's receipt" do
       Feature.activate_user(:graphics_light_receipt, create(:user))
 
