@@ -408,7 +408,9 @@ class Installment < ApplicationRecord
       alt_title = node["data-title"]
       return if target_url.blank?
 
-      content = thumbnail_url.present? ? "<img src='#{thumbnail_url}' alt='#{alt_title}' />" : alt_title.presence || target_url
+      # The thumbnail is the link's only content, so its alt is what names the link.
+      thumbnail_alt = ERB::Util.html_escape(alt_title.presence || "Open embedded media")
+      content = thumbnail_url.present? ? "<img src='#{ERB::Util.html_escape(thumbnail_url)}' alt='#{thumbnail_alt}' />" : alt_title.presence || target_url
       node.replace(%(<p><a href="#{target_url}" target="_blank" rel="noopener noreferrer">#{content}</a></p>))
     end
 
