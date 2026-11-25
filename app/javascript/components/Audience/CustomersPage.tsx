@@ -478,7 +478,11 @@ const CustomersPage = ({
                     <TableRow
                       key={customer.id}
                       onClick={() => {
-                        window.sessionStorage.setItem("CustomersPage:canGoBack", "1");
+                        try {
+                          window.sessionStorage.setItem("CustomersPage:canGoBack", "1");
+                        } catch {
+                          // Remembering the return route must not block opening a sale.
+                        }
                         router.visit(Routes.customer_sale_path(customer.id));
                       }}
                       style={{ cursor: "pointer" }}
