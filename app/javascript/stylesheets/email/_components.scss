@@ -51,7 +51,20 @@
       padding-bottom: 0;
     }
 
+    // Either column may hold seller text of any length (a product name as the label), so each
+    // may break a long word and neither may be squeezed below a short label or a price.
+    th {
+      min-width: 96px;
+      word-break: break-word;
+    }
+
+    // A label held on one line is fixed text, already as narrow as it can go.
+    th.nowrap {
+      min-width: 0;
+    }
+
     td {
+      min-width: 88px;
       text-align: right;
       word-break: break-word;
     }

@@ -72,6 +72,17 @@ describe("email stylesheet", () => {
   it("lets a product row break a long word in the name", () => {
     expect(declarationsFor(css, ".email table.product .product-info")).toMatch(/word-break:\s*break-word/u);
   });
+
+  // A receipt's row label is the product's name. Without a floor under each column a long name
+  // squeezes its price to a glyph per line, and one unbroken name pushes the table off a phone.
+  it("holds both columns of a label/value table to a readable width", () => {
+    const label = declarationsFor(css, ".email table.details th");
+    expect(label).toMatch(/min-width:\s*96px/u);
+    expect(label).toMatch(/word-break:\s*break-word/u);
+    expect(declarationsFor(css, ".email table.details td")).toMatch(/min-width:\s*88px/u);
+    // A fixed one-line label keeps its own width, so the receipt's header rows do not move.
+    expect(declarationsFor(css, ".email table.details th.nowrap")).toMatch(/min-width:\s*0/u);
+  });
 });
 
 describe("app stylesheet", () => {
