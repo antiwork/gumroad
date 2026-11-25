@@ -1940,9 +1940,10 @@ describe PurchasesController, :vcr do
         let(:purchase) { create(:purchase, link: create(:product, user: seller, name: "Paid edition"), seller:, email: "test@example.com") }
         let(:purchase_two) { create(:purchase, link: create(:product, user: seller, name: "Free edition"), seller:, email: "test@example.com") }
 
-        # Only the item cards: "More from this creator" can recommend the other product.
+        # Only the item cards: "More from this creator" can recommend the other product, and a lone
+        # recommendation is a product row too.
         def receipt_item_names
-          Nokogiri::HTML(response.body).css("table.product h4").map { _1.text.squish }
+          Nokogiri::HTML(response.body).css(".card:not(.recommendation) table.product h4").map { _1.text.squish }
         end
 
         before do

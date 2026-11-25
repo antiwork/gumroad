@@ -5,6 +5,11 @@ class ReceiptPresenter
 
   # $color-surface in the email stylesheet.
   EMAIL_CARD_COLOR = "#ffffff"
+  # $color-subtle: the panel a receipt's item, and so its download button, sits on.
+  EMAIL_PANEL_COLOR = "#f8f8f5"
+  # A value longer than this (a gift message) reads as a sentence, so it goes under its label,
+  # left-aligned.
+  LONG_ATTRIBUTE_VALUE_LENGTH = 40
 
   attr_reader :for_email
 
@@ -57,7 +62,7 @@ class ReceiptPresenter
     seller = chargeable.seller
     return unless Feature.active?(:seller_branded_receipt, seller)
 
-    branding = { button_style: seller.seller_profile.email_primary_button_style(surface: EMAIL_CARD_COLOR) }
+    branding = { button_style: seller.seller_profile.email_primary_button_style(surface: EMAIL_PANEL_COLOR) }
     branding[:email_brand] = { name: seller.name_or_username, url: seller.profile_url, logo_url: seller.avatar_url } if seller.avatar.attached?
     branding
   end

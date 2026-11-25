@@ -15,13 +15,19 @@
     (width<=480px), which Gmail and Outlook drop. Premailer leaves media queries in place, so each
     override needs !important to beat the declarations it inlined. %>
 <style>
-  @media only screen and (max-width: 480px) {
-    .email { padding: 16px 8px !important; }
+  @media only screen and (min-width: 481px) {
+    .email { padding: 32px 16px !important; }
     .email.post { padding: 24px 16px !important; }
-    .email .main { padding: 24px 20px !important; border-radius: 12px !important; }
+    .email .header { margin-bottom: 20px !important; padding: 0 33px !important; }
+    .email .main { padding: 32px !important; }
     .email.post .main { padding: 0 !important; }
+  }
+  @media only screen and (max-width: 480px) {
+    .email .main { border-radius: 12px !important; }
+    .email table.details th { padding-right: 12px !important; font-size: 14px !important; }
+    .email table.order-meta th { font-size: 13px !important; }
+    .email .footer a { display: inline-block !important; padding: 8px 0 !important; }
     .email h1 { font-size: 28px !important; line-height: 36px !important; }
-    .email h2 { font-size: 22px !important; line-height: 28px !important; }
     .email .hero .eyebrow { font-size: 16px !important; line-height: 24px !important; }
     .email .hero .figure { font-size: 28px !important; line-height: 36px !important; }
     .email .rich-text h1 { font-size: 24px !important; line-height: 32px !important; }

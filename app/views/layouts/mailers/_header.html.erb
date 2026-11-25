@@ -10,7 +10,10 @@
     </a>
   <% else %>
     <a class="wordmark" href="<%= root_url %>">
-      <img src="<%= image_url("email/wordmark_logo.png") %>" alt="Gumroad" width="123" height="16">
+      <%# The black mark with a halo in the page colour. The halo cannot be seen on the page. Where
+          a client inverts the page for dark mode and leaves images alone (Gmail on Android), the
+          halo is what keeps the mark readable. The file is taller than the mark by the halo. %>
+      <img src="<%= image_url("email/wordmark_logo_on_page.png") %>" alt="Gumroad" width="123" height="20">
     </a>
   <% end %>
 </div>

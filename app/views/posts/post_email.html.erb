@@ -8,6 +8,16 @@
     <%= render("layouts/mailers/head") %>
     <style><%= @post.user.seller_profile.custom_styles.to_s.html_safe %></style>
     <%= vite_entrypoint_stylesheet_tag "email" %>
+    <%# Outlook on Windows resolves neither `inherit` nor `currentColor`, so a post's links and
+        outline buttons would be blue and unbordered there. This names the theme's text colour
+        for them. It comes after the stylesheet, and each selector carries a tag, so it outranks
+        the stylesheet's own `inherit` rules but not a filled button's. %>
+    <% text_color = @post.user.seller_profile.text_color_on_background %>
+    <style>
+      div.email.post a, div.email.post .title, div.email.post .muted a, div.email.post .footer a,
+      div.email.post .footer .wordmark, div.email.post .product-byline a, div.email.post th a { color: <%= text_color %>; }
+      div.email.post .button { border-color: <%= text_color %>; color: <%= text_color %>; }
+    </style>
   </head>
   <body>
     <%= render("shared/preheader_text", text: CGI.unescapeHTML(@post.truncated_description)) %>

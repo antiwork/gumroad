@@ -25,11 +25,32 @@
     text-decoration: none;
   }
 
+  // Every link follows the seller's text colour, whatever the shared rules name for its context.
+  a,
+  h1 a,
+  h2 a,
+  h3 a,
+  h4 a,
+  th a,
+  .muted a,
+  .footer a,
+  .hero p a,
+  .product-byline a {
+    color: inherit;
+  }
+
   hr,
   th,
   td,
   .card {
     border-color: $color-post-border;
+  }
+
+  // No fill: the page behind it is the seller's and may be dark. The Outlook-only shading
+  // follows, so the shared white is not painted over a dark theme.
+  .card {
+    background-color: inherit;
+    mso-shading: auto;
   }
 
   blockquote {

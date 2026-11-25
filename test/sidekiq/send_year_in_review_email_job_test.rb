@@ -84,7 +84,7 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
     assert_equal [seller.email], mail.to
     assert_equal "Your 2022 in review", mail.subject
     body = sanitized_body(mail)
-    assert_stat_tiles mail, sales: 1, views: 2, unique_customers: 1, products_sold: 1
+    assert_stat_rows mail, sales: 1, views: 2, unique_customers: 1, products_sold: 1
     assert_includes body, "You ranked #2 among all creators"
     assert_includes body, "Your top product"
     assert_match(/Product 1 \( \S+ \) -+ 2 views \S+ 1 sale \S+ \$1K/, body)
@@ -393,7 +393,7 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
     assert_equal [seller.email], mail.to
     assert_equal "Your 2022 in review", mail.subject
     body = sanitized_body(mail)
-    assert_stat_tiles mail, sales: 13, views: 1, unique_customers: 13, products_sold: permalinks.size
+    assert_stat_rows mail, sales: 13, views: 1, unique_customers: 13, products_sold: permalinks.size
     top_product_names.each do |name|
       assert_match(/#{name} \( \S+ \) -+ \d+ views? \S+ \d+ sales? \S+ \$\d+/, body)
     end
@@ -450,11 +450,11 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
       Nokogiri::HTML(mail.html_part.decoded).at_css("body").text.squish
     end
 
-    # The four tiles print the value above its label, so they read "12 Sales".
+    # The four rows print the label before its value, so they read "Sales 12".
     # Matched as one run so each number is pinned to its own label.
-    def assert_stat_tiles(mail, sales:, views:, unique_customers:, products_sold:)
+    def assert_stat_rows(mail, sales:, views:, unique_customers:, products_sold:)
       assert_match(
-        /(?<![\d,.])#{sales} Sales #{views} Views #{unique_customers} Unique customers #{products_sold} Products sold/,
+        /Sales #{sales} Views #{views} Unique customers #{unique_customers} Products sold #{products_sold}(?![\d,.])/,
         html_text(mail)
       )
     end
@@ -550,7 +550,7 @@ class SendYearInReviewEmailJobTest < ActiveSupport::TestCase
     def assert_us_seller_stats(mail, seller, permalinks, date)
       assert_equal "Your 2022 in review", mail.subject
       body = sanitized_body(mail)
-      assert_stat_tiles mail, sales: 12, views: 24, unique_customers: 12, products_sold: permalinks.size
+      assert_stat_rows mail, sales: 12, views: 24, unique_customers: 12, products_sold: permalinks.size
       seller.products.where(unique_permalink: permalinks.first(5)).pluck(:name).each do |name|
         assert_match(/#{name} \( \S+ \) -+ \d+ views? \S+ \d+ sales? \S+ \$\d+/, body)
       end

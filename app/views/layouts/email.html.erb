@@ -44,7 +44,12 @@
         <% if @installment.present? || @email_brand.present? %>
           <a class="wordmark" href="<%= root_url %>">
             Powered by
-            <img src="<%= image_url("email/wordmark_logo.png") %>" alt="Gumroad" width="92" height="12">
+            <%# On the page colour, the mark with a halo in that colour: see layouts/mailers/_header. %>
+            <% if @installment.present? %>
+              <img src="<%= image_url("email/wordmark_logo.png") %>" alt="Gumroad" width="92" height="12">
+            <% else %>
+              <img src="<%= image_url("email/wordmark_logo_on_page.png") %>" alt="Gumroad" width="92" height="15">
+            <% end %>
           </a>
         <% end %>
       </div>

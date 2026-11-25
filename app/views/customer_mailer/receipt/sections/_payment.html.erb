@@ -3,8 +3,8 @@
   <div>
     <h3><%= payment_info.title %></h3>
     <% payment_info.notes.each do |note| %>
-      <p><%= note %></p>
+      <p class="small muted"><%= note %></p>
     <% end %>
-    <%= render("customer_mailer/receipt/attributes", attributes: payment_info.today_payment_attributes + payment_info.upcoming_payment_attributes + [payment_info.payment_method_attribute].compact, headings: true) %>
+    <%= render("customer_mailer/receipt/attributes", attributes: payment_info.today_payment_attributes + payment_info.upcoming_payment_attributes + [payment_info.payment_method_attribute].compact, headings: true, table_class: "order-meta") %>
   </div>
 <% end %>
