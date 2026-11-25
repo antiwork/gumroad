@@ -116,6 +116,27 @@ describe Order::PreparePaymentIntentService, :vcr do
       end
     end
 
+    context "when the previewed card country does not satisfy the tax-location guard" do
+      before { create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_taxloc4959") }
+
+      it "fails the purchase before creating an intent, after create deferred the guard" do
+        order, params = build_order
+        purchase = order.purchases.first
+        purchase.update_columns(country: "United States", ip_country: "Spain")
+        preview = { type: "card", card: { country: "FR", wallet: { type: "apple_pay" } } }
+        allow(Stripe::ConfirmationToken).to receive(:retrieve).and_return(double(payment_method_preview: preview))
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_test").perform
+
+        response = responses["unique-id-0"]
+        expect(response[:success]).to eq(false)
+        expect(response[:error_code]).to eq(PurchaseErrorCode::TAX_VALIDATION_FAILED)
+        expect(response[:error_message]).to include("couldn't confirm the country")
+        expect(order.charges).to be_empty
+        expect(purchase.reload).to be_failed
+      end
+    end
+
     context "when the previewed card country fails purchasing power parity verification" do
       before { create(:merchant_account, user: seller) }
 

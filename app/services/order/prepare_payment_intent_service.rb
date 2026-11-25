@@ -55,6 +55,7 @@ class Order::PreparePaymentIntentService
     return responses if preview.nil?
 
     apply_previewed_card_country(preview)
+    return responses if block_tax_location_mismatch
     return responses if block_chargeback_ring_signal
     return responses if block_unsupported_recurring_payment_method
     return responses if block_region_locked_payment_method_country_mismatch
@@ -470,6 +471,17 @@ class Order::PreparePaymentIntentService
     # the platform, outside Brazil.
     def pix_iof_applies?
       !merchant_account&.is_a_brazilian_stripe_connect_account?
+    end
+
+    def block_tax_location_mismatch
+      # wallet_payment is transient, so it is gone on the purchases reloaded for this request.
+      purchases_to_charge.each { _1.wallet_payment = wallet_payment? }
+      refused = purchases_to_charge.reject(&:verify_deferred_tax_location).first
+      return false if refused.nil?
+
+      purchases_to_charge.each { _1.error_code = PurchaseErrorCode::TAX_VALIDATION_FAILED }
+      fail_purchases_with(refused.errors.first.message)
+      true
     end
 
     # Server-confirm checkout refuses in Purchase#charge! / Charge::CreateService; here the browser
