@@ -57,7 +57,8 @@ export const OmnibarTrigger = ({ variant, onOpen }: { variant: "sidebar" | "bar"
     return (
       <button
         type="button"
-        className={classNames("cursor-pointer rounded all-unset", focusRing)}
+        // The padding takes the target past 24px; the matching margin keeps the header's layout.
+        className={classNames("-m-1 cursor-pointer rounded p-1 all-unset", focusRing)}
         aria-label="Search"
         aria-haspopup="dialog"
         onClick={onOpen}
