@@ -640,7 +640,7 @@ export const RichTextEditorToolbar = ({
         <div
           role="separator"
           aria-orientation="vertical"
-          className="m-2 hidden border-r border-solid border-muted sm:flex"
+          className="m-2 hidden border-r border-solid border-border sm:flex"
         />
         <MenuItem
           name="Bold"
@@ -675,7 +675,7 @@ export const RichTextEditorToolbar = ({
         <div
           role="separator"
           aria-orientation="vertical"
-          className="m-2 hidden border-r border-solid border-muted sm:flex"
+          className="m-2 hidden border-r border-solid border-border sm:flex"
         />
         {custom ?? (
           <>
@@ -698,7 +698,7 @@ export const RichTextEditorToolbar = ({
                 <div
                   role="separator"
                   aria-orientation="vertical"
-                  className="m-2 hidden border-r border-muted sm:flex"
+                  className="m-2 hidden border-r border-border sm:flex"
                 />
                 <Popover>
                   <PopoverTrigger className="rounded px-2 py-1 all-unset hover:bg-active-bg">
@@ -844,7 +844,7 @@ export const RichTextEditor = ({
         <RichTextEditorToolbar
           editor={editor}
           allowUpsells={allowUpsells}
-          className="rounded-t rounded-b-none border border-b-0 border-border"
+          className="rounded-t rounded-b-none border border-b-0 border-control"
         />
       ) : null}
       <EditorContent className="rich-text" editor={editor} />

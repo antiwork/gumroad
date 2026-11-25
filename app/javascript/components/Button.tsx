@@ -25,17 +25,16 @@ export const brandNames = [
 export type BrandName = (typeof brandNames)[number];
 
 export const buttonVariants = cva(
-  // Hover drop-shadow is pinned to black (var(--color-black)) in BOTH light and dark mode.
-  // The default `shadow` token resolves to `currentColor`, which flips to near-white in dark
-  // mode (text color becomes rgb(221 221 221)) and renders a strange white button shadow.
-  // Matching light mode's black keeps the neobrutalist look consistent across color schemes.
+  // The lift and its hard shadow are a store opt-in: --button-hover-offset is 0 unless a store
+  // sets it. The shadow is pinned to black because currentColor turns near-white in dark mode.
   // lift-halo has to grow by exactly the distance the lift moves, so it tracks the store's offset.
-  "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded text-current font-[inherit] no-underline transition-transform hover:-translate-(--button-hover-offset) hover:shadow-[var(--button-hover-offset)_var(--button-hover-offset)_0_var(--color-black)] active:translate-0 active:shadow-none data-[state=open]:translate-0! data-[state=open]:shadow-none! lift-halo [--lift-halo-offset:var(--button-hover-offset)]",
+  // The border is transparent so a filled button is edged by its own fill; unfilled ones add a colour.
+  "inline-flex items-center justify-center gap-2 cursor-pointer border border-transparent rounded text-current font-[inherit] no-underline transition-transform hover:-translate-(--button-hover-offset) hover:shadow-[var(--button-hover-offset)_var(--button-hover-offset)_0_var(--color-black)] active:translate-0 active:shadow-none data-[state=open]:translate-0! data-[state=open]:shadow-none! lift-halo [--lift-halo-offset:var(--button-hover-offset)]",
   {
     variants: {
       variant: {
         default: "",
-        outline: "bg-transparent",
+        outline: "bg-transparent border-button",
         secondary: "",
         destructive: "",
       },
@@ -45,25 +44,25 @@ export const buttonVariants = cva(
         icon: "size-12 box-border",
       },
       color: {
-        default: "bg-transparent",
+        default: "bg-transparent border-button not-disabled:hover:bg-active-bg",
         primary: "bg-primary text-primary-foreground hover:bg-accent-with-text hover:text-accent-foreground",
         black: "bg-black text-white",
         accent: "bg-accent-with-text text-accent-foreground",
-        filled: "bg-background text-foreground",
+        filled: "bg-background text-foreground border-button",
         success: "bg-success text-white",
         danger: "bg-danger text-danger-foreground",
         warning: "bg-warning text-black",
         info: "bg-primary text-primary-foreground",
         paypal: "bg-[#00457c] text-white border-[#00457c]",
-        discord: "bg-[#7289da] text-white border-[#7289da]",
+        discord: "bg-[#5865f2] text-white border-[#5865f2]",
         stripe: "bg-[#625bf6] text-white border-[#625bf6]",
         facebook: "bg-[#4267b2] text-white border-[#4267b2]",
         twitter: "bg-black text-white",
         apple: "bg-black text-white",
         android: "bg-[#142f40] text-white",
         kindle: "bg-[#f3a642] text-black border-[#f3a642]",
-        zoom: "bg-[#4087fc] text-white border-[#4087fc]",
-        google: "bg-[#5383ec] text-white border-[#5383ec]",
+        zoom: "bg-[#0b5cff] text-white border-[#0b5cff]",
+        google: "bg-[#1967d2] text-white border-[#1967d2]",
         youtube: "bg-black text-white",
         instagram: "bg-black text-white",
         tiktok: "bg-black text-white",

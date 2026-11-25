@@ -19,11 +19,7 @@ export const PopoverTrigger = React.forwardRef<
   React.ElementRef<typeof PopoverPrimitive.Trigger>,
   React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Trigger>
 >(({ className, ...props }, ref) => (
-  <PopoverPrimitive.Trigger
-    ref={ref}
-    className={classNames("cursor-pointer outline-none all-unset focus-visible:outline-none", className)}
-    {...props}
-  />
+  <PopoverPrimitive.Trigger ref={ref} className={classNames("cursor-pointer all-unset", className)} {...props} />
 ));
 PopoverTrigger.displayName = PopoverPrimitive.Trigger.displayName;
 
@@ -61,11 +57,7 @@ export const PopoverContent = React.forwardRef<
         {...props}
       >
         {children}
-        <PopoverPrimitive.Arrow
-          width={16}
-          height={8}
-          className={classNames("fill-black dark:fill-foreground/35", arrowClassName)}
-        />
+        <PopoverPrimitive.Arrow width={16} height={8} className={classNames("fill-border", arrowClassName)} />
       </PopoverPrimitive.Content>
     );
 

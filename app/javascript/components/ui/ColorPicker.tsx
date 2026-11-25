@@ -6,7 +6,7 @@ export const ColorPicker = React.forwardRef<
   HTMLInputElement,
   Omit<React.InputHTMLAttributes<HTMLInputElement>, "type">
 >(({ className, ...props }, ref) => (
-  <div className="relative max-w-fit overflow-hidden rounded-full border border-border p-4">
+  <div className="relative max-w-fit overflow-hidden rounded-full border border-control p-4 has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-indicator">
     <input
       ref={ref}
       type="color"

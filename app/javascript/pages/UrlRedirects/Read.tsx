@@ -880,7 +880,7 @@ const EpubReader = ({
                       style={{
                         background,
                         color,
-                        borderColor: theme === name ? "var(--accent)" : "var(--border)",
+                        borderColor: theme === name ? "var(--color-indicator)" : "var(--color-control)",
                         borderWidth: theme === name ? 2 : 1,
                         borderStyle: "solid",
                       }}

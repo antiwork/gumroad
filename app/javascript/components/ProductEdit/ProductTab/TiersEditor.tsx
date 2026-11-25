@@ -537,7 +537,7 @@ You can modify or cancel your membership at any time.`;
             {isMounted ? (
               <RichTextEditor
                 id={`${uid}-custom-message`}
-                className="textarea rounded border border-border px-4 py-3"
+                className="textarea rounded border border-control px-4 py-3"
                 placeholder={placeholder}
                 ariaLabel="Custom message"
                 initialValue={editorContent}

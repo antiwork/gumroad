@@ -144,7 +144,7 @@ export const TableHead = ({
       )}
       {...props}
     >
-      <SortLabel className="inline-flex items-center gap-1 no-underline! focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent">
+      <SortLabel className="inline-flex items-center gap-1 no-underline! focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-indicator">
         {children}
         {sortDirection && sortDirection !== "none" ? (
           <span className="inline-block" aria-hidden="true">

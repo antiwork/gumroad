@@ -1183,7 +1183,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
                 <div
                   role="separator"
                   aria-orientation="vertical"
-                  className="m-2 hidden border-r border-solid border-muted sm:flex"
+                  className="m-2 hidden border-r border-solid border-border sm:flex"
                 />
                 <Popover
                   open={insertMenuState != null}
@@ -1281,7 +1281,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
                 <div
                   role="separator"
                   aria-orientation="vertical"
-                  className="m-2 hidden border-r border-solid border-muted sm:flex"
+                  className="m-2 hidden border-r border-solid border-border sm:flex"
                 />
                 <button
                   className="cursor-pointer rounded px-2 py-1 all-unset hover:bg-active-bg"

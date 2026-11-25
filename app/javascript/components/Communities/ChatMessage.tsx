@@ -162,7 +162,7 @@ export const ChatMessage = ({
 
         {canShowActions ? (
           <div
-            className="absolute -top-6 right-0 z-10 flex gap-1 rounded-md border bg-white p-1 hover:shadow-[4px_4px_black] dark:border-[rgb(var(--parent-color)/var(--border-alpha))] dark:bg-black dark:hover:shadow-[4px_4px_white]"
+            className="absolute -top-6 right-0 z-10 flex gap-1 rounded-md border bg-white p-1 dark:border-[rgb(var(--parent-color)/var(--border-alpha))] dark:bg-black"
             aria-label="Actions"
           >
             {isOwnMessage ? (

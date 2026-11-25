@@ -16,7 +16,7 @@ export function getRootTaxonomyCss(slug: RootTaxonomySlug) {
     backgroundColor: `var(--${rootTaxonomies[slug].color})`,
     color: "black",
     "--color": "0 0 0",
-    "--color-border": "rgb(0 0 0 / 1)",
+    "--color-border": "rgb(0 0 0 / var(--border-alpha))",
   };
 }
 

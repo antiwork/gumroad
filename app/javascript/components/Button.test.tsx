@@ -58,6 +58,48 @@ describe("Button brand colors", () => {
   });
 });
 
+describe("Button borders", () => {
+  const classes = (name: string) => screen.getByRole("button", { name }).className.split(" ");
+
+  // A filled button is edged by its own fill; a light outline around a black or pink fill reads as a halo.
+  it("leaves a filled button's border to its fill", () => {
+    render(
+      <>
+        <Button color="primary">Primary</Button>
+        <Button color="accent">Accent</Button>
+      </>,
+    );
+
+    for (const name of ["Primary", "Accent"]) {
+      expect(classes(name)).toContain("border-transparent");
+      expect(classes(name)).not.toContain("border-button");
+    }
+  });
+
+  it("outlines an unfilled button", () => {
+    render(
+      <>
+        <Button>Default</Button>
+        <Button outline color="primary">
+          Outline
+        </Button>
+      </>,
+    );
+
+    for (const name of ["Default", "Outline"]) {
+      expect(classes(name)).toContain("border-button");
+      expect(classes(name)).not.toContain("border-transparent");
+    }
+  });
+
+  // With no lift, a default button would otherwise not react to the pointer at all.
+  it("tints a default button on hover", () => {
+    render(<Button>Default</Button>);
+
+    expect(classes("Default")).toContain("not-disabled:hover:bg-active-bg");
+  });
+});
+
 describe("Button hover halo", () => {
   const offsets = (className: string, prefixes: string[]) =>
     prefixes.map((prefix) => {
