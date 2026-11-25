@@ -1,21 +1,32 @@
 <% recommended_products_info = receipt_presenter.recommended_products_info %>
 <% if recommended_products_info.present? %>
+  <% products = recommended_products_info.products %>
   <div>
     <h3><%= recommended_products_info.title %></h3>
-    <%# One table per row, so the gap between rows is a margin rather than a spacer cell. %>
-    <% recommended_products_info.products.each_slice(2) do |row_products| %>
-      <table class="product-grid" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-        <tr>
-          <% row_products.each do |product| %>
-            <td width="50%">
-              <%= render("customer_mailer/receipt/product_card", product: product) %>
-            </td>
-          <% end %>
-          <% if row_products.one? %>
-            <td width="50%"></td>
-          <% end %>
-        </tr>
-      </table>
+    <% if products.one? %>
+      <%# A lone product is a row: a half-width card would leave the other half of the grid empty. %>
+      <% product = products.first %>
+      <% price = product_card_formatted_price(price: product[:price_cents], currency_code: product[:currency_code], is_pay_what_you_want: product[:is_pay_what_you_want], recurrence: product[:recurrence], duration_in_months: product[:duration_in_months]) %>
+      <% thumbnail_url = product[:thumbnail_url] || image_url("native_types/thumbnails/#{product[:native_type]}.png") %>
+      <div class="card">
+        <%= render("shared/mailers/product", product: { name: product[:name], url: product[:url], thumbnail_url: }, byline: h(product.dig(:creator, :name)), price:) %>
+      </div>
+    <% else %>
+      <%# One table per row, so the gap between rows is a margin rather than a spacer cell. %>
+      <% products.each_slice(2) do |row_products| %>
+        <table class="product-grid" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <% row_products.each do |product| %>
+              <td width="50%">
+                <%= render("customer_mailer/receipt/product_card", product: product) %>
+              </td>
+            <% end %>
+            <% if row_products.one? %>
+              <td width="50%"></td>
+            <% end %>
+          </tr>
+        </table>
+      <% end %>
     <% end %>
   </div>
 <% end %>

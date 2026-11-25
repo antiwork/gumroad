@@ -4,6 +4,23 @@
     margin: $gap-block 0 0;
   }
 
+  // The order's id, date and total, under the items: reference rows, kept quieter than the purchase.
+  table.order-meta {
+    th,
+    td {
+      font-size: 14px;
+      line-height: 20px;
+    }
+
+    td {
+      color: $color-muted;
+    }
+
+    td strong {
+      color: $color-heading;
+    }
+  }
+
   .license-key {
     margin: 0 0 $gap-block;
 

@@ -4,16 +4,25 @@
   <table class="details" border="0" cellpadding="0" cellspacing="0">
     <% attributes.each do |attribute| %>
       <% value = safe_join(Array(attribute[:value]).map { |item| auto_link(item.to_s, html: { target: "_blank" }) }, tag.br + " ") %>
-      <tr>
-        <% if attribute[:label].blank? %>
+      <% if attribute[:label].present? && strip_tags(value).length > ReceiptPresenter::LONG_ATTRIBUTE_VALUE_LENGTH %>
+        <tr>
+          <th class="above" colspan="2"><%= attribute[:label] %></th>
+        </tr>
+        <tr class="below">
           <td class="wide" colspan="2"><%= value %></td>
-        <% elsif value.blank? && local_assigns[:headings] %>
-          <th class="wide" colspan="2"><%= attribute[:label] %></th>
-        <% else %>
-          <th><%= attribute[:label] %></th>
-          <td><%= value %></td>
-        <% end %>
-      </tr>
+        </tr>
+      <% else %>
+        <tr>
+          <% if attribute[:label].blank? %>
+            <td class="wide" colspan="2"><%= value %></td>
+          <% elsif value.blank? && local_assigns[:headings] %>
+            <th class="wide" colspan="2"><%= attribute[:label] %></th>
+          <% else %>
+            <th><%= attribute[:label] %></th>
+            <td><%= value %></td>
+          <% end %>
+        </tr>
+      <% end %>
     <% end %>
   </table>
 <% end %>

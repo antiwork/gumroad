@@ -11,34 +11,22 @@
   <% end %>
 </div>
 
-<table class="stats" role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<table class="details">
   <tr>
-    <td>
-      <div class="stat">
-        <div class="stat-value"><%= number_with_delimiter(@analytics_data[:total_sales_count]) %></div>
-        <div class="stat-label">Sales</div>
-      </div>
-    </td>
-    <td>
-      <div class="stat">
-        <div class="stat-value"><%= number_with_delimiter(@analytics_data[:total_views_count]) %></div>
-        <div class="stat-label">Views</div>
-      </div>
-    </td>
+    <th>Sales</th>
+    <td><strong><%= number_with_delimiter(@analytics_data[:total_sales_count]) %></strong></td>
   </tr>
   <tr>
-    <td>
-      <div class="stat">
-        <div class="stat-value"><%= number_with_delimiter(@analytics_data[:total_unique_customers_count]) %></div>
-        <div class="stat-label">Unique customers</div>
-      </div>
-    </td>
-    <td>
-      <div class="stat">
-        <div class="stat-value"><%= number_with_delimiter(@analytics_data[:total_products_sold_count]) %></div>
-        <div class="stat-label">Products sold</div>
-      </div>
-    </td>
+    <th>Views</th>
+    <td><strong><%= number_with_delimiter(@analytics_data[:total_views_count]) %></strong></td>
+  </tr>
+  <tr>
+    <th>Unique customers</th>
+    <td><strong><%= number_with_delimiter(@analytics_data[:total_unique_customers_count]) %></strong></td>
+  </tr>
+  <tr>
+    <th>Products sold</th>
+    <td><strong><%= number_with_delimiter(@analytics_data[:total_products_sold_count]) %></strong></td>
   </tr>
 </table>
 

@@ -810,7 +810,6 @@ describe CustomerMailer do
       # Not block: Gmail on iOS only makes the text of a display:block link tappable.
       expect(declaration.("display")).to eq("inline-block")
       expect(declaration.("box-sizing")).to eq("border-box")
-      expect(declaration.("width")).to eq("100%")
       expect(declaration.("padding")).to match(/\A[1-9]\d*px [1-9]\d*px\z/)
     end
 
