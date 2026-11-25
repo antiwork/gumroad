@@ -2722,6 +2722,16 @@ describe UrlRedirectsController, inertia: true do
         end
       end
 
+      it "renders for a follower post's redirect that has no product" do
+        installment = create(:installment, link: nil, seller: create(:user), name: "Hello followers")
+        installment.product_files << create(:product_file, link: nil, installment:)
+        url_redirect = UrlRedirect.create!(installment:)
+
+        get :confirm_page, params: { id: url_redirect.token }
+
+        expect(response).to be_successful
+      end
+
       it "assigns @destination with nil value for an installment" do
         installment = create(:installment)
         installment.product_files << create(:product_file, link: nil, installment:)
