@@ -5,11 +5,17 @@
   }
 
   // The order's id, date and total, under the items: reference rows, kept quieter than the purchase.
+  // 13px, and a narrower gutter: a 26-character order id then stays on one line in a 360px
+  // client that drops the phone styles (Gmail on Android with an account that is not Google's).
   table.order-meta {
     th,
     td {
-      font-size: 14px;
+      font-size: 13px;
       line-height: 20px;
+    }
+
+    th {
+      padding-right: 12px;
     }
 
     td {

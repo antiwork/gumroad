@@ -21,7 +21,9 @@ body {
 
 .email {
   margin: 0;
-  padding: 32px 16px;
+  // The phone's spacing is the default, and layouts/mailers/_head widens it from 481px up: a client
+  // that drops <style> (Gmail on Android with an account that is not Google's) is a phone.
+  padding: 16px 8px;
   background-color: $color-page;
   color: $color-text;
   font-family: $font-family;
@@ -44,8 +46,8 @@ body {
   .header {
     // Side padding is the card's padding plus its border, so the mark sits on the content's edge.
     // The gap under it is a margin: Outlook on Windows ignores padding on a div.
-    margin: 0 auto 20px;
-    padding: 0 33px;
+    margin: 0 auto 16px;
+    padding: 0 21px;
 
     a {
       text-decoration: none;
@@ -75,7 +77,7 @@ body {
   }
 
   .main {
-    padding: 32px;
+    padding: 24px 20px;
     background-color: $color-surface;
     border: 1px solid $color-border;
     border-radius: $radius-card;

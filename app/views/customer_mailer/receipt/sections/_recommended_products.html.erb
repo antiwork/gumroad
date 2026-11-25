@@ -10,7 +10,7 @@
       <% product = products.first %>
       <% price = product_card_formatted_price(price: product[:price_cents], currency_code: product[:currency_code], is_pay_what_you_want: product[:is_pay_what_you_want], recurrence: product[:recurrence], duration_in_months: product[:duration_in_months]) %>
       <% thumbnail_url = product[:thumbnail_url] || image_url("native_types/thumbnails/#{product[:native_type]}.png") %>
-      <div class="card">
+      <div class="card recommendation">
         <%= render("shared/mailers/product", product: { name: product[:name], url: product[:url], thumbnail_url: }, byline: safe_join([product.dig(:creator, :name), price].compact_blank, " · ")) %>
       </div>
     <% else %>
