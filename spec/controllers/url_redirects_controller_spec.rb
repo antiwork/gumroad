@@ -2732,6 +2732,15 @@ describe UrlRedirectsController, inertia: true do
         expect(inertia.props[:confirmation_info][:destination]).to be_nil
       end
     end
+
+    it "renders the confirm page when the url redirect has no product, like a post sent to followers" do
+      url_redirect = create(:installment_url_redirect, installment: create(:follower_installment))
+
+      get :confirm_page, params: { id: url_redirect.token }
+
+      expect(response).to be_successful
+      expect(inertia.component).to eq("UrlRedirects/ConfirmPage")
+    end
   end
 
   describe "POST 'confirm'" do

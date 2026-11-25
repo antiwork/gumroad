@@ -240,7 +240,7 @@ class UrlRedirectsController < ApplicationController
 
   def confirm_page
     @content_unavailability_reason_code = UrlRedirectPresenter::CONTENT_UNAVAILABILITY_REASON_CODES[:email_confirmation_required]
-    set_meta_tag(title: "#{@url_redirect.referenced_link.name} - Confirm email")
+    set_meta_tag(title: content_page_title("Confirm email"))
     extra_props = common_props.merge(
       confirmation_info: {
         id: @url_redirect.token,
@@ -256,17 +256,17 @@ class UrlRedirectsController < ApplicationController
   end
 
   def expired
-    set_meta_tag(title: content_unavailable_page_title("Access expired"))
+    set_meta_tag(title: content_page_title("Access expired"))
     render inertia: "UrlRedirects/Expired", props: unavailable_page_props(:access_expired)
   end
 
   def rental_expired_page
-    set_meta_tag(title: content_unavailable_page_title("Your rental has expired"))
+    set_meta_tag(title: content_page_title("Your rental has expired"))
     render inertia: "UrlRedirects/RentalExpired", props: unavailable_page_props(:rental_expired)
   end
 
   def membership_inactive_page
-    set_meta_tag(title: content_unavailable_page_title("Your membership is inactive"))
+    set_meta_tag(title: content_page_title("Your membership is inactive"))
     render inertia: "UrlRedirects/MembershipInactive", props: unavailable_page_props(:inactive_membership)
   end
 
@@ -735,13 +735,13 @@ class UrlRedirectsController < ApplicationController
       create_consumption_event!(ConsumptionEvent::EVENT_TYPE_VIEW)
     end
 
-    # Title for the pages that explain that content is gone. Most url redirects hang off a
-    # product, but a post sent to a creator's followers has neither a purchase nor a product —
-    # `UrlRedirect.create(installment: self)` is all a follower post gets (see
+    # Title for a url_redirect page, built from the content's name and a suffix. Most url redirects
+    # hang off a product, but a post sent to a creator's followers has neither a purchase nor a
+    # product — `UrlRedirect.create(installment: self)` is all a follower post gets (see
     # Installment#generate_url_redirect_for_follower) — so `referenced_link` is nil for them and
-    # reading `.name` off it would 500 the very page that exists to explain the situation. Fall
-    # back to the post's own name, and then to nothing, so the page always renders.
-    def content_unavailable_page_title(suffix)
+    # reading `.name` off it would 500 the page. Fall back to the post's own name, and then to
+    # nothing, so the page always renders.
+    def content_page_title(suffix)
       content_name = @url_redirect.referenced_link&.name.presence ||
         @url_redirect.installment&.displayed_name.presence
 
