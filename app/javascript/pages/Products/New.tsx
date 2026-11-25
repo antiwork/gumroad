@@ -400,7 +400,6 @@ const NewProductPage = () => {
                   onChange={(e) => form.setData("link.name", e.target.value)}
                   aria-invalid={!!errors["link.name"]}
                   ref={nameInputRef}
-                  className="border-foreground/40"
                 />
                 <Errors errors={errors["link.name"]} label="Name" />
               </Fieldset>

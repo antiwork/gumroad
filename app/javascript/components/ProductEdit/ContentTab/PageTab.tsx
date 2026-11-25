@@ -94,7 +94,7 @@ export const PageTab = ({
       // .sortable-* are created by react-sortablejs, and we can't add Tailwind classes to them directly.
       className={classNames(
         "group/tab relative [&_.sortable-drag]:border [&_.sortable-drag]:bg-muted [&.sortable-ghost]:outline [&.sortable-ghost]:outline-accent [&.sortable-ghost]:outline-dashed [&.sortable-ghost>_*]:opacity-30",
-        { "outline-2 -outline-offset-2 outline-accent": renaming },
+        { "outline-2 -outline-offset-2 outline-indicator": renaming },
       )}
       role="tab"
     >

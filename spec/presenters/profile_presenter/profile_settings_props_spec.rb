@@ -50,9 +50,9 @@ describe ProfilePresenter do
 
     it "includes the corner radius and button hover" do
       seller = create_seller!(username: "cornered", email: "cornered@example.com")
-      seller.seller_profile.update!(border_radius: "medium", button_hover: "none")
+      seller.seller_profile.update!(border_radius: "large", button_hover: "lift")
 
-      expect(profile_settings_for(seller)).to include(border_radius: "medium", button_hover: "none")
+      expect(profile_settings_for(seller)).to include(border_radius: "large", button_hover: "lift")
     end
 
     it "expands legacy shorthand colours for the browser color inputs" do

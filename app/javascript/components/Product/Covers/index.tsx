@@ -104,7 +104,7 @@ export const Covers = ({
   return (
     <figure
       className={classNames(
-        "group relative col-span-full overflow-hidden rounded-t border-b border-border bg-cover",
+        "group relative col-span-full overflow-hidden rounded-t-[calc(var(--radius-card)-var(--border-width))] border-b border-border bg-cover",
         frameIsShaped ? "bg-background" : "bg-(image:--product-cover-placeholder)",
         className,
       )}

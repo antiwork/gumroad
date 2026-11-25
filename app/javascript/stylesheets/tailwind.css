@@ -80,9 +80,9 @@
 }
 
 /*
- * Two border tiers above the hairline (--color-border), both derived from --border-alpha so dark
- * mode, stores and preview panes follow without restating anything. Inline, so the alpha resolves
- * on the element. Button outlines get twice the hairline; form fields never go below 3:1.
+ * Two border tiers above the hairline. Inline, so they resolve on the element. Button outlines are
+ * twice --border-alpha. Fields use --control-alpha, which a store or preview pane must set for its
+ * own background; the formula is the fallback and reaches 3:1 only on the app's own two schemes.
  */
 @theme inline {
   --color-button: rgb(var(--color) / min(var(--border-alpha) * 2, 0.35));
@@ -119,6 +119,8 @@
   /* Ensure low precedence so it doesn't override other styles */
   :where(&) {
     all: unset;
+    /* Unlayered, so this beats the base layer's default: a bare `border` would be currentColor. */
+    border-color: rgb(var(--parent-color) / var(--border-alpha));
   }
 }
 

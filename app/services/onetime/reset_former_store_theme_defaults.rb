@@ -4,7 +4,8 @@ module Onetime
   # Stores used to default to small corners and a lifting button, and any save wrote those defaults
   # into the row. Clearing them lets such stores follow the current defaults (medium, no lift). A
   # seller who chose either on purpose cannot be told apart, and can pick it again in settings.
-  # Safe to rerun. Run with dry_run: true first to see the counts.
+  # Run once, right after the deploy: a later run also resets sellers who have picked small corners
+  # or the lift since. Run with dry_run: true first to see the counts.
   class ResetFormerStoreThemeDefaults
     BATCH_SIZE = 1_000
     FORMER_DEFAULTS = { border_radius: "small", button_hover: "lift" }.freeze
@@ -25,9 +26,12 @@ module Onetime
             reset[column] += profiles.count
           else
             cache_names = profiles.map(&:custom_style_cache_name)
-            reset[column] += profiles.update_all(column => nil, updated_at: Time.current)
-            # update_all skips the callback that clears the store's compiled CSS.
-            cache_names.each { Rails.cache.delete(_1) }
+            begin
+              reset[column] += profiles.update_all(column => nil, updated_at: Time.current)
+            ensure
+              # update_all skips the callback that clears the store's compiled CSS.
+              cache_names.each { Rails.cache.delete(_1) }
+            end
           end
         end
       end

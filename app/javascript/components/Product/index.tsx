@@ -490,7 +490,7 @@ export const Product = ({
         // Without covers, the desktop banner fills the card's top-right corner and follows its inner radius.
         className={classNames(
           "flex items-center gap-2 border-b border-border bg-accent-with-text px-6 py-3 font-bold text-accent-foreground",
-          product.covers.length === 0 && "lg:rounded-tr-[calc(var(--radius)_-_var(--border-width))]",
+          product.covers.length === 0 && "lg:rounded-tr-[calc(var(--radius-card)_-_var(--border-width))]",
           // A long option name moves to its own line instead of squeezing the label mid-word.
           discountScope && "flex-wrap",
         )}
