@@ -410,7 +410,7 @@ const CustomersPage = ({
                   <CardContent>
                     <h4 className="font-bold">
                       <Label htmlFor={`${uid}-failure-pending-only`}>
-                        Failure pending ({failure_pending_count.toLocaleString()})
+                        Show failure pending only ({failure_pending_count.toLocaleString()})
                       </Label>
                     </h4>
                     <Switch
@@ -476,7 +476,11 @@ const CustomersPage = ({
         {customers.length > 0 ? (
           <section className="flex flex-col gap-4">
             <Table aria-live="polite" className={cx(isLoading && "pointer-events-none opacity-50")}>
-              <TableCaption>{`All sales (${count.toLocaleString()})`}</TableCaption>
+              <TableCaption>
+                {failurePendingOnly
+                  ? `Failure pending (${count.toLocaleString()})`
+                  : `All sales (${count.toLocaleString()})`}
+              </TableCaption>
               <TableHeader>
                 <TableRow>
                   <TableHead>Email</TableHead>
