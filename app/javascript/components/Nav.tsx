@@ -170,7 +170,8 @@ export const Nav = ({ title, children, footer, headerAction, search }: Props) =>
         )}
       >
         <div className="override grid grid-cols-[auto_1fr_auto] items-center gap-3 p-4 text-lg leading-6 lg:hidden">
-          <a href={Routes.root_url()} className="no-underline">
+          {/* As wide as the two buttons opposite, so the title between them stays centred. */}
+          <a href={Routes.root_url()} className={classNames("no-underline", { "min-w-14": !!headerAction })}>
             <img src={logo} className="size-6" alt="Home" />
           </a>
           <h1 className="w-full truncate text-center text-base">{title}</h1>

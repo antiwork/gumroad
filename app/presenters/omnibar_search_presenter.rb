@@ -3,24 +3,31 @@
 class OmnibarSearchPresenter
   include Rails.application.routes.url_helpers
 
+  # Each group is its own request, so products never wait on the sales index.
+  GROUPS = %w[products sales].freeze
   MINIMUM_QUERY_LENGTH = 2
   MAXIMUM_QUERY_LENGTH = 100
   RESULTS_PER_GROUP = 5
 
-  def initialize(pundit_user:, query:)
+  def initialize(pundit_user:, query:, group:)
     @pundit_user = pundit_user
     @query = query.to_s.strip.first(MAXIMUM_QUERY_LENGTH)
+    @group = group
   end
 
   def props
-    return { products: [], customers: [], customers_unavailable: false } if query.length < MINIMUM_QUERY_LENGTH
+    searchable = query.length >= MINIMUM_QUERY_LENGTH
 
-    found_customers = customers
-    { products:, customers: found_customers || [], customers_unavailable: found_customers.nil? }
+    if group == "products"
+      { products: searchable ? products : [] }
+    else
+      found = searchable ? sales : []
+      { sales: found || [], sales_unavailable: found.nil? }
+    end
   end
 
   private
-    attr_reader :pundit_user, :query
+    attr_reader :pundit_user, :query, :group
 
     def seller = pundit_user.seller
 
@@ -32,17 +39,22 @@ class OmnibarSearchPresenter
         # A name that starts with the query comes before one that only contains it.
         .order(Arel.sql(Link.sanitize_sql_array(["LOCATE(?, links.name)", query])), created_at: :desc)
         .limit(RESULTS_PER_GROUP)
-        .map { |product| { id: product.external_id, name: product.name, url: edit_link_path(product) } }
+        .map { |product| { id: product.external_id, name: product.name, url: product_url_for_viewer(product) } }
     end
 
-    # nil when the search index cannot answer, so the bar can say so and still offer products.
-    def customers
+    # As on the Products page: a role that cannot edit a product gets its public page.
+    def product_url_for_viewer(product)
+      Pundit.policy!(pundit_user, product).edit? ? edit_link_path(product) : product.long_url
+    end
+
+    # nil when the search index cannot answer, so the bar can say so.
+    def sales
       return [] unless Pundit.policy!(pundit_user, [:audience, Purchase]).index?
 
-      sales = PurchaseSearchService.search(
+      search = PurchaseSearchService.search(
         seller:,
         seller_query: query,
-        # The customers page's own exclusions: one row per customer-facing sale.
+        # The Sales page's own exclusions: one row per sale it would list.
         state: Purchase::NON_GIFT_SUCCESS_STATES,
         exclude_non_original_subscription_purchases: true,
         exclude_giftees: true,
@@ -52,7 +64,7 @@ class OmnibarSearchPresenter
         sort: [{ created_at: { order: :desc } }, { id: { order: :desc } }],
       )
 
-      sales.records.includes(:link, :purchaser).map do |purchase|
+      search.records.includes(:link, :purchaser).map do |purchase|
         {
           id: purchase.external_id,
           email: purchase.email,

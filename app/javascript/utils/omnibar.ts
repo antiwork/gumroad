@@ -1,13 +1,35 @@
-import { type OmnibarSearchResults } from "$app/data/omnibar";
+import { type OmnibarProduct, type OmnibarSale } from "$app/data/omnibar";
 
 // Must match OmnibarSearchPresenter::MINIMUM_QUERY_LENGTH: the server answers nothing below it.
 export const MINIMUM_SEARCH_LENGTH = 2;
 
-export type OmnibarItemKind = "page" | "action" | "product" | "customer" | "search";
-export type OmnibarItem = { id: string; kind: OmnibarItemKind; title: string; detail?: string; href: string };
+// Counted in characters, as the server counts: "🎨" is one, though its JavaScript length is two.
+export const isSearchable = (query: string) => Array.from(query.trim()).length >= MINIMUM_SEARCH_LENGTH;
+
+export type OmnibarItemKind = "page" | "action" | "product" | "sale" | "search";
+export type OmnibarItem = {
+  id: string;
+  kind: OmnibarItemKind;
+  title: string;
+  detail?: string;
+  href: string;
+  onSelect?: (() => void) | undefined;
+};
 export type OmnibarGroup = { title: string; items: OmnibarItem[] };
-// A place or an action the bar offers without asking the server.
-export type OmnibarShortcut = { key: string; title: string; href: string; keywords?: string };
+// A place or an action the bar offers without asking the server. `onSelect` runs before the visit,
+// for a destination whose nav link does more than navigate.
+export type OmnibarShortcut = {
+  key: string;
+  title: string;
+  href: string;
+  keywords?: string;
+  onSelect?: (() => void) | undefined;
+};
+// Each group: undefined while its request is out, null when it failed.
+export type OmnibarResults = {
+  products?: OmnibarProduct[] | null | undefined;
+  sales?: OmnibarSale[] | null | undefined;
+};
 
 const normalize = (text: string) => text.normalize("NFKC").toLowerCase();
 
@@ -23,12 +45,12 @@ export const matchesQuery = (query: string, ...values: (string | null | undefine
 const shortcutItems = (kind: "page" | "action", shortcuts: OmnibarShortcut[], query: string): OmnibarItem[] =>
   shortcuts
     .filter((shortcut) => matchesQuery(query, shortcut.title, shortcut.keywords))
-    .map(({ key, title, href }) => ({ id: `${kind}:${key}`, kind, title, href }));
+    .map(({ key, title, href, onSelect }) => ({ id: `${kind}:${key}`, kind, title, href, onSelect }));
 
 /**
- * The bar's rows, in the order they are shown. Places and actions come first because they are
- * known at once: results that arrive later are added below them and never push a row the seller
- * is about to open.
+ * The bar's rows, in the order they are shown. A row only ever appears below the rows already on
+ * screen, so nothing moves under the pointer and the top row stays the top row: sales wait for
+ * products, and the "Search … for" rows wait for both.
  */
 export const buildOmnibarGroups = ({
   query,
@@ -40,7 +62,7 @@ export const buildOmnibarGroups = ({
   query: string;
   pages: OmnibarShortcut[];
   actions: OmnibarShortcut[];
-  results: OmnibarSearchResults | null;
+  results: OmnibarResults;
   searchLinks: { sales: (query: string) => string; products: (query: string) => string };
 }): OmnibarGroup[] => {
   const trimmed = query.trim();
@@ -48,29 +70,33 @@ export const buildOmnibarGroups = ({
     { title: "Go to", items: shortcutItems("page", pages, trimmed) },
     { title: "Quick actions", items: shortcutItems("action", actions, trimmed) },
   ];
+  const productsSettled = results.products !== undefined;
+  const settled = productsSettled && results.sales !== undefined;
 
-  if (trimmed.length >= MINIMUM_SEARCH_LENGTH) {
-    groups.push(
-      {
-        title: "Products",
-        items: (results?.products ?? []).map(({ id, name, url }) => ({
-          id: `product:${id}`,
-          kind: "product",
-          title: name,
-          href: url,
-        })),
-      },
-      {
+  if (isSearchable(query)) {
+    groups.push({
+      title: "Products",
+      items: (results.products ?? []).map(({ id, name, url }) => ({
+        id: `product:${id}`,
+        kind: "product",
+        title: name,
+        href: url,
+      })),
+    });
+    if (productsSettled) {
+      groups.push({
         title: "Sales",
-        items: (results?.customers ?? []).map(({ id, email, name, product_name, url }) => ({
-          id: `customer:${id}`,
-          kind: "customer",
+        items: (results.sales ?? []).map(({ id, email, name, product_name, url }) => ({
+          id: `sale:${id}`,
+          kind: "sale",
           title: name || email,
           detail: name ? `${email} · ${product_name}` : product_name,
           href: url,
         })),
-      },
-      {
+      });
+    }
+    if (settled) {
+      groups.push({
         title: "Search",
         items: [
           {
@@ -86,8 +112,8 @@ export const buildOmnibarGroups = ({
             href: searchLinks.products(trimmed),
           },
         ],
-      },
-    );
+      });
+    }
   }
 
   return groups.filter((group) => group.items.length > 0);

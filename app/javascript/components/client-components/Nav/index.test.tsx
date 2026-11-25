@@ -37,7 +37,7 @@ vi.mock("@inertiajs/react", () => ({
       </a>
     );
   },
-  router: { on: () => () => undefined },
+  router: { on: () => () => undefined, visit: () => undefined },
 }));
 
 beforeEach(() => linkPropsByText.clear());
@@ -388,5 +388,62 @@ describe("dashboard nav progressive disclosure", () => {
     // A promoted row sits at the top level, where prefetching costs nothing: promoting an
     // already-recorded destination is a no-op.
     expect(linkPropsByText.get("Products")?.prefetch).not.toBe(false);
+  });
+});
+
+describe("dashboard nav search", () => {
+  // The phone header's icon and the sidebar's field both render here; CSS shows one at a time.
+  const openSearch = () => {
+    const [trigger] = screen.getAllByRole("button", { name: "Search" });
+    if (!trigger) throw new Error("Expected a search trigger in the nav");
+    fireEvent.click(trigger);
+  };
+  const optionNames = () => screen.getAllByRole("option").map((option) => option.textContent);
+
+  it("offers every destination, including the ones still under Everything else", () => {
+    renderNav();
+    expect(screen.queryByRole("link", { name: "Workflows" })).toBeNull();
+
+    openSearch();
+
+    expect(optionNames()).toEqual(expect.arrayContaining(["Home", "Workflows", "Sales", "Settings", "Help"]));
+  });
+
+  it("offers the create actions the user's policies allow", () => {
+    renderNav({
+      withUser: (user) => {
+        user.policies.installment.create = false;
+        user.policies.workflow.create = false;
+      },
+    });
+
+    openSearch();
+
+    expect(optionNames()).toContain("New product");
+    expect(optionNames()).not.toContain("New email");
+    expect(optionNames()).not.toContain("New workflow");
+  });
+
+  it("does not offer a destination the user's policies forbid", () => {
+    renderNav({
+      withUser: (user) => {
+        user.policies.community.index = false;
+      },
+    });
+
+    openSearch();
+
+    expect(optionNames()).not.toContain("Community");
+  });
+
+  // Community's "Go back" returns to the page stored here, whichever way the seller got there.
+  it("remembers where Community was opened from, as the nav row does", () => {
+    sessionStorage.removeItem("communities:referrer");
+    renderNav({ path: "/customers?query=ada" });
+
+    openSearch();
+    fireEvent.click(screen.getByRole("option", { name: "Community" }));
+
+    expect(sessionStorage.getItem("communities:referrer")).toBe("/customers?query=ada");
   });
 });

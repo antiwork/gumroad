@@ -16,6 +16,11 @@ describe "Dashboard omnibar", type: :system, js: true do
     fill_in "Search products, sales and pages", with: query
   end
 
+  # click_on only sees buttons, links, menu items and tabs; a result row is an option.
+  def choose_result(text)
+    find("[role=option]", text:).click
+  end
+
   it "jumps to a page from the sidebar field without leaving the keyboard" do
     visit dashboard_path
 
@@ -35,7 +40,7 @@ describe "Dashboard omnibar", type: :system, js: true do
     within("nav[aria-label='Main']") { expect(page).not_to have_link("Workflows") }
     open_omnibar
     search_for "workfl"
-    click_on "Workflows"
+    choose_result "Workflows"
 
     expect(page).to have_current_path(workflows_path)
   end
@@ -45,7 +50,7 @@ describe "Dashboard omnibar", type: :system, js: true do
 
     open_omnibar
     search_for "widg"
-    click_on "Beautiful widget"
+    choose_result "Beautiful widget"
 
     expect(page).to have_current_path(edit_link_path(product))
   end
@@ -57,7 +62,7 @@ describe "Dashboard omnibar", type: :system, js: true do
 
     open_omnibar
     search_for "ada@example.com"
-    click_on "Ada Lovelace"
+    choose_result "Ada Lovelace"
 
     expect(page).to have_current_path(customer_sale_path(purchase.external_id))
   end
@@ -68,20 +73,29 @@ describe "Dashboard omnibar", type: :system, js: true do
     open_omnibar
     search_for "nobody@example.com"
     expect(page).to have_text("No products or sales match “nobody@example.com”.")
-    click_on "Search sales for “nobody@example.com”"
+    choose_result "Search sales for “nobody@example.com”"
 
     expect(page).to have_current_path(customers_path(query: "nobody@example.com"))
     expect(page).to have_section("No sales found")
   end
 
-  it "opens with Ctrl+K from any dashboard page and closes with Escape" do
+  it "opens with the keyboard shortcut from any dashboard page and closes with Escape" do
     visit products_path
 
-    find("body").send_keys([:control, "k"])
+    find("body").send_keys([ctrl_key, "k"])
     expect(page).to have_selector("input[role=combobox]:focus")
 
     send_keys(:escape)
     expect(page).not_to have_selector("input[role=combobox]")
+  end
+
+  it "puts focus back on the field in the sidebar when it closes" do
+    visit dashboard_path
+
+    open_omnibar
+    send_keys(:escape)
+
+    expect(page).to have_selector("nav[aria-label='Main'] button:focus", text: "Search")
   end
 
   context "on a phone", :mobile_view do
@@ -90,7 +104,7 @@ describe "Dashboard omnibar", type: :system, js: true do
 
       click_on "Search"
       search_for "widg"
-      click_on "Beautiful widget"
+      choose_result "Beautiful widget"
 
       expect(page).to have_current_path(edit_link_path(product))
     end

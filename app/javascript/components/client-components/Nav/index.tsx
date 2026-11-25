@@ -126,7 +126,8 @@ type NavItem = {
   // Other words a seller might type for this destination in the search bar.
   keywords: string;
   icon: React.ReactNode;
-  onClick?: (event: React.MouseEvent) => void;
+  // Runs before the visit, whether it starts from the row or from the search bar.
+  onClick?: () => void;
 };
 
 const renderItem = ({ key, visible: _visible, keywords: _keywords, ...link }: NavItem) => (
@@ -320,7 +321,13 @@ export const Nav = (props: Props) => {
   const omnibar = useOmnibar();
   // The search bar offers every destination, including the ones still under "Everything else".
   const pages: OmnibarShortcut[] = [
-    ...visibleItems.map(({ key, text, href, keywords }) => ({ key, title: text, href, keywords })),
+    ...visibleItems.map(({ key, text, href, keywords, onClick }) => ({
+      key,
+      title: text,
+      href,
+      keywords,
+      onSelect: onClick,
+    })),
     {
       key: "settings",
       title: "Settings",
