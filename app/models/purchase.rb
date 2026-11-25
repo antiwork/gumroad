@@ -685,7 +685,7 @@ class Purchase < ApplicationRecord
             :flag_query_mode => :bit_operator,
             check_for_column: false
 
-  attr_accessor :wallet_payment, :chargeable, :card_data_handling_error, :save_card, :price_range, :friend_actions,
+  attr_accessor :wallet_payment, :tax_location_check_deferred, :chargeable, :card_data_handling_error, :save_card, :price_range, :friend_actions,
                 :discount_code, :purchaser_plugins, :is_automatic_charge, :sales_tax_country_code_election, :business_vat_id,
                 :save_shipping_address, :flow_of_funds, :prorated_discount_price_cents,
                 :original_variant_attributes, :original_price, :is_updated_original_subscription_purchase,
@@ -2726,6 +2726,13 @@ class Purchase < ApplicationRecord
       pre_discount_displayed_price_cents: discount.pre_discount_displayed_price_cents,
       duration_in_months: discount.duration_in_months
     )
+  end
+
+  # Client-confirm purchases have no card country at create time (it comes from the
+  # ConfirmationToken at prepare), so the location guard runs once it is recorded.
+  def verify_deferred_tax_location
+    self.tax_location_check_deferred = false
+    tax_location_valid?
   end
 
   def prepare_for_charge!(locked_rate: nil)
@@ -6548,6 +6555,7 @@ class Purchase < ApplicationRecord
     end
 
     def tax_location_valid?
+      return true if tax_location_check_deferred
       return true if country.nil?
       return true if link.is_physical || link.require_shipping
       return true if card_country.nil? && country == ip_country

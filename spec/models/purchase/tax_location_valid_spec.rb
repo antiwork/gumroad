@@ -87,5 +87,29 @@ describe Purchase do
         expect(purchase.send(:tax_location_valid?)).to eq(true)
       end
     end
+
+    context "when the check is deferred for a client-confirm purchase" do
+      it "skips the guard until the previewed card country is recorded" do
+        purchase = purchase_for(country: "United States", ip_country: "Spain")
+        purchase.tax_location_check_deferred = true
+
+        expect(purchase.send(:tax_location_valid?)).to eq(true)
+      end
+
+      it "accepts a wallet country that matches the previewed card country" do
+        purchase = purchase_for(country: "United States", ip_country: "Spain", card_country: "US")
+        purchase.tax_location_check_deferred = true
+
+        expect(purchase.verify_deferred_tax_location).to eq(true)
+      end
+
+      it "still rejects when the previewed card country matches neither the selection nor the IP" do
+        purchase = purchase_for(country: "United States", ip_country: "Spain", card_country: "FR")
+        purchase.tax_location_check_deferred = true
+
+        expect(purchase.verify_deferred_tax_location).to eq(false)
+        expect(purchase.error_code).to eq(PurchaseErrorCode::TAX_VALIDATION_FAILED)
+      end
+    end
   end
 end

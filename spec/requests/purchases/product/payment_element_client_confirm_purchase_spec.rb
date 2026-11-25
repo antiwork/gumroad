@@ -91,6 +91,10 @@ describe("PurchaseScenario using StripeJs client-confirm", type: :system, js: tr
   end
 
   it "completes an inline 3DS challenge under client-confirm and fulfills" do
+    # Stripe's 3DS test card is issued in France, and Chrome has no GeoIP country at 127.0.0.1, so
+    # the deferred tax-location guard refuses the United States selection before an intent exists
+    # and no challenge renders. Same stub as the server-confirm SCA specs.
+    use_united_states_buyer_ip
     visit("/checkout?product=#{@product.unique_permalink}")
 
     expect(checkout_payment_props["integration"]).to eq("payment_element_client_confirm")
@@ -104,6 +108,7 @@ describe("PurchaseScenario using StripeJs client-confirm", type: :system, js: tr
   end
 
   it "surfaces an authentication failure when the inline 3DS challenge is failed under client-confirm" do
+    use_united_states_buyer_ip
     visit("/checkout?product=#{@product.unique_permalink}")
 
     expect(checkout_payment_props["integration"]).to eq("payment_element_client_confirm")
