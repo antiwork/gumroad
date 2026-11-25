@@ -1347,6 +1347,7 @@ Rails.application.routes.draw do
     # React Router routes
     scope module: :api, defaults: { format: :json } do
       namespace :internal do
+        resource :omnibar_search, only: [:show]
         post "/customers/:purchase_id/single_customer_email", to: "customers/single_customer_emails#create", as: :single_customer_email
 
         resources :installments, only: [] do

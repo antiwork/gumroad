@@ -120,9 +120,12 @@ type Props = {
   children: React.ReactNode;
   title: string;
   footer: React.ReactNode;
+  // Search has two homes: beside the menu button on a phone, under the logo on a wide screen.
+  headerAction?: React.ReactNode;
+  search?: React.ReactNode;
 };
 
-export const Nav = ({ title, children, footer }: Props) => {
+export const Nav = ({ title, children, footer, headerAction, search }: Props) => {
   const [open, setOpen] = React.useState(false);
   const [showScrollFade, setShowScrollFade] = React.useState(false);
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
@@ -171,15 +174,19 @@ export const Nav = ({ title, children, footer }: Props) => {
             <img src={logo} className="size-6" alt="Home" />
           </a>
           <h1 className="w-full truncate text-center text-base">{title}</h1>
-          <button className="all-unset" aria-label="Toggle navigation" onClick={toggle}>
-            {open ? <X className="size-5" /> : <Menu className="size-5" />}
-          </button>
+          <div className="flex items-center gap-4">
+            {headerAction}
+            <button className="all-unset" aria-label="Toggle navigation" onClick={toggle}>
+              {open ? <X className="size-5" /> : <Menu className="size-5" />}
+            </button>
+          </div>
         </div>
         <header className="hidden p-6 lg:grid">
           <a href={Routes.root_url()} aria-label="Dashboard" className="no-underline">
             <Logo className="w-full text-[2.5rem] leading-[1.2]" />
           </a>
         </header>
+        {search}
         <div className="relative flex min-h-0 flex-1 flex-col">
           <div ref={scrollContainerRef} className="min-h-0 flex-1 overflow-y-auto" onScroll={updateScrollFade}>
             {children}
