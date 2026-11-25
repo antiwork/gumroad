@@ -15,6 +15,8 @@
     background-origin: padding-box;
     border-style: solid;
     border-width: 0;
+    // A bare `border` utility sets no colour and would fall back to currentColor.
+    border-color: #{$border-color};
     --border: #{$border};
     --outline: #{$outline};
     @for $i from 1 through length($grays) {

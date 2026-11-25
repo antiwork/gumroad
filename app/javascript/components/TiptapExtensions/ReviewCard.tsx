@@ -83,7 +83,7 @@ const ReviewCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
           className="p-4"
           style={{
             outline: selected && isEditable ? "2px solid rgb(var(--accent))" : "var(--border)",
-            borderRadius: "var(--border-radius-1)",
+            borderRadius: "var(--radius)",
           }}
           data-drag-handle
         >

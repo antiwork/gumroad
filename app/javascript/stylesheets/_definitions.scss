@@ -34,9 +34,9 @@ $breakpoints: (
   sm: 640px,
   lg: 1024px,
 );
-$grays: (0.1, 0.2, 0.5);
+// The third is muted text: at 0.65 it clears 4.5:1 on every surface, light and dark.
+$grays: (0.1, 0.2, 0.65);
 $border-radii: sizes(0.25, 0.5, 10);
-$box-shadows: ((size(0.25) size(0.25) size(0)), (size(0.5) size(0.5) size(0)));
 $z-indices: (
   base: 0,
   overlay: 1,
@@ -140,10 +140,6 @@ $z-indices: (
   @return rgb(var(--#{$name}));
 }
 
-@function box-shadow($index, $color: full-color(color)) {
-  @return nth($box-shadows, $index) $color;
-}
-
 @function dynamic-grid($breakpoint: $grid-wrap-breakpoint) {
   @return min(100%, (#{$breakpoint} - 100%) * 1000);
 }
@@ -164,9 +160,6 @@ $include-dark-tokens: true !default;
   }
   @for $i from 1 through length($border-radii) {
     --border-radius-#{$i}: #{nth($border-radii, $i)};
-  }
-  @for $i from 1 through length($box-shadows) {
-    --box-shadow-#{$i}: #{nth($box-shadows, $i)} var(--color);
   }
   @each $name, $z-index in $z-indices {
     --z-index-#{$name}: #{$z-index};
@@ -203,9 +196,9 @@ $include-dark-tokens: true !default;
   --neutral-color: 0 0 0;
   --neutral-danger: #{map-get($base-colors, "danger")};
   --neutral-filled: 255 255 255;
-  --neutral-border-alpha: 1;
+  --neutral-border-alpha: 0.45;
   --body-bg: #{$light-body-bg};
-  --border-alpha: 1;
+  --border-alpha: 0.11;
   --font-family: #{$font-family};
   --border-width: #{$border-width};
   --big-icon-size: #{$big-icon-size};
@@ -226,7 +219,7 @@ $include-dark-tokens: true !default;
       --filled: 0 0 0;
       --neutral-color: 221 221 221;
       --neutral-filled: 0 0 0;
-      --neutral-border-alpha: 0.35;
+      --neutral-border-alpha: 0.5;
       --contrast-filled: 221 221 221;
       --contrast-black: 221 221 221;
       --border-alpha: 0.35;
@@ -258,5 +251,4 @@ $main-stack-width: size(28);
 $form-element-height: nth($font-sizes, $form-element-font-size) * nth($line-heights, $form-element-font-size) +
   $form-element-padding-y * 2 + $border-width * 2;
 $body-padding-desktop-center: max((100% - #{$body-max-width}) / 2, #{$body-padding-desktop});
-$button-hover-transform-length: spacer(1);
 $header-padding-y: spacer(6);

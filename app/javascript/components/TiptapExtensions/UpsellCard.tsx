@@ -168,7 +168,7 @@ const UpsellCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
         className="upsell-card"
         style={{
           outline: selected && isEditable ? "2px solid rgb(var(--accent))" : "none",
-          borderRadius: "var(--border-radius-1)",
+          borderRadius: "var(--radius)",
           display: "grid",
           gap: "var(--spacer-4)",
           position: "relative",
