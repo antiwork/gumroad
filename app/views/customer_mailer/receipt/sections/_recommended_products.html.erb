@@ -4,12 +4,14 @@
   <div>
     <h3><%= recommended_products_info.title %></h3>
     <% if products.one? %>
-      <%# A lone product is a row: a half-width card would leave the other half of the grid empty. %>
+      <%# A lone product is a row: a half-width card would leave the other half of the grid empty.
+          The price goes under the name. As a third column it cannot wrap, and in a narrow client
+          that drops the phone styles (Gmail on Android) it squeezes the name to one letter a line. %>
       <% product = products.first %>
       <% price = product_card_formatted_price(price: product[:price_cents], currency_code: product[:currency_code], is_pay_what_you_want: product[:is_pay_what_you_want], recurrence: product[:recurrence], duration_in_months: product[:duration_in_months]) %>
       <% thumbnail_url = product[:thumbnail_url] || image_url("native_types/thumbnails/#{product[:native_type]}.png") %>
       <div class="card">
-        <%= render("shared/mailers/product", product: { name: product[:name], url: product[:url], thumbnail_url: }, byline: h(product.dig(:creator, :name)), price:) %>
+        <%= render("shared/mailers/product", product: { name: product[:name], url: product[:url], thumbnail_url: }, byline: safe_join([product.dig(:creator, :name), price].compact_blank, " · ")) %>
       </div>
     <% else %>
       <%# One table per row, so the gap between rows is a margin rather than a spacer cell. %>
