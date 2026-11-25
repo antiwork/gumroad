@@ -180,7 +180,7 @@ export const PriceCheckerCard = () => {
           <button
             type="button"
             aria-label="Match accuracy details"
-            className="inline-flex appearance-none items-center justify-center border-0 bg-transparent p-0 text-current [-webkit-tap-highlight-color:transparent] focus:outline-none"
+            className="inline-flex appearance-none items-center justify-center border-0 bg-transparent p-0 text-current [-webkit-tap-highlight-color:transparent]"
           >
             <InfoCircle className="size-5" />
           </button>
@@ -207,7 +207,7 @@ export const PriceCheckerCard = () => {
         <div className="grid min-h-64 content-between gap-3 rounded-sm border border-dashed border-border bg-background p-4 xl:min-h-80">
           <div className="flex items-start justify-between gap-2">
             <div className="grid min-w-0 flex-1 gap-1 text-sm">
-              <div className="font-medium text-foreground">Not enough comparable products yet</div>
+              <div className="font-bold text-foreground">Not enough comparable products yet</div>
               <div className="text-muted">
                 We found {data.match_count} similar {productTypeLabel} on Gumroad.
               </div>

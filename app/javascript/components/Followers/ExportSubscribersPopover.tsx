@@ -51,7 +51,7 @@ export const ExportSubscribersPopover = () => {
       <p className="mb-4">This will download a CSV file with one row per subscriber.</p>
 
       <div className="mb-4 flex flex-col gap-2">
-        <Label className="font-medium">
+        <Label className="font-bold">
           <Checkbox checked={allSelected} onChange={selectAll} />
           All Subscribers
         </Label>

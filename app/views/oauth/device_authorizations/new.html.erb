@@ -58,7 +58,7 @@
         <%= link_to "Switch to your own account", @account_switch_path, class: "inline-flex items-center justify-center gap-2 cursor-pointer border border-button rounded font-[inherit] no-underline disabled:opacity-30 bg-white text-black hover:bg-pink hover:text-black px-4 py-3 text-base leading-snug" %>
       <% end %>
       <%= form_tag oauth_device_authorization_path, method: :get, class: "flex flex-col gap-4" do %>
-        <%= text_field_tag :user_code, @user_code, autofocus: true, placeholder: "GRD-ABCD-1234", class: "w-full rounded border border-border bg-background p-3" %>
+        <%= text_field_tag :user_code, @user_code, autofocus: true, placeholder: "GRD-ABCD-1234", class: "w-full rounded border border-border bg-background p-3 placeholder:text-muted" %>
         <%= button_tag "Continue", type: "submit", class: "inline-flex items-center justify-center gap-2 cursor-pointer border border-transparent rounded font-[inherit] no-underline disabled:opacity-30 bg-accent-with-text text-accent-foreground px-4 py-3 text-base leading-snug" %>
       <% end %>
     </div>

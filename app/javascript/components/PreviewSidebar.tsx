@@ -149,13 +149,13 @@ export const PreviewChrome = ({ children, ...props }: PreviewChromeProps) => (
           {props.subject ? (
             <div className="flex min-w-0 gap-2">
               <span className="shrink-0 text-muted">Subject</span>
-              <span className="truncate font-medium">{props.subject}</span>
+              <span className="truncate font-bold">{props.subject}</span>
             </div>
           ) : null}
         </div>
       ) : (
         <div className="relative flex flex-col items-center gap-1 border-b border-border bg-body px-10 py-2 select-none">
-          <div className="w-full truncate text-center text-sm font-medium">{props.title}</div>
+          <div className="w-full truncate text-center text-sm font-bold">{props.title}</div>
           {props.url ? (
             // The URL sits in a quiet inset address field (like a browser's address bar at
             // rest) rather than as bare caption text. Middle truncation keeps the page's own

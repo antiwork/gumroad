@@ -539,7 +539,7 @@ function CommunitiesIndex() {
                     alt={selectedCommunity.seller.name}
                     className="shrink-0 dark:border-[rgb(var(--parent-color)/var(--border-alpha))]"
                   />
-                  <div className="flex items-center font-medium">
+                  <div className="flex items-center font-bold">
                     <span className="flex-1 truncate">
                       {currentSeller?.id === selectedCommunity.seller.id
                         ? "My community"

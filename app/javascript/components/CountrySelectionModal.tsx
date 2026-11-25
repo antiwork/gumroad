@@ -100,7 +100,7 @@ export const CountrySelectionModal = ({ country: initialCountry, countries }: Pr
               <Label
                 key={item}
                 htmlFor={`${uid}requirement-${i}`}
-                className="w-full items-start rounded border border-border p-3 transition-colors focus-within:ring-1 focus-within:ring-accent hover:bg-active-bg active:bg-active-bg"
+                className="w-full items-start rounded border border-border p-3 transition-colors focus-within:ring-1 focus-within:ring-indicator hover:bg-active-bg active:bg-active-bg"
               >
                 <Checkbox
                   id={`${uid}requirement-${i}`}

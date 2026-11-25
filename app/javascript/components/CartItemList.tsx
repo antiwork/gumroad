@@ -105,7 +105,7 @@ export const CartItemTitle = ({
 }: BaseProps & { asChild?: boolean }) => {
   const Comp = asChild ? Slot : "h4";
   return (
-    <Comp className={classNames("line-clamp-2 text-base font-medium no-underline sm:text-lg", className)} {...props}>
+    <Comp className={classNames("line-clamp-2 text-base font-bold no-underline sm:text-lg", className)} {...props}>
       {children}
     </Comp>
   );
