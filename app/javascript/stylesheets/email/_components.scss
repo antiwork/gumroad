@@ -51,7 +51,20 @@
       padding-bottom: 0;
     }
 
+    // Either column may hold seller text of any length (a product name as the label), so each
+    // may break a long word and neither may be squeezed below a short label or a price.
+    th {
+      min-width: 96px;
+      word-break: break-word;
+    }
+
+    // A label held on one line is fixed text, already as narrow as it can go.
+    th.nowrap {
+      min-width: 0;
+    }
+
     td {
+      min-width: 88px;
       text-align: right;
       word-break: break-word;
     }
@@ -177,7 +190,7 @@
     background-color: $color-warning-bg;
   }
 
-  // Centred opener: image or avatar, a big figure, one line of context.
+  // Centred opener: image or avatar, a title, a big figure, one line of context.
   .hero {
     text-align: center;
 
@@ -195,9 +208,25 @@
       color: $color-muted;
     }
 
-    // The line above the figure.
+    // The line above the figure. In an opening hero it is the email's title, an <h1>, so the
+    // text styles are restated for it.
     .eyebrow {
       margin-bottom: 4px;
+      color: $color-muted;
+      font-size: 16px;
+      font-weight: 400;
+      line-height: 24px;
+      letter-spacing: 0;
+    }
+
+    // The big number: a <p> that looks like an <h1>, because an amount is not a heading.
+    .figure {
+      margin-bottom: 4px;
+      color: $color-heading;
+      font-size: 36px;
+      font-weight: 600;
+      line-height: 44px;
+      letter-spacing: -0.02em;
     }
 
     > *:last-child {
@@ -316,6 +345,8 @@
 
   table.product .product-info {
     padding: 0 12px;
+    // A seller's product name can be one long word, which would otherwise set the row's width.
+    word-break: break-word;
   }
 
   // No thumbnail cell before it.

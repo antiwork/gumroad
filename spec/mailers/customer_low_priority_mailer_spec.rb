@@ -1095,6 +1095,16 @@ describe CustomerLowPriorityMailer do
         expect(mail.body.encoded).to include product.name
         expect(mail.body.encoded).to include Money.new(1_000, "USD").format(symbol: true)
       end
+
+      # Someone moving through the email by heading should hear what it is, not a bare amount.
+      it "makes the title the email's heading, with the amount as text under it" do
+        mail = CustomerLowPriorityMailer.deposit(payment.id)
+
+        expect(Nokogiri::HTML(mail.body.encoded).css("h1, h2, h3, h4").map { _1.text.squish }).to eq(["It's pay day!"])
+        expect(mail.body.sanitized).to include("It's pay day! #{payment.displayed_amount} has been deposited in your account")
+        # The phone rules resize every <h1>, so the title and the amount each need their own there.
+        expect(mail.body.encoded).to include(".email .hero .eyebrow { font-size: 16px !important;", ".email .hero .figure { font-size: 28px !important;")
+      end
     end
   end
 end

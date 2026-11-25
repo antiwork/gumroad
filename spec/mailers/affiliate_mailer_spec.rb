@@ -97,6 +97,7 @@ describe AffiliateMailer do
         expect(mail.to).to eq([collaborator.affiliate_user.form_email])
         expect(mail.subject).to include("New sale of #{product_name} for $20")
         expect(mail.body.encoded).to include("You made a sale!")
+        expect(Nokogiri::HTML(mail.body.encoded).css("h1, h2, h3, h4").map { _1.text.squish }).to eq(["You made a sale!"])
         expect(mail.body.encoded).to include "Product price"
         expect(mail.body.encoded).to include "$20"
         expect(mail.body.encoded).to include "Your cut"

@@ -1,7 +1,7 @@
 <div class="hero">
   <%= image_tag image_url("email/gumroad_coins.png"), alt: "Cha-ching!", width: 160, height: 130 %>
-  <p class="eyebrow">It's pay day!</p>
-  <h1><%= @payment_display_amount %></h1>
+  <h1 class="eyebrow">It's pay day!</h1>
+  <p class="figure"><%= @payment_display_amount %></p>
   <p>has been deposited in your account for sales up until <%= @paid_date %>.</p>
   <p><a class="button primary" href="<%= balance_url %>">View account balance</a></p>
 </div>

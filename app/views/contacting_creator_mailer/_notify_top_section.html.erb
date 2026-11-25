@@ -1,7 +1,7 @@
 <div class="hero">
   <%= image_tag image_url("email/gumroad_coins.png"), alt: "Cha-ching!", width: 160, height: 130 %>
-  <p class="eyebrow"><%= @mail_heading %></p>
-  <h1>
+  <h1 class="eyebrow"><%= @mail_heading %></h1>
+  <p class="figure">
     <% if @purchase.present? %>
       <% commission = @purchase.commission %>
       <% if commission.present? %>
@@ -13,7 +13,7 @@
     <% else %>
       <%= @product.price_formatted %>
     <% end %>
-  </h1>
+  </p>
   <p><%= @product.name %></p>
   <% if @mail_subheading.present? %>
     <p><%= @mail_subheading %></p>

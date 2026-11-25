@@ -25,7 +25,8 @@
       <tr>
         <th>Call schedule</th>
         <td>
-          <span class="nowrap"><%= call.formatted_time_range %></span>
+          <%# Each time stays whole, and the range can still wrap at the dash on a narrow phone. %>
+          <%= safe_join(call.formatted_time_range.split(" - ", 2).map { |time| tag.span(time, class: "nowrap") }, " - ") %>
           <br>
           <%= call.formatted_date_range %>
         </td>
@@ -86,7 +87,7 @@
       </tr>
       <tr>
         <th>Affiliate commission</th>
-        <td class="nowrap"><%= "#{Money.new(direct_affiliate_credit.amount_cents + direct_affiliate_credit.fee_cents).format(no_cents_if_whole: true, symbol: true)} (#{direct_affiliate_credit.basis_points / 100}%)" %></td>
+        <td><span class="nowrap"><%= Money.new(direct_affiliate_credit.amount_cents + direct_affiliate_credit.fee_cents).format(no_cents_if_whole: true, symbol: true) %></span> <%= "(#{direct_affiliate_credit.basis_points / 100}%)" %></td>
       </tr>
     <% end %>
     <% if affiliate.present? && !@purchase.affiliate_credit_cents.zero? && @purchase.affiliate_credit.present? %>
@@ -96,7 +97,7 @@
       </tr>
       <tr>
         <th><%= affiliate.collaborator? ? "Collaborator commission" : "Affiliate commission" %></th>
-        <td class="nowrap"><%= "#{Money.new(@purchase.own_affiliate_credit_cents + @purchase.affiliate_credit.fee_cents).format(no_cents_if_whole: true, symbol: true)} (#{@purchase.affiliate_credit.basis_points / 100}%#{" of the rest" if direct_affiliate_credit.present?})" %></td>
+        <td><span class="nowrap"><%= Money.new(@purchase.own_affiliate_credit_cents + @purchase.affiliate_credit.fee_cents).format(no_cents_if_whole: true, symbol: true) %></span> <%= "(#{@purchase.affiliate_credit.basis_points / 100}%#{" of the rest" if direct_affiliate_credit.present?})" %></td>
       </tr>
     <% end %>
     <% if @purchase.utm_link.present? %>

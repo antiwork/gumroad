@@ -15,6 +15,13 @@ const compile = (name: string) => {
   }).css;
 };
 
+// Every declaration the stylesheet makes for exactly this selector, across the rules that list it.
+const declarationsFor = (css: string, selector: string) =>
+  [...css.matchAll(/([^{}]+)\{([^{}]*)\}/gu)]
+    .filter(([, selectors = ""]) => selectors.split(",").some((listed) => listed.trim() === selector))
+    .map(([, , declarations = ""]) => declarations.trim())
+    .join(" ");
+
 // Premailer inlines this stylesheet into style attributes, and mail clients read nothing else:
 // they do not resolve custom properties, scale rem, load web fonts or understand cascade layers,
 // and in dark mode they repaint the message themselves. So the bundle has to stay self-contained.
@@ -52,6 +59,42 @@ describe("email stylesheet", () => {
   // A post sits on the seller's themed <body>, so it may not paint a surface of its own.
   it("leaves a post's background to the seller's theme", () => {
     expect(css).toMatch(/\.email\.post\s*\{[^}]*background-color:\s*inherit/u);
+  });
+
+  // The shared muted grey is under 4.5:1 on any seller background darker than #ececec.
+  it("gives a post's table headers the seller's text colour", () => {
+    expect(declarationsFor(css, ".email th")).toMatch(/(^|[;\s])color:\s*#6b6b66/u);
+    expect(declarationsFor(css, ".email.post th")).toMatch(/(^|[;\s])color:\s*inherit/u);
+  });
+
+  // The inherited overflow-wrap cannot shrink a table cell, so one long word in a product's name
+  // would push its row past the card and the phone's viewport.
+  it("lets a product row break a long word in the name", () => {
+    expect(declarationsFor(css, ".email table.product .product-info")).toMatch(/word-break:\s*break-word/u);
+  });
+
+  // A receipt's row label is the product's name. Without a floor under each column a long name
+  // squeezes its price to a glyph per line, and one unbroken name pushes the table off a phone.
+  it("holds both columns of a label/value table to a readable width", () => {
+    const label = declarationsFor(css, ".email table.details th");
+    expect(label).toMatch(/min-width:\s*96px/u);
+    expect(label).toMatch(/word-break:\s*break-word/u);
+    expect(declarationsFor(css, ".email table.details td")).toMatch(/min-width:\s*88px/u);
+    // A fixed one-line label keeps its own width, so the receipt's header rows do not move.
+    expect(declarationsFor(css, ".email table.details th.nowrap")).toMatch(/min-width:\s*0/u);
+  });
+
+  // An opening hero's title is an <h1> and its amount a <p>, so each look has to come from the
+  // class, not from the element.
+  it("styles a hero's title and figure by class", () => {
+    const title = declarationsFor(css, ".email .hero .eyebrow");
+    expect(title).toMatch(/font-size:\s*16px/u);
+    expect(title).toMatch(/font-weight:\s*400/u);
+    expect(title).toMatch(/(^|[;\s])color:\s*#6b6b66/u);
+    const figure = declarationsFor(css, ".email .hero .figure");
+    expect(figure).toMatch(/font-size:\s*36px/u);
+    expect(figure).toMatch(/font-weight:\s*600/u);
+    expect(figure).toMatch(/(^|[;\s])color:\s*#000000/u);
   });
 });
 

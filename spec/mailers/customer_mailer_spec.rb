@@ -1427,6 +1427,23 @@ describe CustomerMailer do
       expect(body).to have_link("View every item in this order", href: receipt_purchase_url(purchase_one.external_id, host: UrlService.domain_with_protocol))
     end
 
+    it "declares its language and titles the document with the subject" do
+      Feature.activate_user(:graphics_light_receipt, seller)
+      mail = CustomerMailer.receipt(nil, charge.id)
+      document = Nokogiri::HTML(mail.body.decoded)
+
+      expect(document.at_css("html")["lang"]).to eq("en")
+      expect(document.at_css("head title").text).to eq(mail.subject)
+    end
+
+    it "sets the page colour its black text sits on and asks clients to keep it light" do
+      Feature.activate_user(:graphics_light_receipt, seller)
+      document = Nokogiri::HTML(CustomerMailer.receipt(nil, charge.id).body.decoded)
+
+      expect(document.at_css("body")["style"]).to include("color: #000;", "background-color: #ffffff;")
+      expect(document.at_css("meta[name='color-scheme']")["content"]).to eq("light only")
+    end
+
     it "does not apply to another seller's receipt" do
       Feature.activate_user(:graphics_light_receipt, create(:user))
 
@@ -1497,6 +1514,17 @@ describe CustomerMailer do
       expect(mail.body).to have_link("and 1 more product", href: checkout_url(host: UrlService.domain_with_protocol))
       expect(sanitized_body).to have_text("Thanks!")
       expect(mail.body).to have_link("Complete checkout", href: checkout_url(host: UrlService.domain_with_protocol))
+    end
+
+    # The message sits on the email's white card, not on the seller's own page colour.
+    it "keeps a white accent button visible when the seller's own page is dark" do
+      seller.seller_profile.update!(background_color: "#000000", highlight_color: "#ffffff")
+      installment.update!(message: %(#{installment.message}<a href="https://example.com/" class="tiptap__button button primary">Shop now</a>))
+
+      style = Capybara.string(mail.body.decoded).find_link("Shop now")[:style]
+      expect(style).to include("background-color: #ffffff;", "color: #000000;")
+      border_color = style[/border-color: (#\h{6})/, 1]
+      expect(ContrastColor.ratio_between(border_color, ReceiptPresenter::EMAIL_CARD_COLOR)).to be >= ContrastColor::WCAG_AA_NON_TEXT
     end
   end
 
