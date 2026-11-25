@@ -101,6 +101,28 @@ describe Api::V2::SalesController do
         expect(per_row_queries).to be_empty
       end
 
+      it "serializes offer codes on index without per-sale discount or offer code queries" do
+        offer_code = create(:offer_code, user: @seller, products: [@product], amount_cents: 2000)
+        2.times { create(:purchase, purchaser: create(:user), link: @product, seller: @seller, offer_code:) }
+
+        per_row_queries = []
+        callback = lambda do |_name, _start, _finish, _id, payload|
+          sql = payload[:sql].to_s
+          next unless sql.include?("purchase_offer_code_discounts") || sql.include?("`offer_codes`")
+          # IN-lists are the batched preload; equality probes are the N+1 shape.
+          per_row_queries << sql if sql.match?(/\bpurchase_id`? = \d+|`offer_codes`\.`id` = \d+ LIMIT 1/)
+        end
+
+        ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+          get :index, params: @params
+        end
+
+        expect(response.parsed_body["success"]).to eq true
+        sales_with_offer_codes = response.parsed_body["sales"].select { |sale| sale["offer_code"].present? }
+        expect(sales_with_offer_codes.size).to eq(2)
+        expect(per_row_queries).to be_empty
+      end
+
       it "reports is_following when the stored follower email uses different casing" do
         mixed = "Buyer.Case@Example.COM"
         purchase = create(:purchase, purchaser: create(:user), link: @product, email: mixed)

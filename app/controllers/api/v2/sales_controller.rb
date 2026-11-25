@@ -37,6 +37,9 @@ class Api::V2::SalesController < Api::V2::BaseController
     :shipment,
     :product_review,
     :offer_code,
+    # `original_offer_code` reads the cached discount's own offer code, which `:offer_code`
+    # on the sale does not reach.
+    { purchase_offer_code_discount: :offer_code },
     # Per-sale Purchase#as_json (v2) reads nothing else covers: the license, the merchant
     # account behind web_csv_payment_processor, the price behind subscription_duration, and
     # the subscription's own original purchase, payment option and review — the
