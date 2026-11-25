@@ -116,14 +116,34 @@ describe "Dashboard header nav", type: :system, js: true do
       within("main section") { expect(page).to have_link("Add collaborator") }
     end
 
+    it "keeps a form's buttons in a bar under the page" do
+      visit edit_link_path(product)
+
+      within("[role=group][aria-label='Page actions']") { expect(page).to have_button("Save changes") }
+      within("main header") { expect(page).not_to have_button("Save changes") }
+    end
+
     context "on a phone", :mobile_view do
-      it "keeps the drawer and the page's own New product button" do
+      it "has search, a create menu and the drawer in its bar" do
         visit products_path
 
-        expect(page).to have_button("Toggle navigation")
+        within(header) do
+          expect(page).to have_button("Search")
+          toggle_disclosure "Create"
+          expect(page).to have_link("New product", count: 1)
+        end
         expect(page).to have_link("New product", count: 1)
+      end
+
+      it "keeps the page's tabs in the drawer" do
+        visit products_path
+
+        expect(page).not_to have_selector("[role=tab]", text: "Affiliated")
         click_on "Toggle navigation"
-        expect(page).to have_link("Sales")
+        within(header) do
+          expect(page).to have_selector("[role=tab]", text: "Affiliated")
+          expect(page).to have_link("Sales")
+        end
       end
     end
   end

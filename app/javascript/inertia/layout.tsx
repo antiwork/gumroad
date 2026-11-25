@@ -8,6 +8,7 @@ import { CurrentSellerProvider, parseCurrentSeller } from "$app/components/Curre
 import { HeaderNavContext } from "$app/components/HeaderNavContext";
 import { type LoggedInUser, LoggedInUserProvider, parseLoggedInUser } from "$app/components/LoggedInUser";
 import { PageSearchProvider } from "$app/components/PageSearch";
+import { PageSlotsProvider, usePageSlotRefs } from "$app/components/PageSlots";
 import Alert, { type AlertPayload } from "$app/components/server-components/Alert";
 import { useFlashMessage } from "$app/components/useFlashMessage";
 
@@ -44,33 +45,43 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <LoggedInUserProvider value={loggedInUser}>
       <CurrentSellerProvider value={parseCurrentSeller(current_seller)}>
-        <MetaTags />
-        <Alert initial={null} />
-        {/* The sidebar sits beside the page on a wide screen; the header variant stays above it. */}
-        <PageSearchProvider>
-          <div
-            id="inertia-shell"
-            className={
-              loggedInUser?.headerNav
-                ? "flex h-dvh flex-col lg:[--dashboard-header-height:7rem]"
-                : "flex h-dvh flex-col lg:flex-row"
-            }
-          >
-            {logged_in_user && !is_mobile_app_web_view ? <Nav title="Dashboard" /> : null}
-            <main scroll-region="" className="flex flex-1 flex-col overflow-y-auto [contain:paint]">
-              {/* Without the nav there is no search bar, so pages keep their own search. */}
-              <HeaderNavContext.Provider
-                value={!!loggedInUser?.headerNav && !!logged_in_user && !is_mobile_app_web_view}
-              >
-                {children}
-              </HeaderNavContext.Provider>
-            </main>
-          </div>
-        </PageSearchProvider>
+        <PageSlotsProvider>
+          <MetaTags />
+          <Alert initial={null} />
+          {/* The sidebar sits beside the page on a wide screen; the header variant stays above it. */}
+          <PageSearchProvider>
+            <div
+              id="inertia-shell"
+              className={
+                loggedInUser?.headerNav
+                  ? "flex h-dvh flex-col lg:[--dashboard-header-height:7rem]"
+                  : "flex h-dvh flex-col lg:flex-row"
+              }
+            >
+              {logged_in_user && !is_mobile_app_web_view ? <Nav title="Dashboard" /> : null}
+              <main scroll-region="" className="flex flex-1 flex-col overflow-y-auto [contain:paint]">
+                {/* Without the nav there is no search bar, so pages keep their own search. */}
+                <HeaderNavContext.Provider
+                  value={!!loggedInUser?.headerNav && !!logged_in_user && !is_mobile_app_web_view}
+                >
+                  {children}
+                </HeaderNavContext.Provider>
+                <PageFooterSlot />
+              </main>
+            </div>
+          </PageSearchProvider>
+        </PageSlotsProvider>
       </CurrentSellerProvider>
     </LoggedInUserProvider>
   );
 }
+
+// Where a form page's buttons go under the header nav: after the page, and pinned to the bottom
+// of the scrolling area so they are in reach however long the form is.
+const PageFooterSlot = () => {
+  const refs = usePageSlotRefs();
+  return <div ref={refs?.setFooter} className="sticky bottom-0 z-10 mt-auto empty:hidden" />;
+};
 
 export function PublicLayout({ children }: { children: React.ReactNode }) {
   const { flash } = usePage<PageProps>().props;

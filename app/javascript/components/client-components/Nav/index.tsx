@@ -34,7 +34,7 @@ import { type OmnibarAgent, type OmnibarShortcut } from "$app/utils/omnibar";
 import { initTeamMemberReadOnlyAccess } from "$app/utils/team_member_read_only";
 
 import NavbarFooter from "$app/components/client-components/Nav/footer";
-import { HeaderNav } from "$app/components/client-components/Nav/header";
+import { CreateMenu, HeaderNav } from "$app/components/client-components/Nav/header";
 import { CloseOnNavigate } from "$app/components/CloseOnNavigate";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain, useDiscoverUrl } from "$app/components/DomainSettings";
@@ -48,6 +48,9 @@ type Props = {
   title: string;
   compact?: boolean;
 };
+
+// Matches the phone bar's transition in Nav.tsx (duration-200), less a beat so the two overlap.
+const SEARCH_EXPAND_MS = 180;
 
 export const matchesCurrentPath = ({
   href,
@@ -382,6 +385,22 @@ export const Nav = (props: Props) => {
     visibleItems.find(matchesCurrentPath)?.key ?? ""
   ];
   const headerActions = [...actions].sort((a, b) => Number(b.id === sectionAction) - Number(a.id === sectionAction));
+  // On a phone the search field first takes the whole bar, then the search bar opens over it.
+  const [searchExpanding, setSearchExpanding] = React.useState(false);
+  React.useEffect(() => {
+    if (!searchExpanding) return;
+    const timeout = window.setTimeout(() => {
+      omnibar.show();
+      setSearchExpanding(false);
+    }, SEARCH_EXPAND_MS);
+    return () => window.clearTimeout(timeout);
+  }, [searchExpanding]);
+  const openPhoneSearch = () => {
+    const reduceMotion =
+      typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduceMotion) omnibar.show();
+    else setSearchExpanding(true);
+  };
 
   return (
     <>
@@ -396,7 +415,22 @@ export const Nav = (props: Props) => {
             className="mx-6 mb-6 hidden lg:flex"
           />
         }
-        {...(headerNav && { className: "lg:hidden" })}
+        {...(headerNav && {
+          className: "lg:hidden",
+          phoneBar: {
+            search: (
+              <OmnibarTrigger
+                variant="field"
+                compact
+                onOpen={openPhoneSearch}
+                canAsk={agents.length > 0}
+                className="flex h-10 min-w-0 flex-1"
+              />
+            ),
+            create: <CreateMenu actions={headerActions} />,
+            searchExpanded: searchExpanding || omnibar.open,
+          },
+        })}
         {...props}
       >
         <CloseOnNavigate />

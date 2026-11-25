@@ -1,21 +1,17 @@
 import * as React from "react";
+import { createPortal } from "react-dom";
 
 import { classNames } from "$app/utils/classNames";
 
 import { HeaderNavContext, isSectionTitle, TextTabsContext } from "$app/components/HeaderNavContext";
+import { usePageSlots } from "$app/components/PageSlots";
 
 /**
- * Wraps a page action the header nav already offers on every page ("New product"), so wide
- * screens do not show it twice. Phones, which have no header nav, keep it.
+ * Wraps a page action the header nav already offers on every page ("New product"), at every
+ * width, so the page does not show it a second time.
  */
 export const InHeaderNav = ({ children }: { children: React.ReactNode }) =>
-  React.useContext(HeaderNavContext) ? (
-    <div data-in-header-nav className="contents lg:hidden">
-      {children}
-    </div>
-  ) : (
-    children
-  );
+  React.useContext(HeaderNavContext) ? null : children;
 
 /**
  * For an empty page's placeholder: an action its page header would have carried, shown only where
@@ -42,6 +38,13 @@ export const PageHeader = React.forwardRef<
   // and the tabs take its place on the row, opposite the actions.
   const titleInHeader = headerNav && isSectionTitle(title);
   const actions = headerNav && empty ? null : allActions;
+  // Any other page is one thing being viewed or edited (a product, a form). Its title shows at
+  // every width, and its buttons sit in a bar pinned under the page, where a form ends.
+  const { footer } = usePageSlots();
+  const actionsInFooter = headerNav && !titleInHeader && footer !== null;
+  // Hidden while it holds no control: a search that is not filtering and an action the header
+  // nav already has both render nothing.
+  const hiddenWhileEmpty = "[&:not(:has(:is(a,button,input,select,[role=tab])))]:hidden";
 
   return (
     <header
@@ -49,12 +52,9 @@ export const PageHeader = React.forwardRef<
         "flex flex-col gap-4 border-b border-border p-4 md:p-8",
         titleInHeader &&
           "lg:min-h-16 lg:flex-row-reverse lg:flex-wrap lg:items-center lg:justify-between lg:gap-y-2 lg:py-2",
-        // Nothing left to show: no tabs, and no control the header nav does not already have.
-        titleInHeader &&
-          !children &&
-          "lg:[&:not(:has(:is(a,button,input,select):not([data-in-header-nav],[data-in-header-nav]_*)))]:hidden",
-        // A phone shows no title either, so without actions or tabs the header is an empty box.
-        headerNav && !children && !actions && !showTitleOnMobile && "max-sm:hidden",
+        // The title is hidden on a wide screen and, unless asked for, on a phone. In between it shows.
+        titleInHeader && "lg:[&:not(:has(:is(a,button,input,select,[role=tab])))]:hidden",
+        titleInHeader && !showTitleOnMobile && "max-sm:[&:not(:has(:is(a,button,input,select,[role=tab])))]:hidden",
         className,
       )}
       ref={ref}
@@ -63,7 +63,7 @@ export const PageHeader = React.forwardRef<
         <h1
           className={classNames(
             "line-clamp-2 text-2xl",
-            !showTitleOnMobile && "hidden! sm:block!",
+            !showTitleOnMobile && !actionsInFooter && "hidden! sm:block!",
             titleInHeader && "lg:sr-only!",
           )}
         >
@@ -76,9 +76,24 @@ export const PageHeader = React.forwardRef<
             titleInHeader && "lg:my-0 lg:items-center",
           )}
         >
-          {actions}
+          {actionsInFooter ? null : actions}
         </div>
       </div>
+      {actionsInFooter && actions
+        ? createPortal(
+            <div
+              role="group"
+              aria-label="Page actions"
+              className={classNames(
+                "grid grid-cols-2 gap-2 border-t border-border bg-body px-4 py-3 has-[>*:only-child]:grid-cols-1 sm:flex sm:justify-end md:px-8",
+                hiddenWhileEmpty,
+              )}
+            >
+              {actions}
+            </div>,
+            footer,
+          )
+        : null}
       {titleInHeader && children ? (
         // One flex item, so the row holds the tabs on one side and the actions on the other. It
         // does not shrink: tabs that do not fit beside the actions take a line of their own.

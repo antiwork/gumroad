@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
 import { cleanup, render, screen } from "@testing-library/react";
 import * as React from "react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { HeaderNavContext } from "$app/components/HeaderNavContext";
+import { PageSlotsProvider, usePageSlotRefs } from "$app/components/PageSlots";
 import { InHeaderNav, PageHeader, PlaceholderAction } from "$app/components/ui/PageHeader";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 
@@ -70,7 +71,7 @@ describe("PageHeader", () => {
     expect(screen.getByRole("link", { name: "Start selling" })).toBeTruthy();
   });
 
-  it("keeps an action the header nav repeats for phones only", () => {
+  it("drops an action the header nav already offers", () => {
     const renderAction = (headerNav: boolean) =>
       render(
         <HeaderNavContext.Provider value={headerNav}>
@@ -81,11 +82,64 @@ describe("PageHeader", () => {
       );
 
     renderAction(false);
-    expect(screen.getByRole("link", { name: "New product" }).parentElement?.className ?? "").not.toContain("lg:hidden");
+    expect(screen.getByRole("link", { name: "New product" })).toBeTruthy();
     cleanup();
 
     renderAction(true);
-    expect(screen.getByRole("link", { name: "New product" }).parentElement?.className).toContain("lg:hidden");
+    expect(screen.queryByRole("link", { name: "New product" })).toBeNull();
+  });
+
+  it("puts a form page's buttons in the bar under the page, and keeps its title on a phone", () => {
+    const Shell = () => {
+      const refs = usePageSlotRefs();
+      return (
+        <>
+          <PageHeader title="Figma UI kit" actions={<button type="button">Save changes</button>} />
+          <footer ref={refs?.setFooter} />
+        </>
+      );
+    };
+    render(
+      <PageSlotsProvider>
+        <HeaderNavContext.Provider value>
+          <Shell />
+        </HeaderNavContext.Provider>
+      </PageSlotsProvider>,
+    );
+
+    expect(screen.getByRole("button", { name: "Save changes" }).closest("footer")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Figma UI kit" }).className).not.toContain("hidden!");
+  });
+
+  it("moves the tabs into the phone's menu below the wide breakpoint", () => {
+    vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
+    const Shell = () => {
+      const refs = usePageSlotRefs();
+      return (
+        <>
+          <nav ref={refs?.setNavTabs} />
+          <PageHeader title="Products">
+            <Tabs>
+              <Tab isSelected href="/products">
+                All products
+              </Tab>
+            </Tabs>
+          </PageHeader>
+        </>
+      );
+    };
+    render(
+      <PageSlotsProvider>
+        <HeaderNavContext.Provider value>
+          <Shell />
+        </HeaderNavContext.Provider>
+      </PageSlotsProvider>,
+    );
+
+    const tab = screen.getByRole("tab", { name: "All products" });
+    expect(tab.closest("nav")).toBeTruthy();
+    expect(tab.className).toContain("font-bold");
+    vi.unstubAllGlobals();
   });
 
   it("keeps a title the header nav does not show, with the text tabs under it", () => {

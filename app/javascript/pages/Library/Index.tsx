@@ -14,8 +14,10 @@ import { SellerAnalyticsProps, trackSellerPurchaseEvent } from "$app/utils/user_
 
 import { Button } from "$app/components/Button";
 import { useDiscoverUrl } from "$app/components/DomainSettings";
+import { HeaderNavContext } from "$app/components/HeaderNavContext";
 import { Layout } from "$app/components/Library/Layout";
 import { Modal } from "$app/components/Modal";
+import { useRegisterPageSearch } from "$app/components/PageSearch";
 import { Pagination } from "$app/components/Pagination";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { AuthorByline } from "$app/components/Product/AuthorByline";
@@ -435,6 +437,13 @@ export default function LibraryPage() {
     if (e.key === "Enter") commitQuery();
   };
 
+  // Under the header nav the dashboard's search bar searches the library too.
+  const searchInBar = React.useContext(HeaderNavContext);
+  useRegisterPageSearch(
+    { label: "Search library", value: activeSearch.query, onSearch: (query) => navigate({ query }) },
+    searchInBar,
+  );
+
   const shouldShowFilter =
     !showArchivedNotice && (hasParams || archivedCount > 0 || archivedCount + unarchivedCount > 9);
 
@@ -546,7 +555,7 @@ export default function LibraryPage() {
               </CardContent>
               {isDesktop || mobileFiltersExpanded ? (
                 <>
-                  <CardContent>
+                  <CardContent className={searchInBar ? "hidden" : undefined}>
                     <InputGroup className="grow">
                       <Search className="size-5 text-muted" />
                       <Input

@@ -88,12 +88,15 @@ export const OmnibarTrigger = ({
   onOpen,
   className,
   canAsk = false,
+  compact = false,
 }: {
   variant: "field" | "icon";
   onOpen: (options?: { dictate?: boolean }) => void;
   className?: string;
   // With an assistant connected the bar takes questions too, and says so.
   canAsk?: boolean;
+  // In the phone bar: no shortcut hint and no microphone, which the open bar has.
+  compact?: boolean;
 }) => {
   // Both are only known in the browser, so the first render matches the server's without them.
   const [shortcut, setShortcut] = React.useState<{ label: string; keys: string } | null>(null);
@@ -141,14 +144,14 @@ export const OmnibarTrigger = ({
         onClick={() => onOpen()}
       >
         <SearchIcon className="size-5 shrink-0" aria-hidden />
-        <span className="flex-1">{canAsk ? "Search or ask" : "Search"}</span>
-        {shortcut ? (
+        <span className="flex-1 truncate">{canAsk ? "Search or ask" : "Search"}</span>
+        {shortcut && !compact ? (
           <kbd className="font-[inherit] text-sm whitespace-nowrap" aria-hidden>
             {shortcut.label}
           </kbd>
         ) : null}
       </button>
-      {canDictate ? (
+      {canDictate && !compact ? (
         <button
           type="button"
           className={classNames("box-border flex cursor-pointer items-center rounded px-3 all-unset", focusRing)}

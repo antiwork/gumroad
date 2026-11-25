@@ -240,18 +240,16 @@ describe("DashboardPage New product button", () => {
     ...loggedInUser,
     policies: { ...loggedInUser.policies, product: { create: true } },
   };
-  const classes = () => (screen.getByRole("link", { name: "New product" }).parentElement?.className ?? "").split(" ");
-
-  it("shows at every width beside the sidebar", () => {
+  it("shows beside the sidebar", () => {
     renderDashboard(minor, {}, creator);
 
-    expect(classes()).not.toContain("lg:hidden");
+    expect(screen.getByRole("link", { name: "New product" })).toBeTruthy();
   });
 
-  // The header nav carries its own on a wide screen. A phone keeps the drawer, which has none.
-  it("shows only below the wide breakpoint under the header nav", () => {
+  // The header nav carries its own at every width: the button on a wide screen, the plus on a phone.
+  it("is left to the header nav under the trial", () => {
     renderDashboard(minor, {}, { ...creator, headerNav: true });
 
-    expect(classes()).toContain("lg:hidden");
+    expect(screen.queryByRole("link", { name: "New product" })).toBeNull();
   });
 });
