@@ -219,7 +219,7 @@ export const PreviewSidebar = ({
     <>
       <aside
         className={cx(
-          "sticky top-0 hidden h-screen flex-col gap-4 self-start overflow-y-auto bg-background p-6 lg:flex lg:border-l lg:border-border",
+          "sticky top-0 hidden h-[calc(100dvh-var(--dashboard-header-height,0px))] flex-col gap-4 self-start overflow-y-auto bg-background p-6 lg:flex lg:border-l lg:border-border",
           className,
         )}
         // The old visible "Preview" heading is gone (the PreviewChrome bar announces the

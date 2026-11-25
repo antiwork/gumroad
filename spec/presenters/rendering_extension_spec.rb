@@ -170,11 +170,17 @@ describe "RenderingExtension" do
 
       describe "header_nav" do
         let(:seller) { create(:named_seller) }
-        let(:pundit_user) { SellerContext.new(user: seller, seller:) }
+        let(:user) { create(:user) }
+        let(:pundit_user) { SellerContext.new(user:, seller:) }
 
-        it "follows the dashboard_header_nav flag for the logged-in user" do
-          expect { Feature.activate_user(:dashboard_header_nav, seller) }
-            .to change { RenderingExtension.custom_context(stubbed_view_context)[:logged_in_user][:header_nav] }.from(false).to(true)
+        before { create(:team_membership, user:, seller:, role: TeamMembership::ROLE_ADMIN) }
+
+        it "follows the flag for the logged-in user, not the seller being managed" do
+          Feature.activate_user(:dashboard_header_nav, seller)
+          expect(RenderingExtension.custom_context(stubbed_view_context)[:logged_in_user][:header_nav]).to eq(false)
+
+          Feature.activate_user(:dashboard_header_nav, user)
+          expect(RenderingExtension.custom_context(stubbed_view_context)[:logged_in_user][:header_nav]).to eq(true)
         end
       end
 

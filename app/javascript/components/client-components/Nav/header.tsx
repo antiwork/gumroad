@@ -22,6 +22,8 @@ const focusRing =
 const linkClasses = "flex h-10 shrink-0 items-center rounded px-3 no-underline hover:text-accent";
 // The row of links clips what does not fit, so its rings are drawn inside the link.
 const insetRing = "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-current";
+// The bar marks the current page without relying on the accent colour alone.
+const currentClasses = "text-accent shadow-[inset_0_-0.125rem_0_var(--color-accent)]";
 
 /**
  * Which of a one-line row's children did not fit. The row wraps and clips, so a child that did
@@ -55,21 +57,23 @@ export const useWrappedChildren = (keys: string[]) => {
 // the server, which is what promotes a destination.
 const MoreMenu = ({ items }: { items: NavItem[] }) => {
   const [open, setOpen] = React.useState(false);
+  // The page being viewed can be in here, and the bar would then mark nothing.
+  const holdsCurrent = items.some(matchesCurrentPath);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger className={classNames("gap-1", linkClasses, focusRing)}>
+      <PopoverTrigger className={classNames("gap-1", linkClasses, focusRing, holdsCurrent && currentClasses)}>
         More
         <ChevronDown className="size-5" aria-hidden />
       </PopoverTrigger>
-      <PopoverContent className="p-0">
+      <PopoverContent className="p-0" aria-label="More destinations">
         <Menu className="border-0 shadow-none">
           {items.map((item) => (
             <MenuItem key={item.key} asChild>
               <Link
                 href={item.href}
                 aria-current={matchesCurrentPath(item) ? "page" : undefined}
-                className="no-underline"
+                className="no-underline aria-[current=page]:font-bold"
                 onClick={() => {
                   item.onClick?.();
                   setOpen(false);
@@ -108,12 +112,13 @@ const CreateButton = ({ actions }: { actions: OmnibarShortcut[] }) => {
             <Button
               color="accent"
               aria-label="Create something else"
-              className={classNames(joined, "-ml-px rounded-l-none px-2")}
+              // Inset: the ring is the button's text colour, which the black bar would swallow.
+              className={classNames(joined, "-ml-px rounded-l-none px-2", insetRing, "focus-visible:outline-solid")}
             >
               <ChevronDown className="size-5" aria-hidden />
             </Button>
           </PopoverTrigger>
-          <PopoverContent align="end" className="p-0">
+          <PopoverContent align="end" className="p-0" aria-label="Create">
             <Menu className="border-0 shadow-none">
               {others.map((action) => (
                 <MenuItem key={action.id} asChild>
@@ -156,13 +161,21 @@ export const HeaderNav = ({
   return (
     <nav
       aria-label="Main"
-      className="hidden shrink-0 items-center gap-4 bg-black px-6 py-2 text-white lg:flex dark:text-foreground"
+      // h-16 is published to the page as --dashboard-header-height by the layout.
+      className="hidden h-16 shrink-0 items-center gap-4 bg-black px-6 text-white lg:flex dark:text-foreground"
     >
       <a href={homeHref} aria-label="Dashboard" className="flex shrink-0 no-underline">
-        <img src={logoMark} className="size-6 xl:hidden" alt="" />
-        <Logo className="hidden text-2xl xl:inline-block" />
+        <img src={logoMark} className="size-6 2xl:hidden" alt="" />
+        <Logo className="hidden text-2xl 2xl:inline-block" />
       </a>
-      <div ref={rowRef} className="flex h-10 min-w-0 flex-wrap overflow-hidden">
+      <div
+        ref={rowRef}
+        className="flex h-10 min-w-0 flex-wrap overflow-hidden"
+        // A clipped row can still be scrolled, by find-in-page for one, to its hidden lines.
+        onScroll={(event) => {
+          event.currentTarget.scrollTop = 0;
+        }}
+      >
         {links.map((item) => {
           const current = matchesCurrentPath(item);
           const hidden = wrapped.includes(item.key);
@@ -173,14 +186,13 @@ export const HeaderNav = ({
               href={item.href}
               prefetch="hover"
               aria-current={current ? "page" : undefined}
-              // A link on a clipped line is in the More menu instead.
-              {...(hidden && { "aria-hidden": true, tabIndex: -1 })}
               {...(item.onClick && { onClick: item.onClick })}
               className={classNames(
                 linkClasses,
                 insetRing,
-                // The bar marks the current page without relying on the accent colour alone.
-                current && "text-accent shadow-[inset_0_-0.125rem_0_var(--color-accent)]",
+                current && currentClasses,
+                // On a clipped line, so in More instead. Invisible, not unmounted: it is still measured.
+                hidden && "invisible",
               )}
             >
               {item.text}
@@ -189,7 +201,8 @@ export const HeaderNav = ({
         })}
       </div>
       {menuItems.length > 0 ? <MoreMenu items={menuItems} /> : null}
-      <div className="mx-auto max-w-xl min-w-56 flex-1 xl:min-w-80 2xl:min-w-96">
+      {/* One minimum at every width: a part that grew at a breakpoint would push links out as the window widened. */}
+      <div className="mx-auto max-w-xl min-w-56 flex-1">
         <OmnibarTrigger variant="field" onOpen={onOpenSearch} className="flex w-full" />
       </div>
       <CreateButton actions={actions} />

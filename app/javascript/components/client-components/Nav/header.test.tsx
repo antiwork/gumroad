@@ -12,10 +12,14 @@ import { LoggedInUserProvider, type LoggedInUser } from "$app/components/LoggedI
 vi.mock("@inertiajs/react", () => ({
   Link: ({
     children,
-    prefetch: _prefetch,
+    prefetch,
     method: _method,
     ...props
-  }: React.ComponentProps<"a"> & { prefetch?: unknown; method?: string }) => <a {...props}>{children}</a>,
+  }: React.ComponentProps<"a"> & { prefetch?: unknown; method?: string }) => (
+    <a data-prefetch={String(prefetch ?? false)} {...props}>
+      {children}
+    </a>
+  ),
   router: { on: () => () => undefined, visit: () => undefined },
 }));
 
@@ -34,6 +38,7 @@ beforeAll(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 const item = (key: string, text: string, extra: Partial<NavItem> = {}): NavItem => ({
@@ -197,10 +202,54 @@ describe("HeaderNav", () => {
       const { nav } = renderHeader();
 
       const clipped = nav.querySelector('[data-key="customers"]');
-      expect(clipped?.getAttribute("aria-hidden")).toBe("true");
-      expect(clipped?.getAttribute("tabindex")).toBe("-1");
+      // Invisible leaves the tab order, the accessibility tree and find-in-page, and is still measured.
+      expect(clipped?.className.split(" ")).toContain("invisible");
       fireEvent.click(within(nav).getByRole("button", { name: "More" }));
       expect(menuItems()).toEqual(["Sales", "Workflows", "Community"]);
+    });
+  });
+
+  describe("More, beyond its list", () => {
+    it("is marked, with its row, when it holds the page being viewed", () => {
+      const { nav } = renderHeader({}, "/workflows");
+
+      const trigger = within(nav).getByRole("button", { name: "More" });
+      expect(trigger.className).toContain("text-accent");
+      fireEvent.click(trigger);
+      expect(screen.getByRole("menuitem", { name: "Workflows" }).getAttribute("aria-current")).toBe("page");
+    });
+
+    // A prefetched visit never reaches the server, which is what promotes a destination out of More.
+    it("leaves prefetching to the bar's links", () => {
+      const { nav } = renderHeader();
+
+      expect(within(nav).getByRole("link", { name: "Products" }).dataset.prefetch).toBe("hover");
+      fireEvent.click(within(nav).getByRole("button", { name: "More" }));
+      expect(screen.getByRole("menuitem", { name: "Workflows" }).dataset.prefetch).toBe("false");
+    });
+
+    it("takes in a link when the bar is resized and it no longer fits", () => {
+      const resize: { run: () => void } = { run: () => undefined };
+      vi.stubGlobal(
+        "ResizeObserver",
+        class {
+          constructor(callback: () => void) {
+            resize.run = callback;
+          }
+          observe() {}
+          disconnect() {}
+        },
+      );
+      let clippedKey = "";
+      vi.spyOn(HTMLElement.prototype, "offsetTop", "get").mockImplementation(function (this: HTMLElement) {
+        return this.dataset.key === clippedKey ? 40 : 0;
+      });
+      const { nav } = renderHeader();
+
+      clippedKey = "customers";
+      act(() => resize.run());
+
+      expect(nav.querySelector('[data-key="customers"]')?.className.split(" ")).toContain("invisible");
     });
   });
 
@@ -220,6 +269,15 @@ describe("HeaderNav", () => {
       expect(screen.getByRole("menuitem", { name: "New email" }).getAttribute("href")).toBe("/emails/new");
     });
 
+    // PopoverTrigger strips the outline from its child; the arrow puts one back.
+    it("shows a focus ring on the arrow", () => {
+      const { nav } = renderHeader();
+
+      const classes = within(nav).getByRole("button", { name: "Create something else" }).className.split(" ");
+      expect(classes).toContain("focus-visible:outline-solid");
+      expect(classes).not.toContain("focus-visible:outline-none");
+    });
+
     it("has no arrow when there is one thing to create, and is absent when there is none", () => {
       const { nav } = renderHeader({ actions: actions.slice(1, 2) });
       expect(within(nav).getByRole("link", { name: "New email" })).toBeTruthy();
@@ -237,6 +295,16 @@ describe("HeaderNav", () => {
     fireEvent.click(within(nav).getByRole("button", { name: "Gum account" }));
 
     expect(menuItems()).toEqual(["Settings", "Teams", "Help", "Logout"]);
+  });
+
+  // The nav outlives the visit, so an open menu would sit over the page it led to.
+  it("closes the account menu once a row is chosen", () => {
+    const { nav } = renderHeader();
+
+    fireEvent.click(within(nav).getByRole("button", { name: "Gum account" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Settings" }));
+
+    expect(screen.queryByRole("menuitem")).toBeNull();
   });
 });
 
