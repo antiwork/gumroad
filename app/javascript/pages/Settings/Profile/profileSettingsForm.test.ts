@@ -89,6 +89,12 @@ describe("profile settings synchronization", () => {
     expect(profileThemeColors("#000000", "#ff90e8")).toMatchObject({ "--border-alpha": "0.35" });
   });
 
+  // The live store gets this from the server; without it the preview's button would be a bare label.
+  it("edges the preview's accent button when its fill matches the background", () => {
+    expect(profileThemeColors("#ffffff", "#ffffff")).toMatchObject({ "--accent-edge": "148 148 148" });
+    expect(profileThemeColors("#ffffff", "#ff90e8")).toMatchObject({ "--accent-edge": "255 144 232" });
+  });
+
   it("sets the preview's field border from the store's own background", () => {
     expect(profileThemeColors("#ffffff", "#ff90e8")).toMatchObject({ "--control-alpha": "0.45" });
     expect(profileThemeColors("#3b82f6", "#ff90e8")).toMatchObject({ "--control-alpha": "0.55" });

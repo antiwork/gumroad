@@ -44,21 +44,31 @@
     color: full-color(color);
   }
 
-  // The emails' heading scale: 36, 24, 18 and 16px, bold, tighter at the top.
+  // The emails' heading scale: 36, 24 and 18px in bold, tighter at the top. h4 and h5 are
+  // body-sized and hold body copy across the app, so they stay regular.
   $heading-sizes: (2.25rem, 1.5rem, 1.125rem, 1rem, 0.875rem);
   $heading-line-heights: (1.2, 1.3, 1.4, 1.5, 1.4);
   $heading-tracking: (-0.02em, -0.01em, normal, normal, normal);
+  $heading-weights: (bold, bold, bold, normal, normal);
   @for $i from 1 through 5 {
     h#{$i} {
       font-size: nth($heading-sizes, $i);
       line-height: nth($heading-line-heights, $i);
       letter-spacing: nth($heading-tracking, $i);
-      font-weight: bold;
+      font-weight: nth($heading-weights, $i);
     }
   }
 
-  // The marketing pages set their own display type and keep the former scale.
+  // The marketing pages and the blog set their own display type, corners and rules, and keep
+  // the former ones: 4px, and a bare border in the text colour.
   .marketing-type {
+    --radius: 0.25rem;
+    --radius-sm: 0.25rem;
+
+    * {
+      border-color: currentColor;
+    }
+
     @for $i from 1 through 5 {
       h#{$i} {
         @include font-size(6 - $i);

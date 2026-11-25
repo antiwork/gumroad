@@ -92,7 +92,7 @@ export const ClientNavLink = ({
       title={text}
       {...(onClick && { onClick })}
       className={classNames(
-        "flex items-center truncate border-y border-white/20 border-b-transparent px-6 py-4 no-underline last:border-b-white/20 hover:text-accent focus-visible:-outline-offset-2 focus-visible:outline-current dark:border-foreground/20 dark:border-b-transparent dark:last:border-b-foreground/20",
+        "flex items-center truncate border-y border-white/20 border-b-transparent px-6 py-4 no-underline [--focus-halo:transparent] last:border-b-white/20 hover:text-accent focus-visible:-outline-offset-2 focus-visible:outline-current dark:border-foreground/20 dark:border-b-transparent dark:last:border-b-foreground/20",
         { "text-accent shadow-[inset_0.25rem_0_0_var(--color-accent)]": !!ariaCurrent },
       )}
     >
@@ -348,7 +348,7 @@ const EverythingElse = ({ children }: { children: React.ReactNode }) => {
           // double rule against the next row; the last overflow item (or this button, when closed)
           // still needs an explicit bottom edge because the following node is a sibling, not a
           // last-child row.
-          "box-border flex w-full cursor-pointer items-center truncate border-y border-white/20 border-b-transparent px-6 py-4 text-left all-unset hover:text-accent focus-visible:-outline-offset-2 focus-visible:outline-current dark:border-foreground/20 dark:border-b-transparent",
+          "box-border flex w-full cursor-pointer items-center truncate border-y border-white/20 border-b-transparent px-6 py-4 text-left [--focus-halo:transparent] all-unset hover:text-accent focus-visible:-outline-offset-2 focus-visible:outline-current dark:border-foreground/20 dark:border-b-transparent",
           !open && "border-b-white/20 dark:border-b-foreground/20",
         )}
       >

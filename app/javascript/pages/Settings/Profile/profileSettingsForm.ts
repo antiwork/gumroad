@@ -1,6 +1,7 @@
 import {
   getAccessibleAccent,
   getContrastColor,
+  getStoreAccentEdge,
   getStoreBorderAlpha,
   getStoreControlAlpha,
   getStorePageBackground,
@@ -27,6 +28,7 @@ export const profileThemeColors = (backgroundColor: string, highlightColor: stri
   return {
     "--accent": hexToRgb(highlightColor),
     "--accent-with-text": hexToRgb(accentColors.accent),
+    "--accent-edge": hexToRgb(getStoreAccentEdge(accentColors.accent, backgroundColor)),
     "--contrast-accent": hexToRgb(accentColors.text),
     "--filled": hexToRgb(backgroundColor),
     "--color": hexToRgb(textColor),

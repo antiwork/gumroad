@@ -20,7 +20,8 @@ const tabsVariants = cva("", {
 const tabVariants = cva("", {
   variants: {
     variant: {
-      pills: "shrink-0 rounded-full border-transparent px-3 py-2 hover:border-border focus-visible:-outline-offset-2",
+      pills:
+        "shrink-0 rounded-full border-transparent px-3 py-2 hover:border-border focus-visible:-outline-offset-2 [--focus-halo:transparent]",
       // `relative` keeps a containing block for children positioned inside a tile (the cover uploader's input).
       buttons:
         "relative flex items-start gap-3 rounded-sm border-control px-4 py-3 text-left not-disabled:hover:bg-active-bg",
@@ -34,7 +35,7 @@ const tabVariants = cva("", {
     {
       variant: "pills",
       active: true,
-      className: "border-control text-foreground",
+      className: "border-control text-foreground hover:border-control",
     },
     {
       variant: "buttons",

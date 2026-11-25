@@ -483,7 +483,7 @@ export default function PagesEdit() {
                 <ImageUploadSettingsContext.Provider value={canEdit ? imageUploadSettings : null}>
                   <RichTextEditor
                     id="page-content"
-                    className="textarea block w-full rounded border border-control bg-background px-4 py-3 text-foreground placeholder:text-muted focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-indicator"
+                    className="textarea block w-full rounded border border-control bg-background px-4 py-3 text-foreground placeholder:text-muted focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-indicator focus-within:outline-solid"
                     ariaLabel="Page content"
                     placeholder="Write your page..."
                     initialValue={page.content}

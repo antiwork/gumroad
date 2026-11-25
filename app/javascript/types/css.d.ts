@@ -6,6 +6,7 @@ declare module "react" {
     "--accent"?: string;
     "--contrast-accent"?: string;
     "--accent-with-text"?: string;
+    "--accent-edge"?: string;
     "--filled"?: string;
     "--contrast-filled"?: string;
     "--primary"?: string;

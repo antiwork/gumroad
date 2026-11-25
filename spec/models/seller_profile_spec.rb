@@ -148,6 +148,15 @@ describe SellerProfile do
 
       subject.update!(background_color: "#FFFFFF")
       expect(subject.custom_styles).to include("--filled: 255 255 255").and include("--body-bg: #f4f4f0").and include("body{background-color:#f4f4f0")
+
+      subject.update_column(:background_color, "#fff")
+      expect(subject.page_background_color).to eq("#f4f4f0")
+    end
+
+    it "keeps an embed or overlay on the store's own colour" do
+      subject.update!(background_color: "#ffffff")
+
+      expect(subject.custom_styles).to include("body.iframe{--body-bg: #ffffff;background-color:#ffffff}")
     end
 
     it "draws borders as a hairline of the store's text colour" do
@@ -162,7 +171,7 @@ describe SellerProfile do
 
       subject.update!(background_color: "#3b82f6", highlight_color: "#3b82f6")
       expect(subject.custom_styles).to include("--control-alpha: 0.55")
-      expect(subject.custom_styles).not_to include("--accent-edge: 59 130 246")
+      expect(subject.custom_styles).to include("--accent-edge: 26 59 111")
     end
 
     it "keeps cached CSS until the theme update commits" do

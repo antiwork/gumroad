@@ -585,9 +585,9 @@ describe("Product Edit Rich Text Editor", type: :system, js: true) do
       visit edit_link_path(product) + "/content"
 
       expect(page).to have_selector(".tiptap__raw")
-      expect(page).to_not have_selector(".outline-accent .tiptap__raw")
+      expect(page).to_not have_selector(".outline-indicator .tiptap__raw")
       find("[aria-label='Content editor'] .tiptap__raw").click
-      expect(page).to have_selector(".outline-accent .tiptap__raw")
+      expect(page).to have_selector(".outline-indicator .tiptap__raw")
       send_keys(:backspace)
       expect(page).to_not have_selector(".tiptap__raw")
       expect(page).to have_embed(name: "Workbook")

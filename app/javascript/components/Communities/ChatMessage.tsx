@@ -298,7 +298,7 @@ const MessageEditor = ({ content: initialContent, isSaving, onCancel, onSave }: 
       <Textarea
         ref={textareaRef}
         placeholder="Edit message"
-        className="max-h-[300px] min-h-[80px] w-full resize-none overflow-y-auto border-none p-2 pb-14 text-sm outline-hidden"
+        className="max-h-[300px] min-h-[80px] w-full resize-none overflow-y-auto border-none p-2 pb-14 text-sm outline-hidden [--focus-halo:transparent]"
         value={editedContent}
         onChange={(e) => {
           setEditedContent(e.target.value);

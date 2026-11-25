@@ -205,7 +205,15 @@ class SellerProfile < ApplicationRecord
   # a page, as in the app and the emails. Any other background is the page itself.
   # Mirrored by getStorePageBackground in color.ts.
   def page_background_color
-    background_color.to_s.casecmp?(STOCK_BACKGROUND) ? STOCK_PAGE_BACKGROUND : background_color
+    HexColorValidator.normalize(background_color).to_s.casecmp?(STOCK_BACKGROUND) ? STOCK_PAGE_BACKGROUND : background_color
+  end
+
+  # custom_styles sits a white store on the web's tan page. An email has no page behind its body,
+  # so the body stays the store's own colour.
+  def email_page_background_css
+    return "" unless HexColorValidator.safe_for_css?(background_color)
+
+    "body { background-color: #{background_color}; }"
   end
 
   def font_css_source
@@ -217,7 +225,7 @@ class SellerProfile < ApplicationRecord
   def custom_style_cache_name
     # v5 invalidated CSS compiled before persisted style values were checked as a complete string.
     # Without the bump, a previously cached injection could outlive a repaired database row.
-    "users/#{seller.id}/custom_styles_v5"
+    "users/#{seller_id}/custom_styles_v5"
   end
 
   def validate_json_data

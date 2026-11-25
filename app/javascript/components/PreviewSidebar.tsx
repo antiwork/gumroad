@@ -137,7 +137,7 @@ export const PreviewChrome = ({ children, ...props }: PreviewChromeProps) => (
         flex column, and `overflow-hidden` (needed to clip children to the rounded corners)
         zeroes a flex item's automatic minimum size — without shrink-0 the chrome would compress
         to the viewport and silently clip tall previews instead of letting the sidebar scroll. */}
-    <div className="flex shrink-0 flex-col overflow-hidden rounded border border-border bg-background">
+    <div className="flex shrink-0 flex-col overflow-hidden rounded-(--radius-box) border border-border bg-background">
       {props.variant === "email" ? (
         // Email headers read left-to-right like an email client, not centered like a browser
         // tab, and there is no open-in-new-tab arrow — an email has no URL to open.

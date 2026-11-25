@@ -227,7 +227,7 @@ export const PriceCheckerCard = () => {
           />
         </div>
       ) : hasOk && data.status === "ok" ? (
-        <div className="grid min-h-64 grid-rows-[auto_1fr_auto] gap-3 rounded-sm border border-border bg-background p-4 xl:min-h-80">
+        <div className="grid min-h-64 grid-rows-[auto_1fr_auto] gap-3 rounded-(--radius-box) border border-border bg-background p-4 xl:min-h-80">
           {chartHeaderRow}
           <DistributionChart
             histogram={data.histogram}

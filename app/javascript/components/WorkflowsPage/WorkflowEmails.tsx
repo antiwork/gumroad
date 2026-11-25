@@ -532,7 +532,7 @@ const EmailRow = ({
             </Fieldset>
             <RichTextEditor
               id={email.id}
-              className="textarea block w-full rounded border border-control bg-background px-4 py-3 text-foreground placeholder:text-muted focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-indicator"
+              className="textarea block w-full rounded border border-control bg-background px-4 py-3 text-foreground placeholder:text-muted focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-indicator focus-within:outline-solid"
               ariaLabel="Email message"
               placeholder="Write a personalized message..."
               extensions={[...(isAbandonedCartWorkflow ? [AbandonedCartProductList] : [])]}
@@ -594,7 +594,7 @@ const EmailPreview = ({
           {`${email.delayed_delivery_time_period}${email.delayed_delivery_time_duration === 1 ? "" : "s"} after ${WORKFLOW_EMAILS_LABELS[workflowTrigger]}`}
         </div>
       </Separator>
-      <div className="grid gap-4 rounded-sm border border-border bg-background p-4">
+      <div className="grid gap-4 rounded-(--radius-box) border border-border bg-background p-4">
         <h3>{email.name.trim() === "" ? "Untitled" : email.name}</h3>
         <EditorContent className="rich-text" editor={editor} />
         {emailFiles.length > 0 ? <Button color="primary">View content</Button> : null}

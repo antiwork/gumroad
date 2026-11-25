@@ -266,7 +266,7 @@ export default function BundlesContentEdit() {
                 </CartItemList>
               ) : null}
               <div
-                className="grid gap-4 rounded-sm border border-border bg-background p-4"
+                className="grid gap-4 rounded-(--radius-box) border border-border bg-background p-4"
                 aria-label="Product selector"
               >
                 <InputGroup>

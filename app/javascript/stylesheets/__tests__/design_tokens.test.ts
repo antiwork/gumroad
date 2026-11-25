@@ -94,6 +94,7 @@ describe("design tokens", () => {
   it("draws focus and selection rings in the text colour unless a page sets its own", () => {
     expect(tailwind).toContain("--color-indicator: rgb(var(--indicator, var(--color)));");
     expect(tailwind).toMatch(/:where\(:focus-visible\)\s*\{\s*outline:\s*2px solid var\(--color-foreground\);/u);
+    expect(tailwind).toContain("box-shadow: 0 0 0 2px var(--focus-halo, var(--color-background));");
   });
 
   it("has no hard offset shadow and no hover lift by default", () => {
@@ -138,7 +139,18 @@ describe("design tokens", () => {
     expect(heading(3)).toMatch(/font-size:\s*1\.125rem;[\s\S]*font-weight:\s*bold/u);
   });
 
+  // h4 is body-sized and holds confirmation sentences, totals labels and seller descriptions.
+  it("leaves body-sized headings at the regular weight", () => {
+    expect(heading(4)).toMatch(/font-size:\s*1rem;[\s\S]*font-weight:\s*normal/u);
+    expect(heading(5)).toMatch(/font-weight:\s*normal/u);
+  });
+
   it("leaves the marketing pages' headings on their own scale", () => {
     expect(design).toMatch(/\.marketing-type h1 \{[^}]*font-size:\s*2\.5rem;[^}]*font-weight:\s*normal/u);
+  });
+
+  it("leaves the marketing pages' corners and bare borders as they were", () => {
+    expect(design).toMatch(/\.marketing-type \{[^}]*--radius:\s*0\.25rem;[^}]*--radius-sm:\s*0\.25rem/u);
+    expect(design).toMatch(/\.marketing-type \* \{[^}]*border-color:\s*currentColor/u);
   });
 });

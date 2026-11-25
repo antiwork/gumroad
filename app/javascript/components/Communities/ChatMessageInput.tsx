@@ -53,7 +53,7 @@ export const ChatMessageInput = React.forwardRef<HTMLTextAreaElement, Props>(
       >
         <Textarea
           ref={ref}
-          className="resize-none border-none outline-none"
+          className="resize-none border-none outline-none [--focus-halo:transparent]"
           rows={1}
           placeholder="Type a message"
           value={draft?.content ?? ""}

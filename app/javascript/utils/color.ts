@@ -143,7 +143,7 @@ const STOCK_STORE_BACKGROUND = "#ffffff";
 const STOCK_STORE_PAGE_BACKGROUND = "#f4f4f0";
 
 export const getStorePageBackground = (backgroundColor: string) =>
-  backgroundColor.toLowerCase() === STOCK_STORE_BACKGROUND ? STOCK_STORE_PAGE_BACKGROUND : backgroundColor;
+  hexToRgb(backgroundColor) === hexToRgb(STOCK_STORE_BACKGROUND) ? STOCK_STORE_PAGE_BACKGROUND : backgroundColor;
 
 export const getStoreBorderAlpha = (backgroundColor: string) =>
   getContrastColor(backgroundColor) === "#FFFFFF"
@@ -171,6 +171,30 @@ export const getStoreControlAlpha = (backgroundColor: string) => {
   }
 
   return "1.00";
+};
+
+// Must match ContrastColor.visible_indicator, which the server uses for --accent-edge: the accent
+// button's border is its own fill unless that has vanished into the store's background, and then
+// the fill shifted in brightness until it reaches 3:1.
+const INDICATOR_VISIBILITY_FLOOR = 1.5;
+const BACKGROUND_LUMINANCE_MIDPOINT = 0.2159;
+
+export const getStoreAccentEdge = (accent: string, backgroundColor: string) => {
+  const rgb = parseHex(accent);
+  const background = parseHex(backgroundColor);
+  if (rgb === null || background === null) return BLACK;
+  if (ratioBetween(rgb, background) >= INDICATOR_VISIBILITY_FLOOR) return toHex(rgb);
+
+  const towardBlack = relativeLuminance(background) > BACKGROUND_LUMINANCE_MIDPOINT;
+  let low = 0;
+  let high = 255;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    if (ratioBetween(shiftBrightness(rgb, towardBlack, middle), background) >= WCAG_AA_NON_TEXT) high = middle;
+    else low = middle + 1;
+  }
+
+  return toHex(shiftBrightness(rgb, towardBlack, low));
 };
 
 /**

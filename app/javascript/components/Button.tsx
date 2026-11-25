@@ -24,7 +24,7 @@ export const brandNames = [
 
 export type BrandName = (typeof brandNames)[number];
 
-export const buttonVariants = cva(
+const variants = cva(
   // The lift and its hard shadow are a store opt-in: --button-hover-offset is 0 unless a store
   // sets it. The shadow is pinned to black because currentColor turns near-white in dark mode.
   // lift-halo has to grow by exactly the distance the lift moves, so it tracks the store's offset.
@@ -60,7 +60,7 @@ export const buttonVariants = cva(
         facebook: "bg-[#4267b2] text-white border-[#4267b2]",
         twitter: "bg-black text-white border-button",
         apple: "bg-black text-white border-button",
-        android: "bg-[#142f40] text-white",
+        android: "bg-[#142f40] text-white border-button",
         kindle: "bg-[#f3a642] text-black border-[#f3a642]",
         zoom: "bg-[#0b5cff] text-white border-[#0b5cff]",
         google: "bg-[#1967d2] text-white border-[#1967d2]",
@@ -119,13 +119,17 @@ export const buttonVariants = cva(
   },
 );
 
+// cva joins class strings without resolving conflicts, so a variant's border colour would sit
+// beside the base's transparent one and stylesheet order would pick the winner.
+export const buttonVariants = (props?: Parameters<typeof variants>[0]) => classNames(variants(props));
+
 type ButtonVariation = {
   color?: ButtonColor | BrandName | undefined;
   outline?: boolean | undefined;
 };
 
 export interface ButtonProps extends Omit<React.ComponentPropsWithoutRef<"button">, "color">, ButtonVariation {
-  size?: VariantProps<typeof buttonVariants>["size"];
+  size?: VariantProps<typeof variants>["size"];
   asChild?: boolean;
 }
 
@@ -150,7 +154,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 Button.displayName = "Button";
 
 export interface NavigationButtonProps extends Omit<React.ComponentPropsWithoutRef<"a">, "color">, ButtonVariation {
-  size?: VariantProps<typeof buttonVariants>["size"];
+  size?: VariantProps<typeof variants>["size"];
   disabled?: boolean | undefined;
 }
 

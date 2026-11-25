@@ -125,13 +125,14 @@
 /*
  * `all-unset` (and Radix's Slot, which copies it onto triggers) strips the browser's focus ring.
  * This gives every control a ring; it follows the utilities, so it wins the zero-specificity tie
- * with `all-unset`, and any focus utility on an element still beats it. The halo keeps the ring
- * visible on a surface of the ring's own colour.
+ * with `all-unset`, and any outline utility on an element still beats it. The halo keeps the ring
+ * visible on a surface of the ring's own colour; an inset or wrapper-drawn ring turns it off with
+ * `--focus-halo: transparent`.
  */
 :where(:focus-visible) {
   outline: 2px solid var(--color-foreground);
   outline-offset: 2px;
-  box-shadow: 0 0 0 2px var(--color-background);
+  box-shadow: 0 0 0 2px var(--focus-halo, var(--color-background));
 }
 
 /*

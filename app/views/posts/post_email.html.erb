@@ -7,6 +7,7 @@
     <title>{{subject}}</title>
     <%= render("layouts/mailers/head") %>
     <style><%= @post.user.seller_profile.custom_styles.to_s.html_safe %></style>
+    <style><%= @post.user.seller_profile.email_page_background_css.html_safe %></style>
     <%= vite_entrypoint_stylesheet_tag "email" %>
     <%# Outlook on Windows resolves neither `inherit` nor `currentColor`, so a post's links and
         outline buttons would be blue and unbordered there. This names the theme's text colour

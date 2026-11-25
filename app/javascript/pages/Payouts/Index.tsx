@@ -696,7 +696,7 @@ export default function PayoutsIndex() {
               </Fieldset>
               <Fieldset>
                 <FieldsetTitle>Payout details</FieldsetTitle>
-                <div className="rounded-sm border border-border bg-background not-first:border-t">
+                <div className="rounded-(--radius-box) border border-border bg-background not-first:border-t">
                   <div className="grid gap-4 p-4">
                     <div className="grid grid-flow-col justify-between gap-4">
                       <h4 className="inline-flex flex-wrap gap-2">Sent to</h4>

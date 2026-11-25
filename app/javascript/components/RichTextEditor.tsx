@@ -399,7 +399,7 @@ export const useRichTextEditor = ({
     editorProps: {
       attributes: {
         class: classNames(
-          "focus-within:outline-none",
+          "focus-within:outline-none [--focus-halo:transparent]",
           editable && "min-h-full whitespace-break-spaces rounded-t-none",
           className,
         ),

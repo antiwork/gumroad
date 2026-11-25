@@ -24,7 +24,7 @@ module Onetime
           if dry_run
             reset[column] += profiles.count
           else
-            cache_names = profiles.includes(:seller).map(&:custom_style_cache_name)
+            cache_names = profiles.map(&:custom_style_cache_name)
             reset[column] += profiles.update_all(column => nil, updated_at: Time.current)
             # update_all skips the callback that clears the store's compiled CSS.
             cache_names.each { Rails.cache.delete(_1) }

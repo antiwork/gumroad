@@ -10,7 +10,7 @@ type Props = {
 export function BlogLayout({ children }: Props) {
   return (
     <div className="flex flex-1 flex-col bg-white text-black">
-      <div className="flex flex-1 flex-col font-['ABC_Favorit'] text-base leading-relaxed font-normal tracking-tight">
+      <div className="marketing-type flex flex-1 flex-col font-['ABC_Favorit'] text-base leading-relaxed font-normal tracking-tight">
         <HomeNav />
         <div className="flex-1 overflow-hidden">{children}</div>
       </div>

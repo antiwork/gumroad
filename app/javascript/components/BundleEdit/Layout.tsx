@@ -5,6 +5,7 @@ import * as React from "react";
 import {
   getAccessibleAccent,
   getContrastColor,
+  getStoreAccentEdge,
   getStoreBorderAlpha,
   getStoreControlAlpha,
   getStorePageBackground,
@@ -118,6 +119,7 @@ export const BundleEditLayout = ({
     ? {
         "--accent": hexToRgb(currentSeller.profileHighlightColor),
         "--accent-with-text": hexToRgb(accentColors.accent),
+        "--accent-edge": hexToRgb(getStoreAccentEdge(accentColors.accent, currentSeller.profileBackgroundColor)),
         "--contrast-accent": hexToRgb(accentColors.text),
         "--filled": hexToRgb(currentSeller.profileBackgroundColor),
         "--color": hexToRgb(getContrastColor(currentSeller.profileBackgroundColor)),

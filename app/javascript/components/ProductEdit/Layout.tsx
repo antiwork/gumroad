@@ -7,6 +7,7 @@ import { classNames } from "$app/utils/classNames";
 import {
   getAccessibleAccent,
   getContrastColor,
+  getStoreAccentEdge,
   getStoreBorderAlpha,
   getStoreControlAlpha,
   getStorePageBackground,
@@ -168,6 +169,7 @@ export const Layout = ({
       ? {
           "--accent": hexToRgb(currentSeller.profileHighlightColor),
           "--accent-with-text": hexToRgb(accentColors.accent),
+          "--accent-edge": hexToRgb(getStoreAccentEdge(accentColors.accent, currentSeller.profileBackgroundColor)),
           "--contrast-accent": hexToRgb(accentColors.text),
           "--filled": hexToRgb(currentSeller.profileBackgroundColor),
           "--color": hexToRgb(getContrastColor(currentSeller.profileBackgroundColor)),

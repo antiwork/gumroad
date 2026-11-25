@@ -36,3 +36,9 @@ body {
   color: <%= text_color_on_background %>;
   font-family: <%= font_family %>;
 }
+
+// An embed or overlay sits inside someone else's page, so it stays the store's own colour.
+body.iframe {
+  --body-bg: <%= background_color %>;
+  background-color: <%= background_color %>;
+}

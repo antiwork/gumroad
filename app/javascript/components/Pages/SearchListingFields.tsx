@@ -51,7 +51,10 @@ export const SearchListingFields = ({
         <h3 id={`${uid}-heading`}>Search and sharing</h3>
         <p className="text-sm text-muted">Set what search engines and shared links show for this page.</p>
       </header>
-      <div className="grid gap-1 rounded border border-border bg-background p-4" aria-label="Search listing preview">
+      <div
+        className="grid gap-1 rounded-(--radius-box) border border-border bg-background p-4"
+        aria-label="Search listing preview"
+      >
         <span className="truncate text-sm text-muted">{url.replace(/^https?:\/\//u, "")}</span>
         <span className="text-lg leading-snug">{listingTitle}</span>
         {listingDescription ? (

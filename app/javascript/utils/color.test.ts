@@ -6,6 +6,7 @@ import {
   getAccessibleAccent,
   getContrastColor,
   getContrastRatio,
+  getStoreAccentEdge,
   getStoreBorderAlpha,
   getStoreControlAlpha,
   getStorePageBackground,
@@ -67,11 +68,37 @@ describe("getStoreControlAlpha", () => {
   });
 });
 
+// ContrastColor.visible_indicator is the server's copy; spec/lib/contrast_color_spec.rb pins the
+// same values.
+describe("getStoreAccentEdge", () => {
+  it("is the fill itself when a buyer can see it on the background", () => {
+    expect(getStoreAccentEdge("#ff90e8", "#ffffff")).toBe("#ff90e8");
+    expect(getStoreAccentEdge("#d2d2d2", "#ffffff")).toBe("#d2d2d2");
+  });
+
+  it("darkens on a light background and lightens on a dark one once the fill has vanished", () => {
+    expect(getStoreAccentEdge("#f0f0f0", "#ffffff")).toBe("#949494");
+    expect(getStoreAccentEdge("#111111", "#000000")).toBe("#5a5a5a");
+    expect(getStoreAccentEdge("#3473da", "#3b82f6")).toBe("#1a3b6f");
+  });
+
+  it("reaches 3:1 for a fill identical to the background", () => {
+    for (const color of ["#ffffff", "#f8efe3", "#000000"]) {
+      expect(getContrastRatio(getStoreAccentEdge(color, color), color)).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it("falls back to black on a value that isn't a hex colour", () => {
+    expect(getStoreAccentEdge("red", "#ffffff")).toBe("#000000");
+  });
+});
+
 // SellerProfile#page_background_color is the server's copy.
 describe("getStorePageBackground", () => {
   it("puts a white store on the stock page colour", () => {
     expect(getStorePageBackground("#ffffff")).toBe("#f4f4f0");
     expect(getStorePageBackground("#FFFFFF")).toBe("#f4f4f0");
+    expect(getStorePageBackground("#fff")).toBe("#f4f4f0");
   });
 
   it("leaves any other background as the page itself", () => {

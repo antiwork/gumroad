@@ -3,7 +3,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { Button } from "$app/components/Button";
+import { Button, buttonVariants } from "$app/components/Button";
 
 afterEach(cleanup);
 
@@ -86,6 +86,18 @@ describe("Button borders", () => {
     expect(classes("Accent")).toContain("border-[rgb(var(--accent-edge,var(--accent-with-text)))]");
     expect(classes("Outline accent")).toContain("border-button");
   });
+
+  // Labels and links styled as buttons take the class string directly, with no Button to merge it.
+  it.each([{}, { color: "accent" as const }, { color: "primary" as const }, { color: "black" as const }])(
+    "gives buttonVariants(%o) one border colour",
+    (props) => {
+      const borderColours = buttonVariants(props)
+        .split(" ")
+        .filter((name) => /^border-(?:transparent|button|\[)/u.test(name));
+
+      expect(borderColours).toHaveLength(1);
+    },
+  );
 
   it("outlines an unfilled button", () => {
     render(
