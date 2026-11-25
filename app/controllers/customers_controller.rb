@@ -76,6 +76,7 @@ class CustomersController < Sellers::BaseController
       created_before: params[:created_before],
       country: params[:country],
       active_customers_only: ActiveModel::Type::Boolean.new.cast(params[:active_customers_only]),
+      failure_pending_only: ActiveModel::Type::Boolean.new.cast(params[:failure_pending_only]),
       minimum_license_uses: Feature.active?(:license_uses_sales_filter, current_seller) ? params[:minimum_license_uses] : nil,
     )
     customers_presenter = CustomersPresenter.new(
@@ -150,7 +151,7 @@ class CustomersController < Sellers::BaseController
       false
     end
 
-    def fetch_sales(query: nil, sort: nil, products: nil, variants: nil, excluded_products: nil, excluded_variants: nil, minimum_amount_cents: nil, maximum_amount_cents: nil, created_after: nil, created_before: nil, country: nil, active_customers_only: false, minimum_license_uses: nil)
+    def fetch_sales(query: nil, sort: nil, products: nil, variants: nil, excluded_products: nil, excluded_variants: nil, minimum_amount_cents: nil, maximum_amount_cents: nil, created_after: nil, created_before: nil, country: nil, active_customers_only: false, failure_pending_only: false, minimum_license_uses: nil)
       search_options = {
         seller: current_seller,
         country: Compliance::Countries.historical_names(country || params[:bought_from]).presence,
@@ -178,6 +179,8 @@ class CustomersController < Sellers::BaseController
         search_options[:exclude_refunded_except_subscriptions] = true
         search_options[:exclude_unreversed_chargedback] = true
       end
+
+      search_options[:subscription_ids] = Subscription.pending_failure_ids_for(current_seller) if failure_pending_only
 
       search_options[:price_greater_than] = get_usd_cents(current_seller.currency_type, minimum_amount_cents) if numeric_amount?(minimum_amount_cents)
       search_options[:price_less_than] = get_usd_cents(current_seller.currency_type, maximum_amount_cents) if numeric_amount?(maximum_amount_cents)

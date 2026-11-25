@@ -317,6 +317,18 @@ describe PurchaseSearchService do
       expect(get_records(license_uses_greater_than_or_equal_to: 0)).not_to include(purchase_without_license)
     end
 
+    it "can filter by subscription ids" do
+      subscription_1 = create(:membership_purchase).subscription
+      subscription_2 = create(:membership_purchase).subscription
+      purchase_1 = subscription_1.original_purchase
+      purchase_2 = subscription_2.original_purchase
+      index_model_records(Purchase)
+
+      expect(get_records(subscription_ids: [subscription_1.id])).to match_array([purchase_1])
+      expect(get_records(subscription_ids: [subscription_1.id, subscription_2.id])).to match_array([purchase_1, purchase_2])
+      expect(get_records(subscription_ids: [])).to be_empty
+    end
+
     it "can filter by date ranges" do
       travel_to(Time.current)
 

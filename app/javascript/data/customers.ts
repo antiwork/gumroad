@@ -145,6 +145,7 @@ export type Query = {
   createdBefore: Date | null;
   country: string | null;
   activeCustomersOnly: boolean;
+  failurePendingOnly: boolean;
   minimumLicenseUses: number | null;
 };
 
@@ -162,6 +163,7 @@ export const getPagedCustomers = ({
   createdBefore,
   country,
   activeCustomersOnly,
+  failurePendingOnly,
   minimumLicenseUses,
 }: Query) => {
   const abort = new AbortController();
@@ -182,6 +184,7 @@ export const getPagedCustomers = ({
       created_before: createdBefore,
       country,
       active_customers_only: activeCustomersOnly,
+      failure_pending_only: failurePendingOnly,
       minimum_license_uses: minimumLicenseUses,
     }),
     abortSignal: abort.signal,

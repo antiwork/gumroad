@@ -184,6 +184,33 @@ describe CustomersController, :vcr, type: :controller, inertia: true do
       expect(response.parsed_body.deep_symbolize_keys[:customers].size).to eq(3)
     end
 
+    describe "failure pending filter" do
+      let(:membership_product) { create(:membership_product, user: seller) }
+      let!(:failing_subscription) do
+        create(:membership_purchase, link: membership_product, seller:).subscription.tap do |subscription|
+          travel(1.minute) { create(:membership_purchase, link: membership_product, seller:, subscription:, is_original_subscription_purchase: false, purchase_state: "failed") }
+        end
+      end
+
+      before { index_model_records(Purchase) }
+
+      it "returns only memberships inside the payment retry window" do
+        get :paged, params: { page: 1, failure_pending_only: "true" }
+
+        expect(response).to be_successful
+        body = response.parsed_body.deep_symbolize_keys
+        expect(body[:customers].map { _1[:id] }).to eq([failing_subscription.original_purchase.external_id])
+        expect(body[:customers].first[:subscription][:status]).to eq("pending_failure")
+        expect(body[:count]).to eq(1)
+      end
+
+      it "does not filter when the param is absent" do
+        get :paged, params: { page: 1 }
+
+        expect(response.parsed_body.deep_symbolize_keys[:count]).to eq(7)
+      end
+    end
+
     describe "minimum license uses filter" do
       before do
         purchases.first.license.update!(uses: 10)

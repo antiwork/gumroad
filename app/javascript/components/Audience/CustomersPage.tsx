@@ -54,6 +54,7 @@ export type CustomerPageProps = {
   show_refund_fee_notice: boolean;
   license_uses_filter_enabled: boolean;
   can_send_emails: boolean;
+  failure_pending_count: number;
 };
 
 const year = new Date().getFullYear();
@@ -72,6 +73,7 @@ const CustomersPage = ({
   show_refund_fee_notice,
   license_uses_filter_enabled,
   can_send_emails,
+  failure_pending_count,
   ...initialState
 }: CustomerPageProps) => {
   const currentSeller = useCurrentSeller();
@@ -110,6 +112,7 @@ const CustomersPage = ({
       createdBefore: null,
       country: null,
       activeCustomersOnly: false,
+      failurePendingOnly: false,
       minimumLicenseUses: null,
     },
     `CustomersPage:query:${sellerKey}`,
@@ -124,6 +127,7 @@ const CustomersPage = ({
     createdBefore,
     country,
     activeCustomersOnly,
+    failurePendingOnly,
     minimumLicenseUses,
   } = query;
 
@@ -199,6 +203,7 @@ const CustomersPage = ({
     createdBefore != null ||
     country != null ||
     activeCustomersOnly ||
+    failurePendingOnly ||
     minimumLicenseUses != null;
 
   const emailFilterParams = React.useMemo(() => {
@@ -402,6 +407,21 @@ const CustomersPage = ({
                       onChange={(e) => updateQuery({ activeCustomersOnly: e.target.checked })}
                     />
                   </CardContent>
+                  <CardContent>
+                    <h4 className="font-bold">
+                      <Label htmlFor={`${uid}-failure-pending-only`}>
+                        Show failure pending only ({failure_pending_count.toLocaleString()})
+                      </Label>
+                    </h4>
+                    <Switch
+                      id={`${uid}-failure-pending-only`}
+                      checked={failurePendingOnly}
+                      onChange={(e) => updateQuery({ failurePendingOnly: e.target.checked })}
+                    />
+                    <FieldsetDescription>
+                      Memberships whose latest payment failed and are still being retried.
+                    </FieldsetDescription>
+                  </CardContent>
                 </Card>
               </PopoverContent>
             </Popover>
@@ -456,7 +476,11 @@ const CustomersPage = ({
         {customers.length > 0 ? (
           <section className="flex flex-col gap-4">
             <Table aria-live="polite" className={cx(isLoading && "pointer-events-none opacity-50")}>
-              <TableCaption>{`All sales (${count.toLocaleString()})`}</TableCaption>
+              <TableCaption>
+                {failurePendingOnly
+                  ? `Failure pending (${count.toLocaleString()})`
+                  : `All sales (${count.toLocaleString()})`}
+              </TableCaption>
               <TableHeader>
                 <TableRow>
                   <TableHead>Email</TableHead>
@@ -517,7 +541,9 @@ const CustomersPage = ({
                             <Pill size="small" className="ml-2">
                               {customer.subscription.status === "payment_method_update_required"
                                 ? "Payment update required"
-                                : "Inactive"}
+                                : customer.subscription.status === "pending_failure"
+                                  ? "Failure pending"
+                                  : "Inactive"}
                             </Pill>
                           ) : null
                         ) : (

@@ -41,6 +41,7 @@ class CustomersPresenter
       show_refund_fee_notice: pundit_user.seller.show_refund_fee_notice?,
       license_uses_filter_enabled: Feature.active?(:license_uses_sales_filter, pundit_user.seller),
       can_send_emails: user_presenter.audience_types.include?(:customers),
+      failure_pending_count: Subscription.pending_failure_ids_for(pundit_user.seller).size,
     )
   end
 end

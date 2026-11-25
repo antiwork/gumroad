@@ -72,6 +72,7 @@ describe CustomersPresenter do
           show_refund_fee_notice: false,
           license_uses_filter_enabled: false,
           can_send_emails: false,
+          failure_pending_count: 0,
         }
       )
     end
