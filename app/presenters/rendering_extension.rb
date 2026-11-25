@@ -66,6 +66,8 @@ module RenderingExtension
         policies: policies_props(pundit_user),
         promoted_nav_items: user.promoted_nav_item_keys,
         lazy_load_offscreen_discover_images: Feature.active?(:lazy_load_offscreen_discover_images, user),
+        # The dashboard's horizontal header, on trial beside the sidebar.
+        header_nav: Feature.active?(:dashboard_header_nav, user),
       }
     end
 

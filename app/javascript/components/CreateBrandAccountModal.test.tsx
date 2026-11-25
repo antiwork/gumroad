@@ -39,6 +39,7 @@ const user = (flags: PayoutFlags): LoggedInUser => ({
   },
   promotedNavItems: [],
   lazyLoadOffscreenDiscoverImages: false,
+  headerNav: false,
   ...flags,
 });
 

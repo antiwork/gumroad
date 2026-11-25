@@ -34,6 +34,7 @@ import { type OmnibarShortcut } from "$app/utils/omnibar";
 import { initTeamMemberReadOnlyAccess } from "$app/utils/team_member_read_only";
 
 import NavbarFooter from "$app/components/client-components/Nav/footer";
+import { HeaderNav } from "$app/components/client-components/Nav/header";
 import { CloseOnNavigate } from "$app/components/CloseOnNavigate";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain, useDiscoverUrl } from "$app/components/DomainSettings";
@@ -47,7 +48,7 @@ type Props = {
   compact?: boolean;
 };
 
-const matchesCurrentPath = ({
+export const matchesCurrentPath = ({
   href,
   additionalPatterns = [],
   exactHrefMatch,
@@ -114,7 +115,7 @@ export const ClientNavLink = ({
 // names, so renaming one here needs the same rename in app/models/dashboard_nav.rb.
 const CORE_ITEMS = ["home", "products", "sales", "payouts", "discover"];
 
-type NavItem = {
+export type NavItem = {
   key: string;
   // The existing per-row authorization gate, independent of promotion: a row the user may not open
   // does not appear even inside "Everything else".
@@ -360,20 +361,37 @@ export const Nav = (props: Props) => {
     },
   ].flatMap(({ allowed, ...action }) => (allowed ? [{ ...action, keywords: "create add" }] : []));
 
+  const pinned = visibleItems.filter(isPinned);
+  // On trial: a horizontal header on wide screens. Phones keep the drawer either way.
+  const headerNav = !!loggedInUser?.headerNav;
+  // The header drops links from the end when it runs out of room, so the core ones go first.
+  const isCore = (item: NavItem) => CORE_ITEMS.includes(item.key);
+  const headerLinks = [...pinned.filter(isCore), ...pinned.filter((item) => !isCore(item))];
+
   return (
     <>
       <NavFramework
         footer={<NavbarFooter />}
-        headerAction={<OmnibarTrigger variant="bar" onOpen={omnibar.show} />}
-        search={<OmnibarTrigger variant="sidebar" onOpen={omnibar.show} />}
+        headerAction={<OmnibarTrigger variant="icon" onOpen={omnibar.show} />}
+        search={<OmnibarTrigger variant="field" onOpen={omnibar.show} className="mx-6 mb-6 hidden lg:flex" />}
+        {...(headerNav && { className: "lg:hidden" })}
         {...props}
       >
         <CloseOnNavigate />
         <NavSection>
-          {visibleItems.filter(isPinned).map(renderItem)}
+          {pinned.map(renderItem)}
           {overflow.length > 0 ? <EverythingElse>{overflow.map(renderOverflowItem)}</EverythingElse> : null}
         </NavSection>
       </NavFramework>
+      {headerNav ? (
+        <HeaderNav
+          links={headerLinks}
+          more={overflow}
+          actions={actions}
+          homeHref={Routes.root_url()}
+          onOpenSearch={omnibar.show}
+        />
+      ) : null}
       <OmnibarDialog open={omnibar.open} onClose={omnibar.hide} pages={pages} actions={actions} />
     </>
   );

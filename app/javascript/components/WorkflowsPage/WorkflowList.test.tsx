@@ -66,6 +66,7 @@ const loggedInUser: LoggedInUser = {
   },
   promotedNavItems: [],
   lazyLoadOffscreenDiscoverImages: false,
+  headerNav: false,
 };
 
 const workflow = (name: string, externalId: string): Workflow => ({

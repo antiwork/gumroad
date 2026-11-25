@@ -32,6 +32,7 @@ vi.hoisted(() => {
       mcp_path: url("/mcp"),
       new_product_path: url("/products/new"),
       posts_path: url("/posts"),
+      products_path: url("/products"),
       profile_path: url("/profile"),
       sales_dashboard_path: url("/sales"),
       settings_payments_path: url("/settings/payments"),
@@ -77,6 +78,7 @@ const loggedInUser: LoggedInUser = {
   },
   promotedNavItems: [],
   lazyLoadOffscreenDiscoverImages: false,
+  headerNav: false,
 };
 
 const minor: CurrentSeller = {
@@ -227,5 +229,26 @@ describe("DashboardPage getting started", () => {
     renderChecklist({ used_cli: true });
 
     expect(bringYourAi()?.getAttribute("data-status")).toBe("completed");
+  });
+});
+
+describe("DashboardPage New product button", () => {
+  const creator: LoggedInUser = {
+    ...loggedInUser,
+    policies: { ...loggedInUser.policies, product: { create: true } },
+  };
+  const classes = () => screen.getByRole("link", { name: "New product" }).className.split(" ");
+
+  it("shows at every width beside the sidebar", () => {
+    renderDashboard(minor, {}, creator);
+
+    expect(classes()).not.toContain("lg:hidden");
+  });
+
+  // The header nav carries its own on a wide screen. A phone keeps the drawer, which has none.
+  it("shows only below the wide breakpoint under the header nav", () => {
+    renderDashboard(minor, {}, { ...creator, headerNav: true });
+
+    expect(classes()).toContain("lg:hidden");
   });
 });

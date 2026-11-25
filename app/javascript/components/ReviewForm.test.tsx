@@ -82,6 +82,7 @@ const rawLoggedInUser = {
   },
   promoted_nav_items: [],
   lazy_load_offscreen_discover_images: false,
+  header_nav: false,
 };
 
 const domains = {

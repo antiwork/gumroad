@@ -122,6 +122,7 @@ const buildUser = (promotedNavItems: string[]): LoggedInUser => ({
   willCopyBankPayout: false,
   promotedNavItems,
   lazyLoadOffscreenDiscoverImages: false,
+  headerNav: false,
   policies: {
     affiliate_requests_onboarding_form: { update: true },
     direct_affiliate: { create: true, update: true },
@@ -388,6 +389,60 @@ describe("dashboard nav progressive disclosure", () => {
     // A promoted row sits at the top level, where prefetching costs nothing: promoting an
     // already-recorded destination is a no-op.
     expect(linkPropsByText.get("Products")?.prefetch).not.toBe(false);
+  });
+});
+
+describe("dashboard header nav", () => {
+  const navs = () => screen.getAllByRole("navigation", { name: "Main" });
+  // Every link but the logo, which comes first.
+  const linkTexts = (nav: HTMLElement) =>
+    within(nav)
+      .getAllByRole("link")
+      .slice(1)
+      .map((link) => link.textContent);
+
+  it("is not rendered unless the user is on the trial", () => {
+    renderNav();
+
+    expect(navs()).toHaveLength(1);
+    expect(navs()[0]?.className.split(" ")).not.toContain("lg:hidden");
+  });
+
+  it("replaces the sidebar on a wide screen and leaves the drawer to phones", () => {
+    renderNav({
+      withUser: (user) => {
+        user.headerNav = true;
+      },
+    });
+
+    const [drawer, header] = navs();
+    expect(drawer?.className.split(" ")).toContain("lg:hidden");
+    expect(header?.className.split(" ")).toEqual(expect.arrayContaining(["hidden", "lg:flex"]));
+  });
+
+  // The header drops links from the end when it runs out of room.
+  it("puts the core destinations before the promoted ones", () => {
+    renderNav({
+      promoted: ["profile", "workflows"],
+      withUser: (user) => {
+        user.headerNav = true;
+      },
+    });
+
+    const header = navs()[1];
+    if (!header) throw new Error("Expected the header nav");
+    expect(linkTexts(header).slice(0, 7)).toEqual([
+      "Home",
+      "Products",
+      "Sales",
+      "Payouts",
+      "Discover",
+      "Profile",
+      "Workflows",
+    ]);
+    expect(within(header).queryByRole("link", { name: "Emails" })).toBeNull();
+    fireEvent.click(within(header).getByRole("button", { name: "More" }));
+    expect(within(header).getByRole("link", { name: "Emails" })).toBeTruthy();
   });
 });
 

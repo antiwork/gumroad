@@ -64,7 +64,7 @@ const Harness = () => {
   const omnibar = useOmnibar();
   return (
     <>
-      <OmnibarTrigger variant="sidebar" onOpen={omnibar.show} />
+      <OmnibarTrigger variant="field" onOpen={omnibar.show} />
       <OmnibarDialog open={omnibar.open} onClose={omnibar.hide} pages={pages} actions={actions} />
     </>
   );

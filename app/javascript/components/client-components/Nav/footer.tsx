@@ -11,7 +11,8 @@ import { NavLink, NavLinkDropdownItem, NavLinkDropdownMembershipItem } from "$ap
 import { DashboardNavProfilePopover } from "$app/components/ProfilePopover";
 import { Menu, MenuItem } from "$app/components/ui/Menu";
 
-function NavbarFooter() {
+/** The account menu: switch account, settings, log out. The header has no Help row, so its menu carries Help. */
+export const AccountPopover = ({ placement }: { placement: "sidebar" | "header" }) => {
   const routeParams = { host: useAppDomain() };
   const loggedInUser = useLoggedInUser();
   const currentSeller = useCurrentSeller();
@@ -20,19 +21,7 @@ function NavbarFooter() {
 
   return (
     <>
-      {currentSeller?.isBuyer ? (
-        <NavLink
-          text="Start selling"
-          icon={<Store pack="filled" className="size-5" />}
-          href={Routes.dashboard_url(routeParams)}
-        />
-      ) : null}
-      <ClientNavLink
-        text="Help"
-        icon={<Book pack="filled" className="size-5" />}
-        href={Routes.help_center_root_url(routeParams)}
-      />
-      <DashboardNavProfilePopover user={currentSeller}>
+      <DashboardNavProfilePopover user={currentSeller} placement={placement}>
         <Menu className="flex flex-col border-0! shadow-none! dark:border!">
           {teamMemberships != null && teamMemberships.length > 0 ? (
             <>
@@ -68,6 +57,14 @@ function NavbarFooter() {
             href={Routes.settings_team_url(routeParams)}
             component={Link}
           />
+          {placement === "header" ? (
+            <NavLinkDropdownItem
+              text="Help"
+              icon={<Book pack="filled" className="mx-1 size-5" />}
+              href={Routes.help_center_root_url(routeParams)}
+              component={Link}
+            />
+          ) : null}
           <MenuItem asChild>
             <Link href={Routes.logout_url(routeParams)} method="delete" className="all-unset">
               <ArrowOutRightSquareHalf pack="filled" className="mx-1 size-5" />
@@ -80,6 +77,29 @@ function NavbarFooter() {
         open={showCreateBrandAccountModal}
         onClose={() => setShowCreateBrandAccountModal(false)}
       />
+    </>
+  );
+};
+
+function NavbarFooter() {
+  const routeParams = { host: useAppDomain() };
+  const currentSeller = useCurrentSeller();
+
+  return (
+    <>
+      {currentSeller?.isBuyer ? (
+        <NavLink
+          text="Start selling"
+          icon={<Store pack="filled" className="size-5" />}
+          href={Routes.dashboard_url(routeParams)}
+        />
+      ) : null}
+      <ClientNavLink
+        text="Help"
+        icon={<Book pack="filled" className="size-5" />}
+        href={Routes.help_center_root_url(routeParams)}
+      />
+      <AccountPopover placement="sidebar" />
     </>
   );
 }

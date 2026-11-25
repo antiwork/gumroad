@@ -56,20 +56,28 @@ export const useOmnibar = () => {
 
 const focusRing = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current";
 
-/** "sidebar" is the field under the logo on wide screens; "bar" is the icon in the phone header. */
-export const OmnibarTrigger = ({ variant, onOpen }: { variant: "sidebar" | "bar"; onOpen: () => void }) => {
+/** "field" looks like a search field and is placed by `className`; "icon" is the phone header's button. */
+export const OmnibarTrigger = ({
+  variant,
+  onOpen,
+  className,
+}: {
+  variant: "field" | "icon";
+  onOpen: () => void;
+  className?: string;
+}) => {
   const [shortcut, setShortcut] = React.useState<{ label: string; keys: string } | null>(null);
   React.useEffect(
     () => setShortcut(isMac() ? { label: "⌘K", keys: "Meta+K" } : { label: "Ctrl K", keys: "Control+K" }),
     [],
   );
 
-  if (variant === "bar") {
+  if (variant === "icon") {
     return (
       <button
         type="button"
         // The padding takes the target past 24px; the matching margin keeps the header's layout.
-        className={classNames("-m-1 cursor-pointer rounded p-1 all-unset", focusRing)}
+        className={classNames("-m-1 cursor-pointer rounded p-1 all-unset", focusRing, className)}
         aria-label="Search"
         aria-haspopup="dialog"
         onClick={onOpen}
@@ -84,8 +92,9 @@ export const OmnibarTrigger = ({ variant, onOpen }: { variant: "sidebar" | "bar"
       type="button"
       // box-border: `all-unset` resets box-sizing, and the border would widen the field past the sidebar.
       className={classNames(
-        "mx-6 mb-6 box-border hidden cursor-pointer items-center gap-2 rounded border border-white/50 px-3 py-2 text-left all-unset hover:border-white lg:flex dark:border-foreground/50 dark:hover:border-foreground",
+        "box-border cursor-pointer items-center gap-2 rounded border border-white/50 px-3 py-2 text-left all-unset hover:border-white dark:border-foreground/50 dark:hover:border-foreground",
         focusRing,
+        className,
       )}
       aria-haspopup="dialog"
       aria-keyshortcuts={shortcut?.keys}

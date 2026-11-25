@@ -37,13 +37,18 @@ type PageProps = {
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { flash, logged_in_user, current_seller, is_mobile_app_web_view } = usePage<PageProps>().props;
   useFlashMessage(flash);
+  const loggedInUser = parseLoggedInUser(logged_in_user);
 
   return (
-    <LoggedInUserProvider value={parseLoggedInUser(logged_in_user)}>
+    <LoggedInUserProvider value={loggedInUser}>
       <CurrentSellerProvider value={parseCurrentSeller(current_seller)}>
         <MetaTags />
         <Alert initial={null} />
-        <div id="inertia-shell" className="flex h-dvh flex-col lg:flex-row">
+        {/* The sidebar sits beside the page on a wide screen; the header variant stays above it. */}
+        <div
+          id="inertia-shell"
+          className={loggedInUser?.headerNav ? "flex h-dvh flex-col" : "flex h-dvh flex-col lg:flex-row"}
+        >
           {logged_in_user && !is_mobile_app_web_view ? <Nav title="Dashboard" /> : null}
           <main scroll-region="" className="flex flex-1 flex-col overflow-y-auto [contain:paint]">
             {children}

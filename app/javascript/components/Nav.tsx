@@ -123,9 +123,10 @@ type Props = {
   // Search has two homes: beside the menu button on a phone, under the logo on a wide screen.
   headerAction?: React.ReactNode;
   search?: React.ReactNode;
+  className?: string;
 };
 
-export const Nav = ({ title, children, footer, headerAction, search }: Props) => {
+export const Nav = ({ title, children, footer, headerAction, search, className }: Props) => {
   const [open, setOpen] = React.useState(false);
   const [showScrollFade, setShowScrollFade] = React.useState(false);
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
@@ -167,6 +168,7 @@ export const Nav = ({ title, children, footer, headerAction, search }: Props) =>
         className={classNames(
           "flex max-h-full flex-col overflow-x-hidden bg-black text-white lg:static lg:w-52 dark:text-foreground",
           { "fixed z-10 size-full": open },
+          className,
         )}
       >
         <div className="override grid grid-cols-[auto_1fr_auto] items-center gap-3 p-4 text-lg leading-6 lg:hidden">

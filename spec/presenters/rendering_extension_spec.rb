@@ -155,6 +155,7 @@ describe "RenderingExtension" do
                 },
                 promoted_nav_items: [],
                 lazy_load_offscreen_discover_images: false,
+                header_nav: false,
               },
               current_seller: UserPresenter.new(user: seller).as_current_seller,
               csp_nonce: SecureHeaders.content_security_policy_script_nonce(stubbed_view_context.request),
@@ -164,6 +165,16 @@ describe "RenderingExtension" do
               }
             }
           )
+        end
+      end
+
+      describe "header_nav" do
+        let(:seller) { create(:named_seller) }
+        let(:pundit_user) { SellerContext.new(user: seller, seller:) }
+
+        it "follows the dashboard_header_nav flag for the logged-in user" do
+          expect { Feature.activate_user(:dashboard_header_nav, seller) }
+            .to change { RenderingExtension.custom_context(stubbed_view_context)[:logged_in_user][:header_nav] }.from(false).to(true)
         end
       end
 
