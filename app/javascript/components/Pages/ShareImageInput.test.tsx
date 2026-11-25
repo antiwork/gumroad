@@ -43,11 +43,13 @@ describe("ShareImageInput", () => {
     );
   });
 
-  it("reports a removal for the Remove button", () => {
+  it("shows a visible Remove label on the Remove button and reports a removal", () => {
     const onChange = vi.fn();
     render(<ShareImageInput imageUrl="https://cdn.example/blob-key" onChange={onChange} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Remove share image" }));
+    const remove = screen.getByRole("button", { name: "Remove share image" });
+    expect(remove.textContent).toBe("Remove");
+    fireEvent.click(remove);
 
     expect(onChange).toHaveBeenCalledWith(null);
   });
