@@ -2,7 +2,13 @@ import { Link as LinkIcon } from "@boxicons/react";
 import { Link, usePage } from "@inertiajs/react";
 import * as React from "react";
 
-import { getAccessibleAccent, getContrastColor, getStoreBorderAlpha, hexToRgb } from "$app/utils/color";
+import {
+  getAccessibleAccent,
+  getContrastColor,
+  getStoreBorderAlpha,
+  getStorePageBackground,
+  hexToRgb,
+} from "$app/utils/color";
 
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
@@ -115,6 +121,7 @@ export const BundleEditLayout = ({
         "--filled": hexToRgb(currentSeller.profileBackgroundColor),
         "--color": hexToRgb(getContrastColor(currentSeller.profileBackgroundColor)),
         "--border-alpha": getStoreBorderAlpha(currentSeller.profileBackgroundColor),
+        "--body-bg": getStorePageBackground(currentSeller.profileBackgroundColor),
       }
     : {};
 
@@ -245,7 +252,6 @@ export const BundleEditLayout = ({
                   fontFamily: currentSeller?.profileFont === "ABC Favorit" ? undefined : currentSeller?.profileFont,
                   ...profileColors,
                   "--primary": "var(--color)",
-                  "--body-bg": "rgb(var(--filled))",
                   "--contrast-primary": "var(--filled)",
                   "--contrast-filled": "var(--color)",
                   "--color-body": "var(--body-bg)",
@@ -260,7 +266,7 @@ export const BundleEditLayout = ({
                   "--color-primary-foreground": "rgb(var(--contrast-primary))",
                   "--color-active-bg": "rgb(var(--color) / var(--gray-1))",
                   "--color-muted": "rgb(var(--color) / var(--gray-3))",
-                  backgroundColor: "rgb(var(--filled))",
+                  backgroundColor: "var(--body-bg)",
                   color: "rgb(var(--color))",
                 }}
               >

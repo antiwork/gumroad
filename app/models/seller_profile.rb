@@ -12,6 +12,9 @@ class SellerProfile < ApplicationRecord
   # Border strength as an alpha of the store's text colour: the app's light-mode hairline under
   # dark text, its dark-mode hairline under light text. Mirrored by getStoreBorderAlpha in color.ts.
   BORDER_ALPHAS = { ContrastColor::BLACK => "0.11", ContrastColor::WHITE => "0.35" }.freeze
+  STOCK_BACKGROUND = "#ffffff"
+  # The app's own page colour, which is also the page behind an email's white card.
+  STOCK_PAGE_BACKGROUND = "#f4f4f0"
   ALLOWED_SHARE_IMAGE_CONTENT_TYPES = ["image/png", "image/jpeg", "image/jpg"].freeze
   MAXIMUM_SHARE_IMAGE_FILE_SIZE = 5.megabytes
 
@@ -48,7 +51,7 @@ class SellerProfile < ApplicationRecord
 
   after_initialize do
     self.font ||= "ABC Favorit"
-    self.background_color ||= "#ffffff"
+    self.background_color ||= STOCK_BACKGROUND
     self.highlight_color ||= "#ff90e8"
     self.border_radius ||= "medium"
     self.button_hover ||= "none"
@@ -186,6 +189,13 @@ class SellerProfile < ApplicationRecord
 
   def border_alpha_css
     BORDER_ALPHAS.fetch(text_color_on_background)
+  end
+
+  # A white store sits on the stock page colour, so its cards and fields read as white surfaces on
+  # a page, as in the app and the emails. Any other background is the page itself.
+  # Mirrored by getStorePageBackground in color.ts.
+  def page_background_color
+    background_color.to_s.casecmp?(STOCK_BACKGROUND) ? STOCK_PAGE_BACKGROUND : background_color
   end
 
   def font_css_source

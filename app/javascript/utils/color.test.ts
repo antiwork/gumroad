@@ -7,6 +7,7 @@ import {
   getContrastColor,
   getContrastRatio,
   getStoreBorderAlpha,
+  getStorePageBackground,
   hexToRgb,
   shiftAccentBrightness,
 } from "$app/utils/color";
@@ -25,6 +26,19 @@ describe("getStoreBorderAlpha", () => {
   it("uses the dark-mode hairline on a store with light text", () => {
     expect(getStoreBorderAlpha("#000000")).toBe("0.35");
     expect(getStoreBorderAlpha("#16161d")).toBe("0.35");
+  });
+});
+
+// SellerProfile#page_background_color is the server's copy.
+describe("getStorePageBackground", () => {
+  it("puts a white store on the stock page colour", () => {
+    expect(getStorePageBackground("#ffffff")).toBe("#f4f4f0");
+    expect(getStorePageBackground("#FFFFFF")).toBe("#f4f4f0");
+  });
+
+  it("leaves any other background as the page itself", () => {
+    expect(getStorePageBackground("#000000")).toBe("#000000");
+    expect(getStorePageBackground("#fde68a")).toBe("#fde68a");
   });
 });
 

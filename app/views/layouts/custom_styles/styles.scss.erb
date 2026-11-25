@@ -23,7 +23,7 @@
   --contrast-filled: var(--color);
   --danger: #{split-color(<%= danger_color %>)};
   --contrast-danger: #{split-color(<%= text_color_on_danger %>)};
-  --body-bg: <%= background_color %>;
+  --body-bg: <%= page_background_color %>;
   --active-bg: rgb(var(--color) / var(--gray-1));
   --border-alpha: <%= border_alpha_css %>;
   --radius: <%= border_radius_css %>;
@@ -31,7 +31,7 @@
 }
 
 body {
-  background-color: <%= background_color %>;
+  background-color: <%= page_background_color %>;
   color: <%= text_color_on_background %>;
   font-family: <%= font_family %>;
 }

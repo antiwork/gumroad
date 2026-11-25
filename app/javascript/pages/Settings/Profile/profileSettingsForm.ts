@@ -1,4 +1,10 @@
-import { getAccessibleAccent, getContrastColor, getStoreBorderAlpha, hexToRgb } from "$app/utils/color";
+import {
+  getAccessibleAccent,
+  getContrastColor,
+  getStoreBorderAlpha,
+  getStorePageBackground,
+  hexToRgb,
+} from "$app/utils/color";
 
 export type ProfileSettingsForm = {
   name: string | null;
@@ -24,6 +30,7 @@ export const profileThemeColors = (backgroundColor: string, highlightColor: stri
     "--filled": hexToRgb(backgroundColor),
     "--color": hexToRgb(textColor),
     "--border-alpha": getStoreBorderAlpha(backgroundColor),
+    "--body-bg": getStorePageBackground(backgroundColor),
     "--contrast-primary": hexToRgb(getContrastColor(textColor)),
   };
 };

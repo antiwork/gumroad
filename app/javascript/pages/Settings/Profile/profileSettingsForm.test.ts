@@ -89,6 +89,14 @@ describe("profile settings synchronization", () => {
     expect(profileThemeColors("#000000", "#ff90e8")).toMatchObject({ "--border-alpha": "0.35" });
   });
 
+  it("previews a white store on the stock page colour, with white surfaces", () => {
+    expect(profileThemeColors("#ffffff", "#ff90e8")).toMatchObject({
+      "--body-bg": "#f4f4f0",
+      "--filled": "255 255 255",
+    });
+    expect(profileThemeColors("#000000", "#ff90e8")).toMatchObject({ "--body-bg": "#000000", "--filled": "0 0 0" });
+  });
+
   it("matches the live primary-button foreground for saturated backgrounds", () => {
     expect(profileThemeColors("#ff0000", "#ff90e8")).toMatchObject({
       "--color": "0 0 0",

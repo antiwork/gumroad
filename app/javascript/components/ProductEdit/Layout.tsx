@@ -4,7 +4,13 @@ import { Link, NavigationType, useBlocker, useMatches, useNavigate } from "react
 
 import { setProductPublished } from "$app/data/publish_product";
 import { classNames } from "$app/utils/classNames";
-import { getAccessibleAccent, getContrastColor, getStoreBorderAlpha, hexToRgb } from "$app/utils/color";
+import {
+  getAccessibleAccent,
+  getContrastColor,
+  getStoreBorderAlpha,
+  getStorePageBackground,
+  hexToRgb,
+} from "$app/utils/color";
 import { ResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
@@ -165,6 +171,7 @@ export const Layout = ({
           "--filled": hexToRgb(currentSeller.profileBackgroundColor),
           "--color": hexToRgb(getContrastColor(currentSeller.profileBackgroundColor)),
           "--border-alpha": getStoreBorderAlpha(currentSeller.profileBackgroundColor),
+          "--body-bg": getStorePageBackground(currentSeller.profileBackgroundColor),
         }
       : {};
 
@@ -462,7 +469,6 @@ export const Layout = ({
                           currentSeller?.profileFont === "ABC Favorit" ? undefined : currentSeller?.profileFont,
                         ...profileColors,
                         "--primary": "var(--color)",
-                        "--body-bg": "rgb(var(--filled))",
                         "--contrast-primary": "var(--filled)",
                         "--contrast-filled": "var(--color)",
                         "--color-body": "var(--body-bg)",
@@ -477,7 +483,7 @@ export const Layout = ({
                         "--color-primary-foreground": "rgb(var(--contrast-primary))",
                         "--color-active-bg": "rgb(var(--color) / var(--gray-1))",
                         "--color-muted": "rgb(var(--color) / var(--gray-3))",
-                        backgroundColor: "rgb(var(--filled))",
+                        backgroundColor: "var(--body-bg)",
                         color: "rgb(var(--color))",
                       }
                     : {}

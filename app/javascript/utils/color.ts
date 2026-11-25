@@ -138,6 +138,13 @@ export const getContrastColor = (background: string) => {
 const STORE_BORDER_ALPHA_UNDER_DARK_TEXT = "0.11";
 const STORE_BORDER_ALPHA_UNDER_LIGHT_TEXT = "0.35";
 
+// Must match SellerProfile#page_background_color: a white store sits on the stock page colour.
+const STOCK_STORE_BACKGROUND = "#ffffff";
+const STOCK_STORE_PAGE_BACKGROUND = "#f4f4f0";
+
+export const getStorePageBackground = (backgroundColor: string) =>
+  backgroundColor.toLowerCase() === STOCK_STORE_BACKGROUND ? STOCK_STORE_PAGE_BACKGROUND : backgroundColor;
+
 export const getStoreBorderAlpha = (backgroundColor: string) =>
   getContrastColor(backgroundColor) === "#FFFFFF"
     ? STORE_BORDER_ALPHA_UNDER_LIGHT_TEXT

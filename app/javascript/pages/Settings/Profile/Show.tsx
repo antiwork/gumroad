@@ -365,7 +365,6 @@ export default function SettingsPage() {
               ...(previewRadius !== undefined ? { "--radius": previewRadius, "--radius-sm": previewRadius } : {}),
               ...(previewHoverOffset !== undefined ? { "--button-hover-offset": previewHoverOffset } : {}),
               "--primary": "var(--color)",
-              "--body-bg": "rgb(var(--filled))",
               "--contrast-filled": "var(--color)",
               "--color-body": "var(--body-bg)",
               "--color-background": "rgb(var(--filled))",
@@ -379,7 +378,7 @@ export default function SettingsPage() {
               "--color-primary-foreground": "rgb(var(--contrast-primary))",
               "--color-active-bg": "rgb(var(--color) / var(--gray-1))",
               "--color-muted": "rgb(var(--color) / var(--gray-3))",
-              backgroundColor: "rgb(var(--filled))",
+              backgroundColor: "var(--body-bg)",
               color: "rgb(var(--color))",
             }}
           >

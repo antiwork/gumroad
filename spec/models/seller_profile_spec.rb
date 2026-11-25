@@ -143,6 +143,13 @@ describe SellerProfile do
       expect(subject.custom_styles).to include("--button-hover-offset: 0.25rem")
     end
 
+    it "puts a white store on the stock page colour and leaves any other background as the page" do
+      expect(subject.custom_styles).to include("--filled: 0 0 0").and include("--body-bg: #000000").and include("body{background-color:#000000")
+
+      subject.update!(background_color: "#FFFFFF")
+      expect(subject.custom_styles).to include("--filled: 255 255 255").and include("--body-bg: #f4f4f0").and include("body{background-color:#f4f4f0")
+    end
+
     it "draws borders as a hairline of the store's text colour" do
       expect(subject.custom_styles).to include("--color: 255 255 255").and include("--border-alpha: 0.35")
 
