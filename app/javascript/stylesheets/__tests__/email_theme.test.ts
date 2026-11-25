@@ -15,6 +15,13 @@ const compile = (name: string) => {
   }).css;
 };
 
+// Every declaration the stylesheet makes for exactly this selector, across the rules that list it.
+const declarationsFor = (css: string, selector: string) =>
+  [...css.matchAll(/([^{}]+)\{([^{}]*)\}/gu)]
+    .filter(([, selectors = ""]) => selectors.split(",").some((listed) => listed.trim() === selector))
+    .map(([, , declarations = ""]) => declarations.trim())
+    .join(" ");
+
 // Premailer inlines this stylesheet into style attributes, and mail clients read nothing else:
 // they do not resolve custom properties, scale rem, load web fonts or understand cascade layers,
 // and in dark mode they repaint the message themselves. So the bundle has to stay self-contained.
@@ -52,6 +59,12 @@ describe("email stylesheet", () => {
   // A post sits on the seller's themed <body>, so it may not paint a surface of its own.
   it("leaves a post's background to the seller's theme", () => {
     expect(css).toMatch(/\.email\.post\s*\{[^}]*background-color:\s*inherit/u);
+  });
+
+  // The shared muted grey is under 4.5:1 on any seller background darker than #ececec.
+  it("gives a post's table headers the seller's text colour", () => {
+    expect(declarationsFor(css, ".email th")).toMatch(/(^|[;\s])color:\s*#6b6b66/u);
+    expect(declarationsFor(css, ".email.post th")).toMatch(/(^|[;\s])color:\s*inherit/u);
   });
 });
 
