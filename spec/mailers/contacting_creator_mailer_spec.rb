@@ -3540,6 +3540,22 @@ describe ContactingCreatorMailer do
         expect(mail.body.encoded).to have_selector("img[src='#{pending_video.video_file.thumbnail_url}']")
         expect(mail.body.encoded).to have_link("Review & approve video", href: customers_url(query: review.purchase.email))
       end
+
+      # A link around the thumbnail has no text and an empty alt, so it would have no name.
+      it "links to the customers page once, from the named button" do
+        mail = ContactingCreatorMailer.review_submitted(review.id)
+        expect(mail.body.encoded).to have_link(href: customers_url(query: review.purchase.email), count: 1)
+      end
+
+      context "when the video has no thumbnail" do
+        let!(:pending_video) { create(:product_review_video, :pending_review, product_review: review, video_file: create(:video_file)) }
+
+        it "links to the customers page once, from the named button" do
+          mail = ContactingCreatorMailer.review_submitted(review.id)
+          expect(mail.body.encoded).to have_link("Review & approve video", href: customers_url(query: review.purchase.email))
+          expect(mail.body.encoded).to have_link(href: customers_url(query: review.purchase.email), count: 1)
+        end
+      end
     end
   end
 

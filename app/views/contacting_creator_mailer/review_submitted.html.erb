@@ -11,9 +11,7 @@
 
   <% if @review.pending_video.present? %>
     <div class="review-video">
-      <%= link_to customers_url(query: @review.purchase.email) do %>
-        <%= render("shared/mailers/video_file_thumbnail", video_file: @review.pending_video.video_file) %>
-      <% end %>
+      <%= render("shared/mailers/video_file_thumbnail", video_file: @review.pending_video.video_file) %>
     </div>
   <% end %>
 
