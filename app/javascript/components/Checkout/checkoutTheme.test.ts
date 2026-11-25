@@ -6,7 +6,6 @@ import {
   type CheckoutStyle,
   type CheckoutTheme,
   getApplicableCheckoutStyle,
-  getCheckoutIndicatorCss,
   shouldInvertNativePayPalButton,
   useCheckoutStyle,
 } from "$app/components/Checkout/checkoutTheme";
@@ -15,7 +14,6 @@ afterEach(cleanup);
 
 const theme = (background_color: string): CheckoutTheme => ({
   accent_color: "#009a49",
-  indicator_color: "#009a49",
   background_color,
   text_color: "#000000",
   danger_color: "#9b1c12",
@@ -50,14 +48,6 @@ describe("getApplicableCheckoutStyle", () => {
     expect(getApplicableCheckoutStyle(checkoutStyle, [])).toBeNull();
     expect(getApplicableCheckoutStyle(checkoutStyle, ["seller-a", "seller-b"])).toBeNull();
     expect(getApplicableCheckoutStyle(checkoutStyle, ["seller-b"])).toBeNull();
-  });
-});
-
-describe("getCheckoutIndicatorCss", () => {
-  it("exposes the floored indicator at the seller style's root scope", () => {
-    expect(getCheckoutIndicatorCss({ ...theme("#ffffff"), accent_color: "#ffffff", indicator_color: "#949494" })).toBe(
-      ":root { --indicator: 148 148 148; }",
-    );
   });
 });
 

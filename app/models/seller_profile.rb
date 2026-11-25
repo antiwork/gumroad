@@ -12,6 +12,8 @@ class SellerProfile < ApplicationRecord
   # Border strength as an alpha of the store's text colour: the app's light-mode hairline under
   # dark text, its dark-mode hairline under light text. Mirrored by getStoreBorderAlpha in color.ts.
   BORDER_ALPHAS = { ContrastColor::BLACK => "0.11", ContrastColor::WHITE => "0.35" }.freeze
+  # The app's own field-border alphas in light and dark mode. A store never goes below them.
+  CONTROL_BORDER_ALPHA_FLOORS = { ContrastColor::BLACK => 0.45, ContrastColor::WHITE => 0.5 }.freeze
   STOCK_BACKGROUND = "#ffffff"
   # The app's own page colour, which is also the page behind an email's white card.
   STOCK_PAGE_BACKGROUND = "#f4f4f0"
@@ -158,9 +160,10 @@ class SellerProfile < ApplicationRecord
     end || text_color_on_background
   end
 
-  # Keep Stripe's state indicators visible without changing the seller's saved accent.
-  def accent_color_for_indicators
-    ContrastColor.visible_indicator(highlight_color, background_color)
+  # The accent button's border: the accent itself unless the fill has vanished into the store's
+  # background, the rule email_primary_button_style applies.
+  def accent_edge_color
+    ContrastColor.visible_indicator(accent_color_for_text_areas, background_color)
   end
 
   def text_color_on_danger
@@ -189,6 +192,13 @@ class SellerProfile < ApplicationRecord
 
   def border_alpha_css
     BORDER_ALPHAS.fetch(text_color_on_background)
+  end
+
+  # A field's border is its only edge, and on a mid-tone background the stock alpha falls short
+  # of 3:1, so each store gets the lowest alpha that reaches it.
+  def control_border_alpha_css
+    floor = CONTROL_BORDER_ALPHA_FLOORS.fetch(text_color_on_background)
+    format("%.2f", ContrastColor.opacity_for_non_text_contrast(text_color_on_background, background_color, floor:))
   end
 
   # A white store sits on the stock page colour, so its cards and fields read as white surfaces on

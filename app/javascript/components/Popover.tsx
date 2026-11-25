@@ -50,7 +50,7 @@ export const PopoverContent = React.forwardRef<
         align={align}
         collisionPadding={collisionPadding}
         className={classNames(
-          "z-30 w-max max-w-[calc(100vw-2rem)] rounded-(--radius-box) border border-border bg-background p-4 text-foreground shadow outline-none focus-visible:outline-none",
+          "z-30 w-max max-w-[calc(100vw-2rem)] rounded-(--radius-box) border border-border bg-background p-4 text-foreground shadow outline-none focus-visible:outline-none dark:border-control",
           { "w-[var(--radix-popover-trigger-width)] min-w-[var(--radix-popover-trigger-width)]": matchTriggerWidth },
           className,
         )}

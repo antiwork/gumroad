@@ -51,12 +51,7 @@ import {
   createLaneInvalidationSuppressor,
   type CartSaveCallbacks,
 } from "$app/components/Checkout/checkoutPaymentRefresh";
-import {
-  type CheckoutStyle,
-  CheckoutThemeProvider,
-  getCheckoutIndicatorCss,
-  useCheckoutStyle,
-} from "$app/components/Checkout/checkoutTheme";
+import { type CheckoutStyle, CheckoutThemeProvider, useCheckoutStyle } from "$app/components/Checkout/checkoutTheme";
 import { CrossSellModal } from "$app/components/Checkout/CrossSellModal";
 import { computeInitialCheckout, type InitialCheckout } from "$app/components/Checkout/initialCheckout";
 import {
@@ -1176,7 +1171,7 @@ const CheckoutIndexPage = () => {
       {/* Unlayered seller styles override the stock values declared in `@layer base`. */}
       {checkoutStyle ? (
         <Head>
-          <style>{`${checkoutStyle.css}\n${getCheckoutIndicatorCss(checkoutStyle.theme)}`}</style>
+          <style>{checkoutStyle.css}</style>
         </Head>
       ) : null}
       {redirecting ? null : results ? (

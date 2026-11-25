@@ -47,8 +47,8 @@ export const ChatMessageInput = React.forwardRef<HTMLTextAreaElement, Props>(
 
     return (
       <InputGroup
-        className={classNames("pr-2! dark:border-[rgb(var(--parent-color)/var(--border-alpha))]", {
-          "!border-red": errors && errors["community_chat_message.content"],
+        className={classNames("pr-2!", {
+          "border-danger! ring-1 ring-danger": errors && errors["community_chat_message.content"],
         })}
       >
         <Textarea

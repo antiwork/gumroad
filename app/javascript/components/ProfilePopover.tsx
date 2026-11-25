@@ -8,7 +8,7 @@ type User = { name: string | null; email: string | null; avatarUrl: string };
 
 export const DashboardNavProfilePopover = ({ children, user }: { children: React.ReactNode; user: User | null }) => (
   <Popover>
-    <PopoverTrigger className="group flex items-center justify-between overflow-hidden border-t border-white/20 px-6 py-4 all-unset hover:text-accent dark:border-foreground/20">
+    <PopoverTrigger className="group flex items-center justify-between overflow-hidden border-t border-white/20 px-6 py-4 all-unset hover:text-accent focus-visible:-outline-offset-2 focus-visible:outline-current dark:border-foreground/20">
       <div className="flex-1 truncate">
         <Avatar className="mr-3 border-white! dark:border-foreground/35!" src={user?.avatarUrl} alt="Your avatar" />
         {user?.name || user?.email}

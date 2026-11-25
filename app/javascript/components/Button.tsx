@@ -28,7 +28,8 @@ export const buttonVariants = cva(
   // The lift and its hard shadow are a store opt-in: --button-hover-offset is 0 unless a store
   // sets it. The shadow is pinned to black because currentColor turns near-white in dark mode.
   // lift-halo has to grow by exactly the distance the lift moves, so it tracks the store's offset.
-  // The border is transparent so a filled button is edged by its own fill; unfilled ones add a colour.
+  // The border is transparent so a filled button is edged by its own fill. Unfilled ones add a
+  // colour, and so do fills that can equal the surface under them (black, a store's accent).
   "inline-flex items-center justify-center gap-2 cursor-pointer border border-transparent rounded text-current font-[inherit] no-underline transition-transform hover:-translate-(--button-hover-offset) hover:shadow-[var(--button-hover-offset)_var(--button-hover-offset)_0_var(--color-black)] active:translate-0 active:shadow-none data-[state=open]:translate-0! data-[state=open]:shadow-none! lift-halo [--lift-halo-offset:var(--button-hover-offset)]",
   {
     variants: {
@@ -46,8 +47,8 @@ export const buttonVariants = cva(
       color: {
         default: "bg-transparent border-button not-disabled:hover:bg-active-bg",
         primary: "bg-primary text-primary-foreground hover:bg-accent-with-text hover:text-accent-foreground",
-        black: "bg-black text-white",
-        accent: "bg-accent-with-text text-accent-foreground",
+        black: "bg-black text-white border-button",
+        accent: "bg-accent-with-text text-accent-foreground border-[rgb(var(--accent-edge,var(--accent-with-text)))]",
         filled: "bg-background text-foreground border-button",
         success: "bg-success text-white",
         danger: "bg-danger text-danger-foreground",
@@ -57,15 +58,15 @@ export const buttonVariants = cva(
         discord: "bg-[#5865f2] text-white border-[#5865f2]",
         stripe: "bg-[#625bf6] text-white border-[#625bf6]",
         facebook: "bg-[#4267b2] text-white border-[#4267b2]",
-        twitter: "bg-black text-white",
-        apple: "bg-black text-white",
+        twitter: "bg-black text-white border-button",
+        apple: "bg-black text-white border-button",
         android: "bg-[#142f40] text-white",
         kindle: "bg-[#f3a642] text-black border-[#f3a642]",
         zoom: "bg-[#0b5cff] text-white border-[#0b5cff]",
         google: "bg-[#1967d2] text-white border-[#1967d2]",
-        youtube: "bg-black text-white",
-        instagram: "bg-black text-white",
-        tiktok: "bg-black text-white",
+        youtube: "bg-black text-white border-button",
+        instagram: "bg-black text-white border-button",
+        tiktok: "bg-black text-white border-button",
       },
     },
     compoundVariants: [
@@ -102,7 +103,7 @@ export const buttonVariants = cva(
       {
         variant: "outline",
         color: "accent",
-        className: "bg-transparent text-current hover:bg-accent-with-text hover:text-accent-foreground",
+        className: "bg-transparent text-current border-button hover:bg-accent-with-text hover:text-accent-foreground",
       },
       {
         variant: "outline",

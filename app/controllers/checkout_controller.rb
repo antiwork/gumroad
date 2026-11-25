@@ -168,7 +168,6 @@ class CheckoutController < ApplicationController
         seller_id: seller.external_id,
         theme: {
           accent_color: profile.highlight_color,
-          indicator_color: profile.accent_color_for_indicators,
           background_color: profile.background_color,
           text_color: profile.text_color_on_background,
           danger_color: profile.danger_color,

@@ -333,7 +333,6 @@ describe CheckoutController, type: :controller, inertia: true do
         expect(styles).to include("body{background-color:#f8efe3")
         expect(checkout_style[:theme]).to eq({
                                                accent_color: "#009a49",
-                                               indicator_color: "#009a49",
                                                background_color: "#f8efe3",
                                                text_color: "#000000",
                                                danger_color: "#9b1c12",
@@ -349,18 +348,6 @@ describe CheckoutController, type: :controller, inertia: true do
         get :show
 
         expect(inertia.props.dig(:checkout_style, :theme, :border_radius)).to eq("1rem")
-      end
-
-      it "floors the indicator colour when the seller's accent is invisible on their background" do
-        seller = create(:user).tap { _1.seller_profile.update!(highlight_color: "#ffffff", background_color: "#ffffff") }
-        cart_with(create(:product, user: seller))
-
-        get :show
-
-        theme = inertia.props.dig(:checkout_style, :theme)
-        expect(theme[:accent_color]).to eq("#ffffff")
-        expect(ContrastColor.ratio_between(theme[:indicator_color], "#ffffff"))
-          .to be >= ContrastColor::WCAG_AA_NON_TEXT
       end
 
       it "sends no styles for a cart spanning two sellers" do

@@ -150,6 +150,29 @@ export const getStoreBorderAlpha = (backgroundColor: string) =>
     ? STORE_BORDER_ALPHA_UNDER_LIGHT_TEXT
     : STORE_BORDER_ALPHA_UNDER_DARK_TEXT;
 
+// Must match SellerProfile#control_border_alpha_css. A field's border is its only edge, and on a
+// mid-tone background the stock alpha falls short of 3:1, so each store gets the lowest alpha, in
+// hundredths from the app's own field alpha up, that reaches it.
+const WCAG_AA_NON_TEXT = 3;
+const STORE_CONTROL_ALPHA_FLOOR_UNDER_DARK_TEXT = 45;
+const STORE_CONTROL_ALPHA_FLOOR_UNDER_LIGHT_TEXT = 50;
+
+export const getStoreControlAlpha = (backgroundColor: string) => {
+  const lightText = getContrastColor(backgroundColor) === "#FFFFFF";
+  const floor = lightText ? STORE_CONTROL_ALPHA_FLOOR_UNDER_LIGHT_TEXT : STORE_CONTROL_ALPHA_FLOOR_UNDER_DARK_TEXT;
+  const background = parseHex(backgroundColor);
+  if (background === null) return (floor / 100).toFixed(2);
+
+  const text = lightText ? 255 : 0;
+  for (let hundredths = floor; hundredths <= 100; hundredths += 1) {
+    const alpha = hundredths / 100;
+    const composite = background.map((under) => Math.round(text * alpha + under * (1 - alpha)));
+    if (ratioBetween(composite, background) >= WCAG_AA_NON_TEXT) return alpha.toFixed(2);
+  }
+
+  return "1.00";
+};
+
 /**
  * Mixes a hex colour `step`/255 of the way toward black (for white text) or toward white (for black
  * text). Exported only so a test can show the chosen step is minimal by checking the step below it

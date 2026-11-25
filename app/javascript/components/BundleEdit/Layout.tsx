@@ -6,6 +6,7 @@ import {
   getAccessibleAccent,
   getContrastColor,
   getStoreBorderAlpha,
+  getStoreControlAlpha,
   getStorePageBackground,
   hexToRgb,
 } from "$app/utils/color";
@@ -121,6 +122,7 @@ export const BundleEditLayout = ({
         "--filled": hexToRgb(currentSeller.profileBackgroundColor),
         "--color": hexToRgb(getContrastColor(currentSeller.profileBackgroundColor)),
         "--border-alpha": getStoreBorderAlpha(currentSeller.profileBackgroundColor),
+        "--control-alpha": getStoreControlAlpha(currentSeller.profileBackgroundColor),
         "--body-bg": getStorePageBackground(currentSeller.profileBackgroundColor),
       }
     : {};

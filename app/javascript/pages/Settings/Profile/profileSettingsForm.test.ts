@@ -89,6 +89,11 @@ describe("profile settings synchronization", () => {
     expect(profileThemeColors("#000000", "#ff90e8")).toMatchObject({ "--border-alpha": "0.35" });
   });
 
+  it("sets the preview's field border from the store's own background", () => {
+    expect(profileThemeColors("#ffffff", "#ff90e8")).toMatchObject({ "--control-alpha": "0.45" });
+    expect(profileThemeColors("#3b82f6", "#ff90e8")).toMatchObject({ "--control-alpha": "0.55" });
+  });
+
   it("previews a white store on the stock page colour, with white surfaces", () => {
     expect(profileThemeColors("#ffffff", "#ff90e8")).toMatchObject({
       "--body-bg": "#f4f4f0",

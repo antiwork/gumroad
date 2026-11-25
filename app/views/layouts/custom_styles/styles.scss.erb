@@ -9,9 +9,8 @@
 :root {
   // Keep --accent as the seller's saved highlight colour so decorative fills, borders, and
   // accent-coloured text do not change. Only surfaces that put content on the accent opt into
-  // --accent-with-text and its matching --contrast-accent. Checkout additionally overrides
-  // --indicator after this blob, so focus and selection rings there never vanish into the
-  // seller's background.
+  // --accent-with-text and its matching --contrast-accent. Focus and selection rings are the text
+  // colour, so they need nothing from here.
   --accent: #{split-color(<%= highlight_color %>)};
   --accent-with-text: #{split-color(<%= accent_color_for_text_areas %>)};
   --contrast-accent: #{split-color(<%= text_color_on_highlight %>)};
@@ -28,6 +27,8 @@
   --border-alpha: <%= border_alpha_css %>;
   --radius: <%= border_radius_css %>;
   --button-hover-offset: <%= button_hover_offset_css %>;
+  --control-alpha: <%= control_border_alpha_css %>;
+  --accent-edge: #{split-color(<%= accent_edge_color %>)};
 }
 
 body {

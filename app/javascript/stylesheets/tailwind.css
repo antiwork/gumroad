@@ -86,7 +86,7 @@
  */
 @theme inline {
   --color-button: rgb(var(--color) / min(var(--border-alpha) * 2, 0.35));
-  --color-control: rgb(var(--color) / max(var(--border-alpha) + 0.15, 0.45));
+  --color-control: rgb(var(--color) / var(--control-alpha, max(var(--border-alpha) + 0.15, 0.45)));
 }
 
 @layer base {

@@ -37,9 +37,12 @@ const schemes = [
   { name: "dark", css: dark, text: "#dddddd", surface: "#000000", page: "#242423" },
 ];
 
-// The field border is this formula over --border-alpha (see the `@theme inline` block).
+// The field border is this formula over --border-alpha, unless a store sets --control-alpha
+// (see the `@theme inline` block).
 const controlFormula =
-  /--color-control:\s*rgb\(var\(--color\) \/ max\(var\(--border-alpha\) \+ ([\d.]+), ([\d.]+)\)\)/u.exec(tailwind);
+  /--color-control:\s*rgb\(var\(--color\) \/ var\(--control-alpha, max\(var\(--border-alpha\) \+ ([\d.]+), ([\d.]+)\)\)\)/u.exec(
+    tailwind,
+  );
 const controlAlpha = (css: string) => {
   if (!controlFormula) throw new Error("--color-control does not have the expected formula");
   return Math.max(Number(token(css, "border-alpha")) + Number(controlFormula[1]), Number(controlFormula[2]));

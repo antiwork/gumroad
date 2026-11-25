@@ -320,7 +320,7 @@ const MenuList = <IsMulti extends boolean>(props: MenuListProps<Option, IsMulti>
       style={{ maxHeight }}
       id={menuListId ?? undefined}
       className={classNames(
-        "absolute top-full left-0 z-10 block w-full overflow-auto rounded-b border border-border bg-background py-2 text-foreground shadow [--color:var(--contrast-filled)]",
+        "absolute top-full left-0 z-10 block w-full overflow-auto rounded-b border border-border bg-background py-2 text-foreground shadow [--color:var(--contrast-filled)] dark:border-control",
       )}
     >
       {props.children}

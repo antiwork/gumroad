@@ -157,6 +157,14 @@ describe SellerProfile do
       expect(subject.custom_styles).to include("--color: 0 0 0").and include("--border-alpha: 0.11")
     end
 
+    it "sets the field border and the accent button's edge for the store's background" do
+      expect(subject.custom_styles).to include("--control-alpha: 0.50").and include("--accent-edge: 0 137 65")
+
+      subject.update!(background_color: "#3b82f6", highlight_color: "#3b82f6")
+      expect(subject.custom_styles).to include("--control-alpha: 0.55")
+      expect(subject.custom_styles).not_to include("--accent-edge: 59 130 246")
+    end
+
     it "keeps cached CSS until the theme update commits" do
       subject.custom_styles
 
@@ -351,32 +359,33 @@ describe SellerProfile do
     end
   end
 
-  describe "#accent_color_for_indicators" do
-    it "keeps the saved accent when it is already visible on the background" do
-      subject = build(:seller_profile, highlight_color: "#009a49", background_color: "#f8efe3")
-
-      expect(subject.accent_color_for_indicators).to eq("#009a49")
-    end
-
-    it "keeps the default pink on the default white background" do
+  describe "#accent_edge_color" do
+    it "is the accent button's own fill when that is visible on the background" do
       subject = build(:seller_profile, highlight_color: "#ff90e8", background_color: "#ffffff")
 
-      expect(subject.accent_color_for_indicators).to eq("#ff90e8")
+      expect(subject.accent_edge_color).to eq(subject.accent_color_for_text_areas)
     end
 
-    it "moves an accent that matches the background far enough to be seen" do
+    it "moves away from a fill that matches the background far enough to be seen" do
       subject = build(:seller_profile, highlight_color: "#ffffff", background_color: "#ffffff")
 
-      indicator = subject.accent_color_for_indicators
-      expect(indicator).not_to eq("#ffffff")
-      expect(ContrastColor.ratio_between(indicator, "#ffffff")).to be >= ContrastColor::WCAG_AA_NON_TEXT
-    end
-
-    it "leaves the saved accent itself untouched" do
-      subject = build(:seller_profile, highlight_color: "#ffffff", background_color: "#ffffff")
-      subject.accent_color_for_indicators
-
+      expect(subject.accent_color_for_text_areas).to eq("#ffffff")
+      expect(ContrastColor.ratio_between(subject.accent_edge_color, "#ffffff")).to be >= ContrastColor::WCAG_AA_NON_TEXT
       expect(subject.highlight_color).to eq("#ffffff")
+    end
+  end
+
+  # getStoreControlAlpha in color.ts is the browser's copy; color.test.ts pins the same values.
+  describe "#control_border_alpha_css" do
+    it "keeps the app's own field border on a white or black store" do
+      expect(build(:seller_profile, background_color: "#ffffff").control_border_alpha_css).to eq("0.45")
+      expect(build(:seller_profile, background_color: "#000000").control_border_alpha_css).to eq("0.50")
+    end
+
+    it "strengthens the field border on a mid-tone store" do
+      expect(build(:seller_profile, background_color: "#3b82f6").control_border_alpha_css).to eq("0.55")
+      expect(build(:seller_profile, background_color: "#808080").control_border_alpha_css).to eq("0.57")
+      expect(build(:seller_profile, background_color: "#ec0000").control_border_alpha_css).to eq("0.77")
     end
   end
 

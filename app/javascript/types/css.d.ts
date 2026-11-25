@@ -15,6 +15,7 @@ declare module "react" {
     "--color-background"?: string;
     "--color-foreground"?: string;
     "--border-alpha"?: string;
+    "--control-alpha"?: string;
     "--color-border"?: string;
     "--color-indicator"?: string;
     "--color-accent"?: string;

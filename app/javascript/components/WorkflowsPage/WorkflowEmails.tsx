@@ -532,7 +532,7 @@ const EmailRow = ({
             </Fieldset>
             <RichTextEditor
               id={email.id}
-              className="textarea block w-full rounded border border-control bg-background px-4 py-3 text-foreground placeholder:text-muted focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-accent"
+              className="textarea block w-full rounded border border-control bg-background px-4 py-3 text-foreground placeholder:text-muted focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-indicator"
               ariaLabel="Email message"
               placeholder="Write a personalized message..."
               extensions={[...(isAbandonedCartWorkflow ? [AbandonedCartProductList] : [])]}

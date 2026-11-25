@@ -7,6 +7,7 @@ import {
   getContrastColor,
   getContrastRatio,
   getStoreBorderAlpha,
+  getStoreControlAlpha,
   getStorePageBackground,
   hexToRgb,
   shiftAccentBrightness,
@@ -26,6 +27,43 @@ describe("getStoreBorderAlpha", () => {
   it("uses the dark-mode hairline on a store with light text", () => {
     expect(getStoreBorderAlpha("#000000")).toBe("0.35");
     expect(getStoreBorderAlpha("#16161d")).toBe("0.35");
+  });
+});
+
+// SellerProfile#control_border_alpha_css is the server's copy; spec/models/seller_profile_spec.rb
+// pins the same values.
+describe("getStoreControlAlpha", () => {
+  it("keeps the app's own field border on a white or black store", () => {
+    expect(getStoreControlAlpha("#ffffff")).toBe("0.45");
+    expect(getStoreControlAlpha("#000000")).toBe("0.50");
+  });
+
+  it("strengthens the field border on a mid-tone store", () => {
+    expect(getStoreControlAlpha("#3b82f6")).toBe("0.55");
+    expect(getStoreControlAlpha("#808080")).toBe("0.57");
+    expect(getStoreControlAlpha("#ec0000")).toBe("0.77");
+  });
+
+  // WCAG 1.4.11: a store field is filled with the store's background, so its border is its only edge.
+  it("reaches 3:1 against every background", () => {
+    const hex = (rgb: number[]) => `#${rgb.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
+
+    for (let red = 0; red <= 255; red += 15) {
+      for (let green = 0; green <= 255; green += 15) {
+        for (let blue = 0; blue <= 255; blue += 15) {
+          const background = [red, green, blue];
+          const alpha = Number(getStoreControlAlpha(hex(background)));
+          const text = getContrastColor(hex(background)) === "#FFFFFF" ? 255 : 0;
+          const border = background.map((under) => Math.round(text * alpha + under * (1 - alpha)));
+
+          expect(getContrastRatio(hex(border), hex(background))).toBeGreaterThanOrEqual(3);
+        }
+      }
+    }
+  });
+
+  it("falls back to the stock alpha on a value that isn't a hex colour", () => {
+    expect(getStoreControlAlpha("red")).toBe("0.45");
   });
 });
 

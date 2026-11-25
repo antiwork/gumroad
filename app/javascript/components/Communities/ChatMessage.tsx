@@ -294,7 +294,7 @@ const MessageEditor = ({ content: initialContent, isSaving, onCancel, onSave }: 
   };
 
   return (
-    <div className="relative overflow-hidden rounded-md border focus-within:outline-[0.125rem] focus-within:outline-[rgb(var(--accent))] focus-within:outline-solid dark:border-[rgb(var(--parent-color)/var(--border-alpha))]">
+    <div className="relative overflow-hidden rounded-md border border-control focus-within:outline-2 focus-within:outline-indicator">
       <Textarea
         ref={textareaRef}
         placeholder="Edit message"

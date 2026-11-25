@@ -160,7 +160,6 @@ const stripeFontsCssSource =
   "https://fonts.googleapis.com/css2?family=Domine:wght@400;600&family=Inter:wght@400;600&family=Merriweather:wght@400;600&family=Roboto%20Mono:wght@400;600&family=Roboto%20Slab:wght@400;600&display=swap";
 const sellerTheme: CheckoutTheme = {
   accent_color: "#009a49",
-  indicator_color: "#009a49",
   background_color: "#f8efe3",
   text_color: "#000000",
   danger_color: "#9b1c12",
@@ -237,19 +236,15 @@ describe("PaymentElementInput", () => {
       colorDanger: "rgb(155,28,18)",
       colorPrimary: "rgb(0,0,0)",
       fontFamily: sellerTheme.font_family,
-      focusOutline: "2px solid rgb(0,154,73)",
+      focusOutline: "2px solid rgb(0,0,0)",
     });
     // The field border, not the full text colour: the same 3:1 tier as the native inputs beside it.
     expect(elementsRender.options?.appearance?.rules?.[".Input"]?.borderColor).toBe("rgb(0,0,0, 0.45)");
   });
 
-  it("draws the focus ring and selected-method marker from the floored indicator, not the saved accent", () => {
-    const theme: CheckoutTheme = {
-      ...sellerTheme,
-      accent_color: "#ffffff",
-      indicator_color: "#949494",
-      background_color: "#ffffff",
-    };
+  // WCAG 1.4.11: the stock pink is 2:1 on white, and the field border beside it is no longer black.
+  it("draws the focus ring and selected-method marker in the text colour, not the accent", () => {
+    const theme: CheckoutTheme = { ...sellerTheme, accent_color: "#ff90e8", background_color: "#ffffff" };
 
     render(
       <CheckoutThemeProvider value={{ theme, stripe_fonts_css_source: stripeFontsCssSource }}>
@@ -259,13 +254,26 @@ describe("PaymentElementInput", () => {
 
     expect(elementsRender.options?.appearance?.variables).toMatchObject({
       colorPrimary: "rgb(0,0,0)",
-      focusOutline: "2px solid rgb(148,148,148)",
+      focusOutline: "2px solid rgb(0,0,0)",
     });
     expect(elementsRender.options?.appearance?.rules).toMatchObject({
-      ".AccordionItem--selected": { borderColor: "rgb(148,148,148)" },
-      ".RadioIconOuter--checked": { stroke: "rgb(148,148,148)" },
-      ".RadioIconInner--checked": { fill: "rgb(148,148,148)" },
+      ".AccordionItem--selected": { borderColor: "rgb(0,0,0)" },
+      ".RadioIconOuter--checked": { stroke: "rgb(0,0,0)" },
+      ".RadioIconInner--checked": { fill: "rgb(0,0,0)" },
     });
+  });
+
+  // A mid-tone store needs a stronger field border than the stock alpha to reach 3:1.
+  it("strengthens the field border on a mid-tone store", () => {
+    const theme: CheckoutTheme = { ...sellerTheme, background_color: "#3b82f6" };
+
+    render(
+      <CheckoutThemeProvider value={{ theme, stripe_fonts_css_source: stripeFontsCssSource }}>
+        <PaymentElementInput {...props} amount={1_625} mountCurrency="usd" />
+      </CheckoutThemeProvider>,
+    );
+
+    expect(elementsRender.options?.appearance?.rules?.[".Input"]?.borderColor).toBe("rgb(0,0,0, 0.55)");
   });
 
   it("rounds the inputs and payment-method rows with the seller's radius", () => {
@@ -323,7 +331,7 @@ describe("PaymentElementInput", () => {
       colorDanger: "rgb(220,52,30)",
       colorPrimary: "rgb(0,0,0)",
       fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-      focusOutline: "2px solid rgb(255,144,232)",
+      focusOutline: "2px solid rgb(0,0,0)",
       borderRadius: "8px",
     });
     expect(elementsRender.options?.appearance?.rules?.[".Input"]?.borderColor).toBe("rgb(0,0,0, 0.45)");

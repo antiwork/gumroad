@@ -328,6 +328,47 @@ describe ContrastColor do
     end
   end
 
+  describe ".opacity_for_non_text_contrast" do
+    def composite(hex_color, background_hex, alpha)
+      channels = ->(hex) { hex.delete("#").scan(/../).map(&:hex) }
+      mixed = channels.(hex_color).zip(channels.(background_hex)).map { |channel, under| ((channel * alpha) + (under * (1 - alpha))).round }
+      format("#%02x%02x%02x", *mixed)
+    end
+
+    it "returns the floor when that already reaches the non-text floor" do
+      expect(described_class.opacity_for_non_text_contrast("#000000", "#ffffff", floor: 0.45)).to eq(0.45)
+      expect(described_class.opacity_for_non_text_contrast("#ffffff", "#000000", floor: 0.5)).to eq(0.5)
+    end
+
+    it "returns the lowest opacity that reaches the non-text floor" do
+      alpha = described_class.opacity_for_non_text_contrast("#000000", "#3b82f6", floor: 0.45)
+
+      expect(alpha).to eq(0.55)
+      expect(described_class.ratio_between(composite("#000000", "#3b82f6", alpha), "#3b82f6")).to be >= ContrastColor::WCAG_AA_NON_TEXT
+      expect(described_class.ratio_between(composite("#000000", "#3b82f6", alpha - 0.01), "#3b82f6")).to be < ContrastColor::WCAG_AA_NON_TEXT
+    end
+
+    it "reaches the non-text floor against every background, under its readable text colour" do
+      random = Random.new(11)
+      1_000.times do
+        background = format("#%06x", random.rand(0x1000000))
+        text = described_class.for(background)
+        alpha = described_class.opacity_for_non_text_contrast(text, background, floor: 0.45)
+
+        expect(described_class.ratio_between(composite(text, background, alpha), background))
+          .to be >= ContrastColor::WCAG_AA_NON_TEXT, "#{text} at #{alpha} on #{background} is below the floor"
+      end
+    end
+
+    it "is opaque when even the solid colour cannot reach the floor" do
+      expect(described_class.opacity_for_non_text_contrast("#777777", "#808080", floor: 0.45)).to eq(1.0)
+    end
+
+    it "returns the floor rather than raising on a value that isn't a hex colour" do
+      expect(described_class.opacity_for_non_text_contrast("#000000", nil, floor: 0.45)).to eq(0.45)
+    end
+  end
+
   describe ".visible_indicator" do
     it "keeps the seller's colour when it already clears the non-text floor" do
       expect(described_class.visible_indicator("#009a49", "#f8efe3")).to eq("#009a49")

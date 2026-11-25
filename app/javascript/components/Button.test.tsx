@@ -63,17 +63,28 @@ describe("Button borders", () => {
 
   // A filled button is edged by its own fill; a light outline around a black or pink fill reads as a halo.
   it("leaves a filled button's border to its fill", () => {
+    render(<Button color="primary">Primary</Button>);
+
+    expect(classes("Primary")).toContain("border-transparent");
+    expect(classes("Primary")).not.toContain("border-button");
+  });
+
+  // Black on a dark surface, or a store's accent on a background of the same colour, would
+  // otherwise leave only the label.
+  it("edges a fill that can match the surface under it", () => {
     render(
       <>
-        <Button color="primary">Primary</Button>
+        <Button color="black">Black</Button>
         <Button color="accent">Accent</Button>
+        <Button outline color="accent">
+          Outline accent
+        </Button>
       </>,
     );
 
-    for (const name of ["Primary", "Accent"]) {
-      expect(classes(name)).toContain("border-transparent");
-      expect(classes(name)).not.toContain("border-button");
-    }
+    expect(classes("Black")).toContain("border-button");
+    expect(classes("Accent")).toContain("border-[rgb(var(--accent-edge,var(--accent-with-text)))]");
+    expect(classes("Outline accent")).toContain("border-button");
   });
 
   it("outlines an unfilled button", () => {
