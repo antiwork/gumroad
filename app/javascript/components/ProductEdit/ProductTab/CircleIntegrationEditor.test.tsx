@@ -15,7 +15,7 @@ vi.mock("$app/data/circle_integration", () => ({
   fetchSpaceGroups: vi.fn(),
 }));
 vi.mock("$app/components/ProductEdit/state", () => ({
-  useProductEditContext: () => ({ product: { native_type: "digital", variants: [] }, updateProduct: vi.fn() }),
+  useProductEditContext: () => ({ product: { native_type: "membership", variants: [] }, updateProduct: vi.fn() }),
 }));
 vi.mock("$app/components/server-components/Alert", () => ({ showAlert: vi.fn() }));
 
@@ -43,7 +43,6 @@ const renderEditor = async () => {
   });
   const onChange = vi.fn();
   render(<CircleIntegrationEditor integration={integration} onChange={onChange} />);
-  // The editor re-emits the loaded integration on mount, so start from a clean call list.
   await act(async () => {});
   onChange.mockClear();
   return onChange;
@@ -78,6 +77,48 @@ it("still writes the integration when the space group changes while the switch i
 
   expect(onChange).toHaveBeenCalledExactlyOnceWith({
     ...integration,
+    integration_details: { community_id: "1", space_group_id: "3" },
+  });
+});
+
+it.each([true, false])("preserves saved membership retention %s on load and group selection", async (keepInactive) => {
+  vi.mocked(fetchCommunities).mockResolvedValue({ communities: [{ id: 1, name: "Community" }] });
+  vi.mocked(fetchSpaceGroups).mockResolvedValue({
+    spaceGroups: [
+      { id: 2, name: "Original" },
+      { id: 3, name: "New" },
+    ],
+  });
+  const saved = { ...integration, keep_inactive_members: keepInactive };
+  const onChange = vi.fn();
+  render(<CircleIntegrationEditor integration={saved} onChange={onChange} />);
+  const groups = await screen.findByRole("combobox", { name: "Select a space group" });
+  expect(onChange).not.toHaveBeenCalled();
+  expect(screen.getByRole("checkbox", { name: "Do not remove Circle access when membership ends" })).toHaveProperty(
+    "checked",
+    keepInactive,
+  );
+  fireEvent.change(groups, { target: { value: "3" } });
+  expect(onChange).toHaveBeenCalledExactlyOnceWith({
+    ...saved,
+    integration_details: { community_id: "1", space_group_id: "3" },
+  });
+});
+
+it("defaults a newly selected Circle integration to removing inactive members", async () => {
+  vi.mocked(fetchCommunities).mockResolvedValue({ communities: [{ id: 1, name: "Community" }] });
+  vi.mocked(fetchSpaceGroups).mockResolvedValue({ spaceGroups: [{ id: 3, name: "New" }] });
+  const onChange = vi.fn();
+  render(<CircleIntegrationEditor integration={null} onChange={onChange} />);
+  fireEvent.click(screen.getByRole("switch", { name: switchLabel }));
+  fireEvent.change(screen.getByLabelText("API Token"), { target: { value: "new-key" } });
+  fireEvent.click(screen.getByRole("button", { name: "Load communities" }));
+  fireEvent.change(await screen.findByRole("combobox", { name: "Select a community" }), { target: { value: "1" } });
+  fireEvent.change(await screen.findByRole("combobox", { name: "Select a space group" }), { target: { value: "3" } });
+  expect(onChange).toHaveBeenCalledExactlyOnceWith({
+    name: "circle",
+    api_key: "new-key",
+    keep_inactive_members: false,
     integration_details: { community_id: "1", space_group_id: "3" },
   });
 });

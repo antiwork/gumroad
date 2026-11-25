@@ -82,20 +82,18 @@ export const CircleIntegrationEditor = ({
     integration ? parseInt(integration.integration_details.space_group_id, 10) : null,
   );
 
-  // The switch is authoritative: the dropdown stays reachable while it is off, so a selection made
-  // there must not put back the integration the seller turned off.
-  React.useEffect(() => {
-    if (!isEnabled || !apiKey || !selectedCommunityId || !selectedSpaceGroupId) return;
+  const updateIntegration = (spaceGroupId: number | null) => {
+    if (!apiKey || !selectedCommunityId || !spaceGroupId) return;
     onChange({
       name: "circle",
       api_key: apiKey,
-      keep_inactive_members: false,
+      keep_inactive_members: integration?.keep_inactive_members ?? false,
       integration_details: {
         community_id: selectedCommunityId.toString(),
-        space_group_id: selectedSpaceGroupId.toString(),
+        space_group_id: spaceGroupId.toString(),
       },
     });
-  }, [isEnabled, selectedSpaceGroupId]);
+  };
 
   const setEnabledForOptions = (enabled: boolean) =>
     updateProduct((product) => {
@@ -109,6 +107,7 @@ export const CircleIntegrationEditor = ({
         if (newValue) {
           setIsEnabled(true);
           setEnabledForOptions(true);
+          updateIntegration(selectedSpaceGroupId);
         } else {
           onChange(null);
           setIsEnabled(false);
@@ -187,8 +186,12 @@ export const CircleIntegrationEditor = ({
                     id={`${uid}-space-group`}
                     value={selectedSpaceGroupId ?? "select-space-group"}
                     onChange={(ev) => {
-                      setSelectedSpaceGroupId(parseInt(ev.target.value, 10));
-                      if (isEnabled) setEnabledForOptions(true);
+                      const spaceGroupId = parseInt(ev.target.value, 10);
+                      setSelectedSpaceGroupId(spaceGroupId);
+                      if (isEnabled) {
+                        updateIntegration(spaceGroupId);
+                        setEnabledForOptions(true);
+                      }
                     }}
                   >
                     <option value="select-space-group" disabled>
