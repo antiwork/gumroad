@@ -221,9 +221,13 @@ export const getIndividualTaxIdConfig = (complianceInfo: ComplianceInfo, user: U
       idSuffix: "dominican-republic-id-number",
     },
     BO: {
+      // Stripe's individual.id_number for Bolivia takes 7 or 8 characters, and a seven-digit Cédula
+      // de Identidad is a real, common shape, so an 8-character input floor rejects a value the
+      // validator accepts. Measured against live BO custom accounts 2026-11-24 (UTC): 7 and 8
+      // accepted, 9 and 10 refused ("That ID number does not appear to be valid").
       label: "Cédula de Identidad (CI)",
       placeholder: "12345678",
-      minLength: 8,
+      minLength: 7,
       maxLength: 8,
       idSuffix: "bolivia-id-number",
     },
