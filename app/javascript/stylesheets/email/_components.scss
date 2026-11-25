@@ -316,6 +316,8 @@
 
   table.product .product-info {
     padding: 0 12px;
+    // A seller's product name can be one long word, which would otherwise set the row's width.
+    word-break: break-word;
   }
 
   // No thumbnail cell before it.

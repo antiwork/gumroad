@@ -66,6 +66,12 @@ describe("email stylesheet", () => {
     expect(declarationsFor(css, ".email th")).toMatch(/(^|[;\s])color:\s*#6b6b66/u);
     expect(declarationsFor(css, ".email.post th")).toMatch(/(^|[;\s])color:\s*inherit/u);
   });
+
+  // The inherited overflow-wrap cannot shrink a table cell, so one long word in a product's name
+  // would push its row past the card and the phone's viewport.
+  it("lets a product row break a long word in the name", () => {
+    expect(declarationsFor(css, ".email table.product .product-info")).toMatch(/word-break:\s*break-word/u);
+  });
 });
 
 describe("app stylesheet", () => {
