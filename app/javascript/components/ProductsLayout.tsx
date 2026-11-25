@@ -13,7 +13,9 @@ export const ProductsLayout = ({
   children,
   archivedTabVisible,
   piracyReportsTabVisible = false,
+  empty,
 }: {
+  empty?: boolean;
   selectedTab: Tab;
   ctaButton?: React.ReactNode;
   title?: string | undefined;
@@ -22,7 +24,7 @@ export const ProductsLayout = ({
   piracyReportsTabVisible?: boolean;
 }) => (
   <div>
-    <PageHeader title={title || "Products"} actions={ctaButton}>
+    <PageHeader title={title || "Products"} actions={ctaButton} {...(empty && { empty })}>
       <Tabs>
         <Tab isSelected={selectedTab === "products"} asChild>
           <Link href={Routes.products_path()} className="no-underline">

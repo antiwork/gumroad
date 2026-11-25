@@ -7,6 +7,7 @@ import { Nav } from "$app/components/client-components/Nav";
 import { CurrentSellerProvider, parseCurrentSeller } from "$app/components/CurrentSeller";
 import { HeaderNavContext } from "$app/components/HeaderNavContext";
 import { type LoggedInUser, LoggedInUserProvider, parseLoggedInUser } from "$app/components/LoggedInUser";
+import { PageSearchProvider } from "$app/components/PageSearch";
 import Alert, { type AlertPayload } from "$app/components/server-components/Alert";
 import { useFlashMessage } from "$app/components/useFlashMessage";
 
@@ -46,19 +47,26 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <MetaTags />
         <Alert initial={null} />
         {/* The sidebar sits beside the page on a wide screen; the header variant stays above it. */}
-        <div
-          id="inertia-shell"
-          className={
-            loggedInUser?.headerNav
-              ? "flex h-dvh flex-col lg:[--dashboard-header-height:7rem]"
-              : "flex h-dvh flex-col lg:flex-row"
-          }
-        >
-          {logged_in_user && !is_mobile_app_web_view ? <Nav title="Dashboard" /> : null}
-          <main scroll-region="" className="flex flex-1 flex-col overflow-y-auto [contain:paint]">
-            <HeaderNavContext.Provider value={!!loggedInUser?.headerNav}>{children}</HeaderNavContext.Provider>
-          </main>
-        </div>
+        <PageSearchProvider>
+          <div
+            id="inertia-shell"
+            className={
+              loggedInUser?.headerNav
+                ? "flex h-dvh flex-col lg:[--dashboard-header-height:7rem]"
+                : "flex h-dvh flex-col lg:flex-row"
+            }
+          >
+            {logged_in_user && !is_mobile_app_web_view ? <Nav title="Dashboard" /> : null}
+            <main scroll-region="" className="flex flex-1 flex-col overflow-y-auto [contain:paint]">
+              {/* Without the nav there is no search bar, so pages keep their own search. */}
+              <HeaderNavContext.Provider
+                value={!!loggedInUser?.headerNav && !!logged_in_user && !is_mobile_app_web_view}
+              >
+                {children}
+              </HeaderNavContext.Provider>
+            </main>
+          </div>
+        </PageSearchProvider>
       </CurrentSellerProvider>
     </LoggedInUserProvider>
   );

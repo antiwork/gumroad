@@ -100,7 +100,10 @@ export type LoggedInUser = {
   lazyLoadOffscreenDiscoverImages: boolean;
   /** The dashboard's horizontal header, on trial beside the sidebar (the dashboard_header_nav flag). */
   headerNav: boolean;
+  /** AI assistants the user has connected to Gumroad that the search bar can hand a question to. */
+  askAgents?: AskAgent[];
 };
+export type AskAgent = "claude" | "chatgpt";
 
 const Context = React.createContext<LoggedInUser | null | undefined>(undefined);
 
@@ -120,6 +123,7 @@ export const parseLoggedInUser = (data: unknown): LoggedInUser | null => {
     confirmed: boolean;
     lazy_load_offscreen_discover_images: boolean;
     header_nav: boolean;
+    ask_agents?: AskAgent[];
   } | null>(data);
   if (parsed == null) return null;
   return {
@@ -137,6 +141,7 @@ export const parseLoggedInUser = (data: unknown): LoggedInUser | null => {
     promotedNavItems: parsed.promoted_nav_items,
     lazyLoadOffscreenDiscoverImages: parsed.lazy_load_offscreen_discover_images,
     headerNav: parsed.header_nav,
+    askAgents: parsed.ask_agents ?? [],
   };
 };
 

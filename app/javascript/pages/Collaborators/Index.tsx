@@ -13,6 +13,7 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Avatar } from "$app/components/ui/Avatar";
+import { PlaceholderAction } from "$app/components/ui/PageHeader";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -48,22 +49,25 @@ const CollaboratorsPage = () => {
 
   const disableActions = !loggedInUser?.policies.collaborator.update || deleteForm.processing;
 
+  const addCollaborator = (
+    <WithTooltip position="bottom" tip={collaborators_disabled_reason}>
+      <NavigationButtonInertia
+        href={Routes.new_collaborator_path()}
+        color="accent"
+        disabled={disableActions || collaborators_disabled_reason !== null}
+      >
+        Add collaborator
+      </NavigationButtonInertia>
+    </WithTooltip>
+  );
+
   return (
     <Layout
       title="Collaborators"
       selectedTab="collaborators"
       showTabs={has_incoming_collaborators}
-      headerActions={
-        <WithTooltip position="bottom" tip={collaborators_disabled_reason}>
-          <NavigationButtonInertia
-            href={Routes.new_collaborator_path()}
-            color="accent"
-            disabled={disableActions || collaborators_disabled_reason !== null}
-          >
-            Add collaborator
-          </NavigationButtonInertia>
-        </WithTooltip>
-      }
+      empty={collaborators.length === 0}
+      headerActions={addCollaborator}
     >
       {collaborators.length > 0 ? (
         <>
@@ -179,6 +183,7 @@ const CollaboratorsPage = () => {
             <PlaceholderImage src={placeholder} />
             <h2>No collaborators yet</h2>
             <h4>Share your revenue with the people who helped create your products.</h4>
+            <PlaceholderAction>{addCollaborator}</PlaceholderAction>
             <a href="/help/article/341-collaborations" target="_blank" rel="noreferrer">
               Learn more about collaborators
             </a>

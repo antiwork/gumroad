@@ -30,7 +30,7 @@ import * as React from "react";
 
 import { escapeRegExp } from "$app/utils";
 import { classNames } from "$app/utils/classNames";
-import { type OmnibarShortcut } from "$app/utils/omnibar";
+import { type OmnibarAgent, type OmnibarShortcut } from "$app/utils/omnibar";
 import { initTeamMemberReadOnlyAccess } from "$app/utils/team_member_read_only";
 
 import NavbarFooter from "$app/components/client-components/Nav/footer";
@@ -41,6 +41,7 @@ import { useAppDomain, useDiscoverUrl } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Nav as NavFramework, NavSection } from "$app/components/Nav";
 import { OmnibarDialog, OmnibarTrigger, useOmnibar } from "$app/components/Omnibar";
+import { usePageSearch } from "$app/components/PageSearch";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 type Props = {
@@ -320,6 +321,14 @@ export const Nav = (props: Props) => {
   const overflow = visibleItems.filter((item) => !isPinned(item));
 
   const omnibar = useOmnibar();
+  // Each opens the assistant's own chat with the question typed in; its Gumroad connector does the rest.
+  const askQuestion = (question: string) => encodeURIComponent(`In my Gumroad store: ${question}`);
+  const agents: OmnibarAgent[] = (loggedInUser?.askAgents ?? []).map((agent) =>
+    agent === "claude"
+      ? { id: agent, name: "Claude", href: (question) => `https://claude.ai/new?q=${askQuestion(question)}` }
+      : { id: agent, name: "ChatGPT", href: (question) => `https://chatgpt.com/?q=${askQuestion(question)}` },
+  );
+  const pageSearch = usePageSearch();
   // The search bar offers every destination, including the ones still under "Everything else".
   // Shortcuts carry `id`, not `key`: dashboard_nav_spec.rb reads every `key: "…"` line in this
   // file as a nav item the server must know.
@@ -367,13 +376,26 @@ export const Nav = (props: Props) => {
   // The header drops links from the end when it runs out of room, so the core ones go first.
   const isCore = (item: NavItem) => CORE_ITEMS.includes(item.key);
   const headerLinks = [...pinned.filter(isCore), ...pinned.filter((item) => !isCore(item))];
+  // The header's create button leads with what the section being viewed makes, since the pages
+  // no longer carry a "New email" or "New workflow" button of their own.
+  const sectionAction = { emails: "new-email", workflows: "new-workflow" }[
+    visibleItems.find(matchesCurrentPath)?.key ?? ""
+  ];
+  const headerActions = [...actions].sort((a, b) => Number(b.id === sectionAction) - Number(a.id === sectionAction));
 
   return (
     <>
       <NavFramework
         footer={<NavbarFooter />}
         headerAction={<OmnibarTrigger variant="icon" onOpen={omnibar.show} />}
-        search={<OmnibarTrigger variant="field" onOpen={omnibar.show} className="mx-6 mb-6 hidden lg:flex" />}
+        search={
+          <OmnibarTrigger
+            variant="field"
+            onOpen={omnibar.show}
+            canAsk={agents.length > 0}
+            className="mx-6 mb-6 hidden lg:flex"
+          />
+        }
         {...(headerNav && { className: "lg:hidden" })}
         {...props}
       >
@@ -387,12 +409,21 @@ export const Nav = (props: Props) => {
         <HeaderNav
           links={headerLinks}
           more={overflow}
-          actions={actions}
+          actions={headerActions}
           homeHref={Routes.root_url()}
           onOpenSearch={omnibar.show}
+          canAsk={agents.length > 0}
         />
       ) : null}
-      <OmnibarDialog open={omnibar.open} onClose={omnibar.hide} pages={pages} actions={actions} />
+      <OmnibarDialog
+        open={omnibar.open}
+        dictate={omnibar.dictate}
+        onClose={omnibar.hide}
+        pages={pages}
+        actions={actions}
+        pageSearch={pageSearch}
+        agents={agents}
+      />
     </>
   );
 };

@@ -22,20 +22,32 @@ export const Layout = ({
   children,
   pages,
   actions,
+  empty,
 }: {
+  empty?: boolean;
   currentPage: Page;
   children: React.ReactNode;
   pages: Page[];
   actions?: React.ReactNode;
 }) => (
   <div>
-    <Header actions={actions} pages={pages} currentPage={currentPage} />
+    <Header actions={actions} pages={pages} currentPage={currentPage} {...(empty && { empty })} />
     {children}
   </div>
 );
 
-const Header = ({ actions, pages, currentPage }: { currentPage: Page; pages: Page[]; actions?: React.ReactNode }) => (
-  <PageHeader title="Checkout" actions={actions}>
+const Header = ({
+  actions,
+  pages,
+  currentPage,
+  empty,
+}: {
+  currentPage: Page;
+  pages: Page[];
+  actions?: React.ReactNode;
+  empty?: boolean;
+}) => (
+  <PageHeader title="Checkout" actions={actions} {...(empty && { empty })}>
     <Tabs>
       {pages.map((page) => (
         <Tab key={page} isSelected={page === currentPage} asChild>

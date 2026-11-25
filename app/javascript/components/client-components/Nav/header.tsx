@@ -164,12 +164,14 @@ export const HeaderNav = ({
   actions,
   homeHref,
   onOpenSearch,
+  canAsk = false,
 }: {
   links: NavItem[];
   more: NavItem[];
   actions: OmnibarShortcut[];
   homeHref: string;
-  onOpenSearch: () => void;
+  onOpenSearch: (options?: { dictate?: boolean }) => void;
+  canAsk?: boolean;
 }) => {
   const [rowRef, wrapped, slack] = useWrappedChildren(links.map((item) => item.key));
   const menuItems = [...links.filter((item) => wrapped.includes(item.key)), ...more];
@@ -179,15 +181,19 @@ export const HeaderNav = ({
   return (
     // Two rows, 4rem and 3rem: the layout publishes their sum as --dashboard-header-height.
     <nav aria-label="Main" className="hidden shrink-0 flex-col lg:flex">
-      <div className={classNames(row, "h-16 gap-4")}>
-        <a href={homeHref} aria-label="Dashboard" className="flex shrink-0 items-center no-underline">
+      {/* Equal side columns keep the capped search in the middle of the screen; each still grows
+          to fit its content, so on a narrow screen the search gives way before they do. */}
+      <div
+        className={classNames(
+          row,
+          "grid h-16 grid-cols-[minmax(max-content,1fr)_minmax(0,48rem)_minmax(max-content,1fr)] gap-4",
+        )}
+      >
+        <a href={homeHref} aria-label="Dashboard" className="flex items-center justify-self-start no-underline">
           <Logo className="text-2xl" />
         </a>
-        {/* Search starts at the logo and is capped, so it does not stretch across a very wide screen. */}
-        <div className="max-w-3xl flex-1">
-          <OmnibarTrigger variant="field" onOpen={onOpenSearch} className="flex h-12 w-full" />
-        </div>
-        <div className="ml-auto flex shrink-0 items-center gap-4">
+        <OmnibarTrigger variant="field" onOpen={onOpenSearch} canAsk={canAsk} className="flex h-12 w-full" />
+        <div className="flex items-center gap-4 justify-self-end">
           <CreateButton actions={actions} />
           <AccountPopover placement="header" />
         </div>

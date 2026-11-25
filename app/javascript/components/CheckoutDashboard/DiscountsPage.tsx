@@ -46,7 +46,7 @@ import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
 import { Menu, MenuItem } from "$app/components/ui/Menu";
-import { PageHeader } from "$app/components/ui/PageHeader";
+import { PageHeader, PlaceholderAction } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
@@ -413,6 +413,7 @@ const DiscountsPage = ({
     <Layout
       currentPage="discounts"
       pages={pages}
+      empty={!hasSearchableContent}
       actions={
         <>
           {isSearchVisible.current ? (
@@ -610,6 +611,21 @@ const DiscountsPage = ({
             <div>
               <h2>No discounts yet</h2>
               <p>Use discounts to create sweet deals for your customers</p>
+              {!searchQuery ? (
+                <PlaceholderAction>
+                  <Button
+                    color="accent"
+                    onClick={() => {
+                      setIsBlackFridayMode(false);
+                      setSelectedOfferCodeId(null);
+                      setView("create");
+                    }}
+                    disabled={!loggedInUser?.policies.checkout_offer_code.create}
+                  >
+                    New discount
+                  </Button>
+                </PlaceholderAction>
+              ) : null}
               <p>
                 <a href="/help/article/128-discount-codes" target="_blank" rel="noreferrer">
                   Learn more about discount codes

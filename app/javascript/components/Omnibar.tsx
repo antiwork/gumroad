@@ -1,15 +1,26 @@
-import { ArchiveAlt, ArrowRight, Plus, Search as SearchIcon, User as UserIcon, X } from "@boxicons/react";
+import {
+  ArchiveAlt,
+  ArrowRight,
+  MessageBubble,
+  Microphone,
+  Plus,
+  Search as SearchIcon,
+  User as UserIcon,
+  X,
+} from "@boxicons/react";
 import { router } from "@inertiajs/react";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as React from "react";
 
 import { searchOmnibarProducts, searchOmnibarSales } from "$app/data/omnibar";
 import { classNames } from "$app/utils/classNames";
+import { isDictationSupported, useDictation } from "$app/utils/dictation";
 import {
   buildOmnibarGroups,
   isSearchable,
   moveActiveId,
   nextActiveId,
+  type OmnibarAgent,
   type OmnibarItem,
   type OmnibarItemKind,
   type OmnibarResults,
@@ -17,6 +28,7 @@ import {
 } from "$app/utils/omnibar";
 
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
+import { type PageSearch } from "$app/components/PageSearch";
 import { normalizeSearchQuery } from "$app/components/Search";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
@@ -38,6 +50,8 @@ const isKKey = (event: KeyboardEvent) => {
 
 export const useOmnibar = () => {
   const [open, setOpen] = React.useState(false);
+  // Opened from a microphone button: the bar starts listening as it opens.
+  const [dictate, setDictate] = React.useState(false);
 
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -45,13 +59,25 @@ export const useOmnibar = () => {
       // Ctrl+K on a Mac deletes to the end of the line in every text field, so only ⌘K opens there.
       if (isMac() ? !event.metaKey || event.ctrlKey : !event.ctrlKey || event.metaKey) return;
       event.preventDefault();
+      setDictate(false);
       setOpen(true);
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  return React.useMemo(() => ({ open, show: () => setOpen(true), hide: () => setOpen(false) }), [open]);
+  return React.useMemo(
+    () => ({
+      open,
+      dictate,
+      show: (options?: { dictate?: boolean }) => {
+        setDictate(options?.dictate === true);
+        setOpen(true);
+      },
+      hide: () => setOpen(false),
+    }),
+    [open, dictate],
+  );
 };
 
 const focusRing = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current";
@@ -61,16 +87,25 @@ export const OmnibarTrigger = ({
   variant,
   onOpen,
   className,
+  canAsk = false,
 }: {
   variant: "field" | "icon";
-  onOpen: () => void;
+  onOpen: (options?: { dictate?: boolean }) => void;
   className?: string;
+  // With an assistant connected the bar takes questions too, and says so.
+  canAsk?: boolean;
 }) => {
+  // Both are only known in the browser, so the first render matches the server's without them.
   const [shortcut, setShortcut] = React.useState<{ label: string; keys: string } | null>(null);
-  React.useEffect(
-    () => setShortcut(isMac() ? { label: "⌘K", keys: "Meta+K" } : { label: "Ctrl K", keys: "Control+K" }),
-    [],
-  );
+  const [canDictate, setCanDictate] = React.useState(false);
+  React.useEffect(() => {
+    // A touch-only device has no keyboard to press the shortcut on.
+    const hasKeyboard = typeof window.matchMedia !== "function" || window.matchMedia("(any-hover: hover)").matches;
+    setShortcut(
+      !hasKeyboard ? null : isMac() ? { label: "⌘K", keys: "Meta+K" } : { label: "Ctrl+K", keys: "Control+K" },
+    );
+    setCanDictate(isDictationSupported());
+  }, []);
 
   if (variant === "icon") {
     return (
@@ -80,7 +115,7 @@ export const OmnibarTrigger = ({
         className={classNames("-m-1 cursor-pointer rounded p-1 all-unset", focusRing, className)}
         aria-label="Search"
         aria-haspopup="dialog"
-        onClick={onOpen}
+        onClick={() => onOpen()}
       >
         <SearchIcon className="size-5" />
       </button>
@@ -88,31 +123,55 @@ export const OmnibarTrigger = ({
   }
 
   return (
-    <button
-      type="button"
-      // box-border: `all-unset` resets box-sizing, and the border would widen the field past the sidebar.
+    // The field is two buttons in one border: the search, and the microphone where there is one.
+    <div
       className={classNames(
-        "box-border cursor-pointer items-center gap-2 rounded border border-white/50 px-3 py-2 text-left all-unset hover:border-white dark:border-foreground/50 dark:hover:border-foreground",
-        focusRing,
+        "box-border items-stretch rounded border border-white/50 hover:border-white dark:border-foreground/50 dark:hover:border-foreground",
         className,
       )}
-      aria-haspopup="dialog"
-      aria-keyshortcuts={shortcut?.keys}
-      onClick={onOpen}
     >
-      <SearchIcon className="size-5 shrink-0" aria-hidden />
-      <span className="flex-1">Search</span>
-      {shortcut ? (
-        <kbd className="font-[inherit] text-sm" aria-hidden>
-          {shortcut.label}
-        </kbd>
+      <button
+        type="button"
+        className={classNames(
+          "box-border flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded px-3 py-2 text-left all-unset",
+          focusRing,
+        )}
+        aria-haspopup="dialog"
+        aria-keyshortcuts={shortcut?.keys}
+        onClick={() => onOpen()}
+      >
+        <SearchIcon className="size-5 shrink-0" aria-hidden />
+        <span className="flex-1">{canAsk ? "Search or ask" : "Search"}</span>
+        {shortcut ? (
+          <kbd className="font-[inherit] text-sm whitespace-nowrap" aria-hidden>
+            {shortcut.label}
+          </kbd>
+        ) : null}
+      </button>
+      {canDictate ? (
+        <button
+          type="button"
+          className={classNames("box-border flex cursor-pointer items-center rounded px-3 all-unset", focusRing)}
+          aria-label="Dictate"
+          aria-haspopup="dialog"
+          onClick={() => onOpen({ dictate: true })}
+        >
+          <Microphone className="size-5" aria-hidden />
+        </button>
       ) : null}
-    </button>
+    </div>
   );
 };
 
 const KindIcon = ({ kind }: { kind: OmnibarItemKind }) => {
-  const Icon = { page: ArrowRight, action: Plus, product: ArchiveAlt, sale: UserIcon, search: SearchIcon }[kind];
+  const Icon = {
+    page: ArrowRight,
+    action: Plus,
+    product: ArchiveAlt,
+    sale: UserIcon,
+    search: SearchIcon,
+    ask: MessageBubble,
+  }[kind];
   return <Icon className="size-5 shrink-0 text-muted" aria-hidden />;
 };
 
@@ -124,11 +183,28 @@ const visit = (href: string, newTab: boolean) => {
   else window.location.assign(href);
 };
 
-type PanelProps = { onClose: () => void; pages: OmnibarShortcut[]; actions: OmnibarShortcut[] };
+type PanelProps = {
+  onClose: () => void;
+  pages: OmnibarShortcut[];
+  actions: OmnibarShortcut[];
+  pageSearch?: PageSearch | null;
+  dictate?: boolean;
+  agents?: OmnibarAgent[];
+};
 
 // Mounted with the dialog, so every opening starts from an empty field.
-const OmnibarPanel = ({ onClose, pages, actions }: PanelProps) => {
+const OmnibarPanel = ({ onClose, pages, actions, pageSearch, dictate, agents = [] }: PanelProps) => {
+  const [firstAgent] = agents;
+  const fieldLabel = firstAgent
+    ? `Search products, sales and pages, or ask ${firstAgent.name}`
+    : "Search products, sales and pages";
   const [query, setQuery] = React.useState("");
+  const inputRef = React.useRef<HTMLInputElement>(null);
+  const dictation = useDictation((text) => setQuery(normalizeSearchQuery(text)));
+  const canDictate = React.useMemo(isDictationSupported, []);
+  React.useEffect(() => {
+    if (dictate) dictation.start();
+  }, []);
   const [search, setSearch] = React.useState<OmnibarResults & { query: string }>({ query: "" });
   const [activeId, setActiveId] = React.useState<string | null>(null);
   // Enter pressed before any row exists opens the first one that arrives.
@@ -178,18 +254,23 @@ const OmnibarPanel = ({ onClose, pages, actions }: PanelProps) => {
           sales: (value) => Routes.customers_path({ query: value }),
           products: (value) => Routes.products_path({ query: value }),
         },
+        pageSearch: pageSearch
+          ? { label: pageSearch.label, onSearch: pageSearch.onSearch, active: pageSearch.value !== "" }
+          : null,
+        agents,
       }),
-    [query, pages, actions, results.products, results.sales],
+    [query, pages, actions, results.products, results.sales, pageSearch, agents],
   );
   const items = groups.flatMap((group) => group.items);
   const activeItemId = nextActiveId(items, activeId);
 
   const select = (item: OmnibarItem, newTab = false) => {
-    if (!newTab) {
+    // A row that filters the page being viewed has nowhere to go, in this tab or a new one.
+    if (!newTab || item.stay) {
       item.onSelect?.();
       onClose();
     }
-    visit(item.href, newTab);
+    if (!item.stay) visit(item.href, newTab || item.external === true);
   };
 
   React.useEffect(() => {
@@ -230,15 +311,16 @@ const OmnibarPanel = ({ onClose, pages, actions }: PanelProps) => {
             <SearchIcon className="size-5 shrink-0 text-muted" aria-hidden />
           )}
           <Input
+            ref={inputRef}
             type="text"
             role="combobox"
-            aria-label="Search products, sales and pages"
+            aria-label={fieldLabel}
             aria-expanded={items.length > 0}
             aria-controls={listId}
             aria-autocomplete="list"
             aria-activedescendant={activeItemId ? optionId(activeItemId) : undefined}
             autoComplete="off"
-            placeholder="Search products, sales and pages"
+            placeholder={dictation.listening ? "Listening…" : fieldLabel}
             value={query}
             onChange={(event) => {
               pendingEnter.current = false;
@@ -259,6 +341,26 @@ const OmnibarPanel = ({ onClose, pages, actions }: PanelProps) => {
             }}
           />
         </InputGroup>
+        {canDictate ? (
+          <button
+            type="button"
+            aria-label="Dictate"
+            aria-pressed={dictation.listening}
+            className={classNames(
+              "cursor-pointer rounded p-2 all-unset",
+              focusRing,
+              // Filled while listening, so the state does not rest on colour alone.
+              dictation.listening && "bg-foreground text-background",
+            )}
+            onClick={() => {
+              if (dictation.listening) dictation.stop();
+              else dictation.start();
+              inputRef.current?.focus();
+            }}
+          >
+            <Microphone className="size-5" aria-hidden />
+          </button>
+        ) : null}
         <Dialog.Close className={classNames("cursor-pointer rounded p-2 all-unset", focusRing)} aria-label="Close">
           <X className="size-5" />
         </Dialog.Close>
@@ -285,7 +387,8 @@ const OmnibarPanel = ({ onClose, pages, actions }: PanelProps) => {
                       href={item.href}
                       onClick={(event) => {
                         // A modified or middle click is the browser's own "open in a new tab".
-                        if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+                        if (!item.stay && (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0))
+                          return;
                         event.preventDefault();
                         select(item);
                       }}
@@ -310,6 +413,13 @@ const OmnibarPanel = ({ onClose, pages, actions }: PanelProps) => {
         <p role="status" className={note ? "px-3 py-3 text-sm" : "sr-only"}>
           {searching ? "Searching" : (note ?? `${items.length} ${items.length === 1 ? "result" : "results"}`)}
         </p>
+        {dictation.error ? (
+          <p role="alert" className="px-3 py-3 text-sm">
+            {dictation.error === "blocked"
+              ? "The microphone is blocked for this site. Allow it in your browser to search by voice."
+              : "Couldn't hear that. Try the microphone again, or type."}
+          </p>
+        ) : null}
       </div>
       <div aria-hidden className="hidden gap-4 border-t border-border px-4 py-2 text-sm sm:flex">
         <span>↑↓ to move</span>

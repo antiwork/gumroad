@@ -4,7 +4,7 @@ import * as React from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { HeaderNavContext } from "$app/components/HeaderNavContext";
-import { PageHeader } from "$app/components/ui/PageHeader";
+import { InHeaderNav, PageHeader, PlaceholderAction } from "$app/components/ui/PageHeader";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 
 afterEach(cleanup);
@@ -47,6 +47,45 @@ describe("PageHeader", () => {
     expect(selected.className).toContain("lg:shadow-[inset_0_-0.125rem_0_currentColor]!");
     expect(selected.getAttribute("aria-selected")).toBe("true");
     expect(screen.getByRole("tab", { name: "Affiliated" }).className).not.toContain("lg:font-bold");
+  });
+
+  it("leaves the actions of an empty page to its placeholder under the header nav", () => {
+    const renderEmpty = (headerNav: boolean) =>
+      render(
+        <HeaderNavContext.Provider value={headerNav}>
+          <PageHeader title="Sales" empty actions={<button type="button">Export</button>} />
+          <PlaceholderAction>
+            <a href="/products/new">Start selling</a>
+          </PlaceholderAction>
+        </HeaderNavContext.Provider>,
+      );
+
+    renderEmpty(false);
+    expect(screen.getByRole("button", { name: "Export" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Start selling" })).toBeNull();
+    cleanup();
+
+    renderEmpty(true);
+    expect(screen.queryByRole("button", { name: "Export" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Start selling" })).toBeTruthy();
+  });
+
+  it("keeps an action the header nav repeats for phones only", () => {
+    const renderAction = (headerNav: boolean) =>
+      render(
+        <HeaderNavContext.Provider value={headerNav}>
+          <InHeaderNav>
+            <a href="/products/new">New product</a>
+          </InHeaderNav>
+        </HeaderNavContext.Provider>,
+      );
+
+    renderAction(false);
+    expect(screen.getByRole("link", { name: "New product" }).parentElement?.className ?? "").not.toContain("lg:hidden");
+    cleanup();
+
+    renderAction(true);
+    expect(screen.getByRole("link", { name: "New product" }).parentElement?.className).toContain("lg:hidden");
   });
 
   it("keeps a title the header nav does not show, with the text tabs under it", () => {

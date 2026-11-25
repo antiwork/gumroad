@@ -28,7 +28,7 @@ import { DownloadTaxFormsPopover } from "$app/components/server-components/Dashb
 import { Stats } from "$app/components/Stats";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
-import { PageHeader } from "$app/components/ui/PageHeader";
+import { InHeaderNav, PageHeader } from "$app/components/ui/PageHeader";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { useUserAgentInfo } from "$app/components/UserAgent";
@@ -369,15 +369,11 @@ export const DashboardPage = ({
                 members whose role can't create products, and on wide screens where the header
                 nav has its own. */}
             {loggedInUser?.policies.product.create ? (
-              <NavigationButton
-                href={Routes.new_product_path()}
-                color="accent"
-                className={loggedInUser.headerNav ? "lg:hidden" : undefined}
-                // Lets the page header collapse when this is all it would have held.
-                {...(loggedInUser.headerNav && { "data-in-header-nav": true })}
-              >
-                New product
-              </NavigationButton>
+              <InHeaderNav>
+                <NavigationButton href={Routes.new_product_path()} color="accent">
+                  New product
+                </NavigationButton>
+              </InHeaderNav>
             ) : null}
           </>
         }

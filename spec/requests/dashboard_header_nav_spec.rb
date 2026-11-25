@@ -92,6 +92,30 @@ describe "Dashboard header nav", type: :system, js: true do
       expect(page).to have_link("New product", count: 1)
     end
 
+    it "searches the page being viewed from the search bar, in place of the page's own search" do
+      create(:product, user: seller, name: "Plain gadget")
+      visit products_path
+
+      expect(page).not_to have_button("Toggle Search")
+      within(header) { click_on "Search" }
+      fill_in "Search products, sales and pages", with: "widg"
+      find("[role=option]", text: "Search products for “widg”").click
+
+      expect(page).to have_current_path(products_path, ignore_query: true)
+      expect(page).to have_link("Beautiful widget")
+      expect(page).not_to have_link("Plain gadget")
+
+      click_on "Clear search for widg"
+      expect(page).to have_link("Plain gadget")
+    end
+
+    it "leaves an empty page's actions to its placeholder" do
+      visit collaborators_path
+
+      expect(page).to have_link("Add collaborator", count: 1)
+      within("main section") { expect(page).to have_link("Add collaborator") }
+    end
+
     context "on a phone", :mobile_view do
       it "keeps the drawer and the page's own New product button" do
         visit products_path

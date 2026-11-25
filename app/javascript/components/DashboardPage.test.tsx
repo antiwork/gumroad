@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { CurrentSellerProvider, type CurrentSeller } from "$app/components/CurrentSeller";
 import { DashboardPage, type DashboardPageProps } from "$app/components/DashboardPage";
 import { DomainSettingsProvider } from "$app/components/DomainSettings";
+import { HeaderNavContext } from "$app/components/HeaderNavContext";
 import { LoggedInUserProvider, type LoggedInUser } from "$app/components/LoggedInUser";
 import { UserAgentProvider } from "$app/components/UserAgent";
 
@@ -135,7 +136,9 @@ const renderDashboard = (
           }}
         >
           <UserAgentProvider value={{ isMobile: false, locale: "en-US" }}>
-            <DashboardPage {...props} {...overrides} />
+            <HeaderNavContext.Provider value={user.headerNav}>
+              <DashboardPage {...props} {...overrides} />
+            </HeaderNavContext.Provider>
           </UserAgentProvider>
         </DomainSettingsProvider>
       </CurrentSellerProvider>
@@ -237,7 +240,7 @@ describe("DashboardPage New product button", () => {
     ...loggedInUser,
     policies: { ...loggedInUser.policies, product: { create: true } },
   };
-  const classes = () => screen.getByRole("link", { name: "New product" }).className.split(" ");
+  const classes = () => (screen.getByRole("link", { name: "New product" }).parentElement?.className ?? "").split(" ");
 
   it("shows at every width beside the sidebar", () => {
     renderDashboard(minor, {}, creator);

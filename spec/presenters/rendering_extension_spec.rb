@@ -156,6 +156,7 @@ describe "RenderingExtension" do
                 promoted_nav_items: [],
                 lazy_load_offscreen_discover_images: false,
                 header_nav: false,
+                ask_agents: [],
               },
               current_seller: UserPresenter.new(user: seller).as_current_seller,
               csp_nonce: SecureHeaders.content_security_policy_script_nonce(stubbed_view_context.request),
@@ -181,6 +182,44 @@ describe "RenderingExtension" do
 
           Feature.activate_user(:dashboard_header_nav, user)
           expect(RenderingExtension.custom_context(stubbed_view_context)[:logged_in_user][:header_nav]).to eq(true)
+        end
+      end
+
+      describe "ask_agents" do
+        let(:seller) { create(:named_seller) }
+        let(:user) { seller }
+        let(:pundit_user) { SellerContext.new(user:, seller:) }
+        let(:ask_agents) { RenderingExtension.custom_context(stubbed_view_context)[:logged_in_user][:ask_agents] }
+
+        def connect(name, mcp_dynamic_client: true, revoked_at: nil)
+          application = create(:oauth_application, name:, mcp_dynamic_client:)
+          create("doorkeeper/access_token", application:, resource_owner_id: user.id, scopes: "view_sales", revoked_at:)
+        end
+
+        before { Feature.activate_user(:dashboard_header_nav, user) }
+
+        it "lists the assistants the user has connected through MCP" do
+          connect("Claude")
+          connect("ChatGPT")
+          connect("Cursor")
+
+          expect(ask_agents).to eq(%w[claude chatgpt])
+        end
+
+        it "leaves out revoked connections, ordinary OAuth applications and other users' connections" do
+          connect("Claude", revoked_at: 1.day.ago)
+          connect("ChatGPT", mcp_dynamic_client: false)
+          create("doorkeeper/access_token", application: create(:oauth_application, name: "Claude", mcp_dynamic_client: true),
+                                            resource_owner_id: create(:user).id, scopes: "view_sales")
+
+          expect(ask_agents).to eq([])
+        end
+
+        it "is empty without the header nav flag" do
+          connect("Claude")
+          Feature.deactivate_user(:dashboard_header_nav, user)
+
+          expect(ask_agents).to eq([])
         end
       end
 

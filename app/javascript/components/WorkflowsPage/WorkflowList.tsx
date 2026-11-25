@@ -10,6 +10,7 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Modal } from "$app/components/Modal";
 import { Search } from "$app/components/Search";
 import { showAlert } from "$app/components/server-components/Alert";
+import { InHeaderNav } from "$app/components/ui/PageHeader";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { Layout } from "$app/components/WorkflowsPage";
@@ -48,14 +49,14 @@ const WorkflowList = ({ workflows }: WorkflowListProps) => {
     workflows.length > 0 ? (
       <>
         <Search value={query} onSearch={setQuery} placeholder="Search workflows" />
-        {newWorkflowButton}
+        <InHeaderNav>{newWorkflowButton}</InHeaderNav>
       </>
     ) : (
       newWorkflowButton
     );
 
   return (
-    <Layout title="Workflows" actions={headerActions}>
+    <Layout title="Workflows" actions={headerActions} empty={workflows.length === 0}>
       {workflows.length > 0 ? (
         <div className="space-y-8 p-4 md:p-8">
           {matchingWorkflows.length > 0 ? (

@@ -18,6 +18,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { Skeleton } from "$app/components/Skeleton";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Menu, MenuItem } from "$app/components/ui/Menu";
+import { PlaceholderAction } from "$app/components/ui/PageHeader";
 import { Placeholder, PlaceholderImage } from "$app/components/ui/Placeholder";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
@@ -159,15 +160,20 @@ export default function UtmLinksIndex() {
     });
   };
 
+  const createLink = (
+    <NavigationButtonInertia href={Routes.new_dashboard_utm_link_path()} color="accent">
+      Create link
+    </NavigationButtonInertia>
+  );
+
   return (
     <AnalyticsLayout
       selectedTab="utm_links"
+      empty={utmLinks.length === 0 && !query && !isNavigating}
       actions={
         <>
-          <Search value={query} onSearch={onSearch} />
-          <NavigationButtonInertia href={Routes.new_dashboard_utm_link_path()} color="accent">
-            Create link
-          </NavigationButtonInertia>
+          <Search value={query} onSearch={onSearch} label="Search links" />
+          {createLink}
         </>
       }
     >
@@ -301,6 +307,7 @@ export default function UtmLinksIndex() {
             <PlaceholderImage src={noLinksYetPlaceholder} />
             <h2>No links yet</h2>
             <h4>Use UTM links to track which sources are driving the most conversions and revenue</h4>
+            <PlaceholderAction>{createLink}</PlaceholderAction>
 
             <a href="/help/article/74-the-analytics-dashboard" target="_blank" rel="noreferrer">
               Learn more about UTM tracking

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   buildOmnibarGroups,
@@ -150,10 +150,70 @@ describe("buildOmnibarGroups", () => {
       expect(search?.items[0]?.href).toBe("/customers?query=ada%2Btest%40example.com");
     });
 
+    it("asks a connected assistant last, once the results have settled", () => {
+      const agents = [
+        { id: "claude", name: "Claude", href: (question: string) => `https://claude.example/?q=${question}` },
+      ];
+      const ask = (results: OmnibarResults) =>
+        buildOmnibarGroups({ query: "refunds", pages, actions, results, searchLinks, agents }).at(-1);
+
+      expect(ask({ products: [widget] })?.title).not.toBe("Ask");
+      expect(ask({ products: [widget], sales: [] })).toEqual({
+        title: "Ask",
+        items: [
+          {
+            id: "ask:claude",
+            kind: "ask",
+            title: "Ask Claude “refunds”",
+            detail: "Opens in a new tab",
+            href: "https://claude.example/?q=refunds",
+            external: true,
+          },
+        ],
+      });
+    });
+
     // The server answers nothing for one character, so offering to search for it would lead nowhere.
     it("offers no search rows for a single character", () => {
       expect(titles(build("z", { products: [], sales: [] }))).toEqual([]);
     });
+  });
+});
+
+describe("a page with its own search", () => {
+  const onSearch = vi.fn();
+  const buildOn = (query: string, active = false, results: OmnibarResults = {}) =>
+    buildOmnibarGroups({
+      query,
+      pages,
+      actions,
+      results,
+      searchLinks,
+      pageSearch: { label: "Search products", onSearch, active },
+    });
+
+  it("puts the page's search first, as a row that stays on the page", () => {
+    const [first] = buildOn("wid");
+
+    expect(first?.title).toBe("On this page");
+    expect(first?.items).toMatchObject([{ id: "search:page", title: "Search products for “wid”", stay: true }]);
+    first?.items[0]?.onSelect?.();
+    expect(onSearch).toHaveBeenCalledWith("wid");
+  });
+
+  it("offers to clear a filtered page before anything is typed", () => {
+    expect(buildOn("")[0]?.title).not.toBe("On this page");
+
+    const [first] = buildOn("", true);
+    expect(first?.items).toMatchObject([{ id: "search:page-clear", stay: true }]);
+    first?.items[0]?.onSelect?.();
+    expect(onSearch).toHaveBeenCalledWith("");
+  });
+
+  it("does not repeat the page's search among the search rows", () => {
+    const search = buildOn("wid", false, { products: [], sales: [] }).find((group) => group.title === "Search");
+
+    expect(search?.items.map((item) => item.id)).toEqual(["search:sales"]);
   });
 });
 

@@ -25,5 +25,7 @@ const SECTION_TITLES = new Set([
   "Affiliates",
   "Community",
   "Library",
+  // A tab of Emails, which the header marks.
+  "Subscribers",
 ]);
 export const isSectionTitle = (title: React.ReactNode) => typeof title === "string" && SECTION_TITLES.has(title);

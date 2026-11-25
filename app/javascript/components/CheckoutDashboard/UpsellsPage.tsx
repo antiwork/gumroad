@@ -236,6 +236,7 @@ const UpsellsPage = (props: UpsellsPageProps) => {
     <Layout
       currentPage="upsells"
       pages={props.pages}
+      empty={upsells.length === 0 && !searchQuery}
       actions={
         <>
           {upsells.length > 0 || searchQuery ? (

@@ -65,12 +65,36 @@ const Harness = () => {
   return (
     <>
       <OmnibarTrigger variant="field" onOpen={omnibar.show} />
-      <OmnibarDialog open={omnibar.open} onClose={omnibar.hide} pages={pages} actions={actions} />
+      <OmnibarDialog
+        open={omnibar.open}
+        dictate={omnibar.dictate}
+        onClose={omnibar.hide}
+        pages={pages}
+        actions={actions}
+      />
     </>
   );
 };
 
 const trigger = () => screen.getByRole("button", { name: "Search" });
+
+// A stand-in for the browser's recogniser: `hear` plays back what it would have heard.
+class FakeRecognition {
+  static last: FakeRecognition | null = null;
+  lang = "";
+  interimResults = false;
+  onresult: ((event: { results: { transcript: string }[][] }) => void) | null = null;
+  onend: (() => void) | null = null;
+  onerror: ((event: { error: string }) => void) | null = null;
+  start = vi.fn();
+  abort = vi.fn();
+  constructor() {
+    FakeRecognition.last = this;
+  }
+  hear(...phrases: string[]) {
+    this.onresult?.({ results: phrases.map((transcript) => [{ transcript }]) });
+  }
+}
 const openBar = () => {
   render(<Harness />);
   trigger().focus();
@@ -449,5 +473,97 @@ describe("Omnibar", () => {
       expect(trigger().getAttribute("aria-keyshortcuts")).toBe("Meta+K");
       expect(screen.getByText("⌘K")).toBeTruthy();
     });
+  });
+});
+
+describe("Omnibar extras", () => {
+  afterEach(() => {
+    Reflect.deleteProperty(window, "webkitSpeechRecognition");
+    FakeRecognition.last = null;
+  });
+
+  it("offers no microphone where the browser cannot dictate", () => {
+    openBar();
+
+    expect(screen.queryByRole("button", { name: "Dictate" })).toBeNull();
+  });
+
+  it("opens listening from the field's microphone and types what it hears", () => {
+    Reflect.set(window, "webkitSpeechRecognition", FakeRecognition);
+    render(<Harness />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Dictate" }));
+    const input = screen.getByRole<HTMLInputElement>("combobox");
+    expect(FakeRecognition.last?.start).toHaveBeenCalled();
+    expect(input.placeholder).toBe("Listening…");
+
+    act(() => FakeRecognition.last?.hear("pro", "widget"));
+    expect(input.value).toBe("pro widget");
+  });
+
+  it("says so when the microphone is blocked", () => {
+    Reflect.set(window, "webkitSpeechRecognition", FakeRecognition);
+    render(<Harness />);
+    fireEvent.click(screen.getByRole("button", { name: "Dictate" }));
+
+    act(() => FakeRecognition.last?.onerror?.({ error: "not-allowed" }));
+
+    expect(screen.getByRole("alert").textContent).toContain("microphone is blocked");
+  });
+
+  it("filters the page being viewed without leaving it", () => {
+    const onSearch = vi.fn();
+    const Page = () => {
+      const omnibar = useOmnibar();
+      return (
+        <>
+          <OmnibarTrigger variant="field" onOpen={omnibar.show} />
+          <OmnibarDialog
+            open={omnibar.open}
+            onClose={omnibar.hide}
+            pages={pages}
+            actions={actions}
+            pageSearch={{ label: "Search products", value: "", onSearch }}
+          />
+        </>
+      );
+    };
+    render(<Page />);
+    fireEvent.click(trigger());
+    const input = screen.getByRole("combobox");
+
+    type(input, "wid");
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(onSearch).toHaveBeenCalledWith("wid");
+    expect(visit).not.toHaveBeenCalled();
+    expect(screen.queryByRole("combobox")).toBeNull();
+  });
+
+  it("hands a question to a connected assistant in a new tab", () => {
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const Page = () => {
+      const omnibar = useOmnibar();
+      return (
+        <>
+          <OmnibarTrigger variant="field" onOpen={omnibar.show} canAsk />
+          <OmnibarDialog
+            open={omnibar.open}
+            onClose={omnibar.hide}
+            pages={[]}
+            actions={[]}
+            agents={[{ id: "claude", name: "Claude", href: (question) => `https://claude.example/?q=${question}` }]}
+          />
+        </>
+      );
+    };
+    render(<Page />);
+    fireEvent.click(screen.getByRole("button", { name: "Search or ask" }));
+
+    type(screen.getByRole("combobox", { name: "Search products, sales and pages, or ask Claude" }), "x");
+    fireEvent.click(screen.getByRole("option", { name: /Ask Claude “x”/u }));
+
+    expect(open).toHaveBeenCalledWith("https://claude.example/?q=x", "_blank", "noopener");
+    expect(visit).not.toHaveBeenCalled();
   });
 });

@@ -3,6 +3,8 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { HeaderNavContext } from "$app/components/HeaderNavContext";
+import { PageSearchProvider, usePageSearch } from "$app/components/PageSearch";
 import { Search, normalizeSearchQuery } from "$app/components/Search";
 
 afterEach(cleanup);
@@ -99,5 +101,53 @@ describe("Search", () => {
     }
 
     expect(onSearch).toHaveBeenLastCalledWith("Jane Cooper");
+  });
+});
+
+describe("Search under the header nav", () => {
+  const Bar = () => {
+    const search = usePageSearch();
+    return (
+      <button type="button" onClick={() => search?.onSearch("from the bar")}>
+        {search ? `${search.label}: ${search.value}` : "no page search"}
+      </button>
+    );
+  };
+  const renderPage = (value: string, onSearch = vi.fn()) => {
+    render(
+      <PageSearchProvider>
+        <Bar />
+        <HeaderNavContext.Provider value>
+          <Search value={value} onSearch={onSearch} placeholder="Search products" />
+        </HeaderNavContext.Provider>
+      </PageSearchProvider>,
+    );
+    return onSearch;
+  };
+
+  it("hands the page's search to the search bar and shows no control of its own", () => {
+    const onSearch = renderPage("");
+
+    expect(screen.queryByRole("button", { name: "Toggle Search" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Search products:" }));
+    expect(onSearch).toHaveBeenCalledWith("from the bar");
+  });
+
+  it("shows what the page is filtered by, with a way to clear it", () => {
+    const onSearch = renderPage("ada");
+
+    expect(screen.getByRole("button", { name: "Search products: ada" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Clear search for ada" }));
+    expect(onSearch).toHaveBeenCalledWith("");
+  });
+
+  it("keeps its own control where there is no search bar to take it", () => {
+    render(
+      <HeaderNavContext.Provider value>
+        <Search value="" onSearch={vi.fn()} />
+      </HeaderNavContext.Provider>,
+    );
+
+    expect(screen.getByRole("button", { name: "Toggle Search" })).toBeTruthy();
   });
 });

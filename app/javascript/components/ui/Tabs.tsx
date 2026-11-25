@@ -10,7 +10,7 @@ import { TextTabsContext } from "$app/components/HeaderNavContext";
 // Wide screens only: a phone keeps the pills, which are easier to tap. The negative margins cancel
 // the page header's padding, so the selected tab's bar sits on the header's bottom border.
 // Important throughout: these override the pill's own classes, which come later in the stylesheet.
-const textTabsClasses = { row: "lg:-my-3! lg:gap-6!", stacked: "lg:-mb-8! lg:gap-6!" };
+const textTabsClasses = { row: "lg:-my-2! lg:gap-6!", stacked: "lg:-mb-8! lg:gap-6!" };
 const textTabClasses = {
   row: "lg:py-5!",
   stacked: "lg:pt-0! lg:pb-4!",

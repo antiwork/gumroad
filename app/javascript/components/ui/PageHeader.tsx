@@ -4,6 +4,26 @@ import { classNames } from "$app/utils/classNames";
 
 import { HeaderNavContext, isSectionTitle, TextTabsContext } from "$app/components/HeaderNavContext";
 
+/**
+ * Wraps a page action the header nav already offers on every page ("New product"), so wide
+ * screens do not show it twice. Phones, which have no header nav, keep it.
+ */
+export const InHeaderNav = ({ children }: { children: React.ReactNode }) =>
+  React.useContext(HeaderNavContext) ? (
+    <div data-in-header-nav className="contents lg:hidden">
+      {children}
+    </div>
+  ) : (
+    children
+  );
+
+/**
+ * For an empty page's placeholder: an action its page header would have carried, shown only where
+ * the header leaves it out (see `empty`).
+ */
+export const PlaceholderAction = ({ children }: { children: React.ReactNode }) =>
+  React.useContext(HeaderNavContext) ? children : null;
+
 export const PageHeader = React.forwardRef<
   HTMLDivElement,
   {
@@ -12,21 +32,29 @@ export const PageHeader = React.forwardRef<
     children?: React.ReactNode;
     className?: string;
     showTitleOnMobile?: boolean;
+    // The page has nothing to list yet. Under the header nav its actions are then left out: there
+    // is nothing for them to act on, and the page's placeholder carries the one that matters.
+    empty?: boolean;
   }
->(({ title, actions, children, className, showTitleOnMobile = false }, ref) => {
+>(({ title, actions: allActions, children, className, showTitleOnMobile = false, empty = false }, ref) => {
   const headerNav = React.useContext(HeaderNavContext);
   // On a wide screen the header already names the section. The heading stays for screen readers,
   // and the tabs take its place on the row, opposite the actions.
   const titleInHeader = headerNav && isSectionTitle(title);
+  const actions = headerNav && empty ? null : allActions;
 
   return (
     <header
       className={classNames(
         "flex flex-col gap-4 border-b border-border p-4 md:p-8",
         titleInHeader &&
-          "lg:min-h-16 lg:flex-row-reverse lg:flex-wrap lg:items-center lg:justify-between lg:gap-y-3 lg:py-3",
-        // Nothing left to show: no tabs, and no control the header does not already have.
-        titleInHeader && !children && "lg:[&:not(:has(:is(a,button,input,select):not([data-in-header-nav])))]:hidden",
+          "lg:min-h-16 lg:flex-row-reverse lg:flex-wrap lg:items-center lg:justify-between lg:gap-y-2 lg:py-2",
+        // Nothing left to show: no tabs, and no control the header nav does not already have.
+        titleInHeader &&
+          !children &&
+          "lg:[&:not(:has(:is(a,button,input,select):not([data-in-header-nav],[data-in-header-nav]_*)))]:hidden",
+        // A phone shows no title either, so without actions or tabs the header is an empty box.
+        headerNav && !children && !actions && !showTitleOnMobile && "max-sm:hidden",
         className,
       )}
       ref={ref}
@@ -41,7 +69,13 @@ export const PageHeader = React.forwardRef<
         >
           {title}
         </h1>
-        <div className="grid flex-1 grid-cols-2 gap-2 has-[>*:only-child]:grid-cols-1 sm:flex sm:flex-none md:-my-2">
+        <div
+          className={classNames(
+            "grid flex-1 grid-cols-2 gap-2 has-[>*:only-child]:grid-cols-1 sm:flex sm:flex-none md:-my-2",
+            // The row's own padding is the spacing here, and it holds when the tabs wrap under.
+            titleInHeader && "lg:my-0 lg:items-center",
+          )}
+        >
           {actions}
         </div>
       </div>
@@ -57,5 +91,4 @@ export const PageHeader = React.forwardRef<
     </header>
   );
 });
-
 PageHeader.displayName = "PageHeader";

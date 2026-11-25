@@ -6,7 +6,7 @@ export const MINIMUM_SEARCH_LENGTH = 2;
 // Counted in characters, as the server counts: "🎨" is one, though its JavaScript length is two.
 export const isSearchable = (query: string) => Array.from(query.trim()).length >= MINIMUM_SEARCH_LENGTH;
 
-export type OmnibarItemKind = "page" | "action" | "product" | "sale" | "search";
+export type OmnibarItemKind = "page" | "action" | "product" | "sale" | "search" | "ask";
 export type OmnibarItem = {
   id: string;
   kind: OmnibarItemKind;
@@ -14,7 +14,13 @@ export type OmnibarItem = {
   detail?: string;
   href: string;
   onSelect?: (() => void) | undefined;
+  // Acts on the page being viewed: selecting it runs `onSelect` and navigates nowhere.
+  stay?: true;
+  // Leaves Gumroad, so it always opens in a new tab.
+  external?: true;
 };
+// An AI assistant the seller has connected: `href` opens its chat with the question typed in.
+export type OmnibarAgent = { id: string; name: string; href: (question: string) => string };
 export type OmnibarGroup = { title: string; items: OmnibarItem[] };
 // A place or an action the bar offers without asking the server. `onSelect` runs before the visit,
 // for a destination whose nav link does more than navigate.
@@ -58,15 +64,50 @@ export const buildOmnibarGroups = ({
   actions,
   results,
   searchLinks,
+  pageSearch,
+  agents = [],
 }: {
+  agents?: OmnibarAgent[];
   query: string;
   pages: OmnibarShortcut[];
   actions: OmnibarShortcut[];
   results: OmnibarResults;
   searchLinks: { sales: (query: string) => string; products: (query: string) => string };
+  // The search of the page being viewed: `label` is its name ("Search products"), `active` whether
+  // the page is filtered now.
+  pageSearch?: { label: string; onSearch: (query: string) => void; active: boolean } | null;
 }): OmnibarGroup[] => {
   const trimmed = query.trim();
+  const pageSearchTitle = pageSearch ? `${pageSearch.label} for “${trimmed}”` : null;
+  // First, and known without a request: typing and pressing Enter filters the page, as its own
+  // search field did.
+  const onThisPage: OmnibarItem[] = !pageSearch
+    ? []
+    : trimmed
+      ? [
+          {
+            id: "search:page",
+            kind: "search",
+            title: pageSearchTitle ?? "",
+            href: "#",
+            stay: true,
+            onSelect: () => pageSearch.onSearch(trimmed),
+          },
+        ]
+      : pageSearch.active
+        ? [
+            {
+              id: "search:page-clear",
+              kind: "search",
+              title: "Clear this page's search",
+              href: "#",
+              stay: true,
+              onSelect: () => pageSearch.onSearch(""),
+            },
+          ]
+        : [];
   const groups: OmnibarGroup[] = [
+    { title: "On this page", items: onThisPage },
     { title: "Go to", items: shortcutItems("page", pages, trimmed) },
     { title: "Quick actions", items: shortcutItems("action", actions, trimmed) },
   ];
@@ -111,9 +152,25 @@ export const buildOmnibarGroups = ({
             title: `Search products for “${trimmed}”`,
             href: searchLinks.products(trimmed),
           },
-        ],
+          // The page's own row, at the top, already says this.
+        ].filter((item): item is OmnibarItem => item.title !== pageSearchTitle),
       });
     }
+  }
+
+  // Last, and only once the rows above have settled: nothing here may push a result down.
+  if (trimmed && (!isSearchable(query) || settled)) {
+    groups.push({
+      title: "Ask",
+      items: agents.map(({ id, name, href }) => ({
+        id: `ask:${id}`,
+        kind: "ask",
+        title: `Ask ${name} “${trimmed}”`,
+        detail: "Opens in a new tab",
+        href: href(trimmed),
+        external: true,
+      })),
+    });
   }
 
   return groups.filter((group) => group.items.length > 0);

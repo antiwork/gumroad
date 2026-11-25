@@ -327,18 +327,18 @@ describe("HeaderNav rows", () => {
   it("gives search and the create button the same height", () => {
     const { nav } = renderHeader();
 
-    expect(within(nav).getByRole("button", { name: "Search" }).className.split(" ")).toContain("h-12");
+    expect(within(nav).getByRole("button", { name: "Search" }).parentElement?.className.split(" ")).toContain("h-12");
     expect(within(nav).getByRole("link", { name: "New product" }).parentElement?.className.split(" ")).toContain(
       "h-12",
     );
   });
 
-  // On a very wide screen an uncapped field would run most of the way across it.
-  it("caps the search field's width", () => {
+  // Equal side columns centre the field; its own column caps it on a very wide screen.
+  it("centres the search field and caps its width", () => {
     const { nav } = renderHeader();
 
-    expect(within(nav).getByRole("button", { name: "Search" }).parentElement?.className.split(" ")).toContain(
-      "max-w-3xl",
+    expect(within(nav).getByRole("button", { name: "Search" }).parentElement?.parentElement?.className).toContain(
+      "grid-cols-[minmax(max-content,1fr)_minmax(0,48rem)_minmax(max-content,1fr)]",
     );
   });
 });
