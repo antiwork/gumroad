@@ -52,9 +52,8 @@ export const PageHeader = React.forwardRef<
         "flex flex-col gap-4 border-b border-border p-4 md:p-8",
         titleInHeader &&
           "lg:min-h-16 lg:flex-row-reverse lg:flex-wrap lg:items-center lg:justify-between lg:gap-y-2 lg:py-2",
-        // The title is hidden on a wide screen and, unless asked for, on a phone. In between it shows.
+        // On a wide screen the title is hidden, so a header holding no control is an empty box.
         titleInHeader && "lg:[&:not(:has(:is(a,button,input,select,[role=tab])))]:hidden",
-        titleInHeader && !showTitleOnMobile && "max-sm:[&:not(:has(:is(a,button,input,select,[role=tab])))]:hidden",
         className,
       )}
       ref={ref}
@@ -63,7 +62,8 @@ export const PageHeader = React.forwardRef<
         <h1
           className={classNames(
             "line-clamp-2 text-2xl",
-            !showTitleOnMobile && !actionsInFooter && "hidden! sm:block!",
+            // Under the header nav a phone's bar carries no title, so the page shows its own.
+            !showTitleOnMobile && !headerNav && "hidden! sm:block!",
             titleInHeader && "lg:sr-only!",
           )}
         >

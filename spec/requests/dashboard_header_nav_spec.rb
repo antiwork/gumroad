@@ -120,19 +120,20 @@ describe "Dashboard header nav", type: :system, js: true do
       visit edit_link_path(product)
 
       within("[role=group][aria-label='Page actions']") { expect(page).to have_button("Save changes") }
-      within("main header") { expect(page).not_to have_button("Save changes") }
+      expect(page).to have_button("Save changes", count: 1)
     end
 
     context "on a phone", :mobile_view do
       it "has search, a create menu and the drawer in its bar" do
         visit products_path
 
+        expect(page).not_to have_link("New product")
         within(header) do
           expect(page).to have_button("Search")
           toggle_disclosure "Create"
-          expect(page).to have_link("New product", count: 1)
+          # The menu's rows are menu items, not links.
+          expect(page).to have_selector("[role=menuitem]", text: "New product", count: 1)
         end
-        expect(page).to have_link("New product", count: 1)
       end
 
       it "keeps the page's tabs in the drawer" do
