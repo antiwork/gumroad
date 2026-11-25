@@ -3,7 +3,7 @@
   <% if alert_text %>
     <% status = flash[:alert] ? "danger" : flash[:warning] ? "warning" : flash[:info] ? "info" : "success" %>
     <div id="flash-toast"
-         class="fixed top-4 left-1/2 z-100 w-max max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded bg-background shadow md:max-w-md"
+         class="fixed top-4 left-1/2 z-100 w-max max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-(--radius-box) bg-background shadow md:max-w-md"
          style="transition: all 0.3s ease-out 0.5s;">
       <%= render("layouts/shared/flash/#{status}", message: alert_text) %>
     </div>

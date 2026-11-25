@@ -702,7 +702,7 @@ export const Product = ({
       className={classNames(
         // The article's DOM order is the stacked order so focus follows what the narrow layout draws;
         // the named areas below put both back in the desktop columns.
-        "relative grid rounded border border-border bg-background lg:grid-cols-[2fr_1fr]",
+        "relative grid rounded-(--radius-card) border border-border bg-background lg:grid-cols-[2fr_1fr]",
         showsExistingPurchase
           ? "[grid-template-areas:'covers'_'title'_'price'_'details'_'controls'_'social']"
           : "[grid-template-areas:'covers'_'title'_'price'_'controls'_'details'_'social']",

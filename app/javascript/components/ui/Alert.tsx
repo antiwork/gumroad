@@ -4,14 +4,15 @@ import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
 
-const alertVariants = cva("flex items-start gap-2 rounded border border-border p-3", {
+// A tint and an icon carry the meaning, as in the emails' callouts; the border only keeps the box size.
+const alertVariants = cva("flex items-start gap-2 rounded-(--radius-box) border border-border p-3", {
   variants: {
     variant: {
-      success: "border-success bg-success/20",
-      danger: "border-danger bg-danger/20",
-      warning: "border-warning bg-warning/20",
-      info: "border-info bg-info/20",
-      accent: "border-accent bg-accent/20",
+      success: "border-transparent bg-success/20",
+      danger: "border-transparent bg-danger/20",
+      warning: "border-transparent bg-warning/20",
+      info: "border-transparent bg-info/20",
+      accent: "border-transparent bg-accent/20",
     },
   },
 });

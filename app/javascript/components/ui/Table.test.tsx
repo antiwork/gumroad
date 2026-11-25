@@ -18,6 +18,30 @@ const renderHead = (props: React.ComponentProps<typeof TableHead>) =>
     </Table>,
   );
 
+describe("table column labels", () => {
+  // As in the emails' tables: the labels step back and the rows carry the weight.
+  it("sets column labels small, regular and muted, and leaves row headers alone", () => {
+    render(
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Name</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow>
+            <TableHead scope="row">Beautiful widget</TableHead>
+          </TableRow>
+        </TableBody>
+      </Table>,
+    );
+
+    const label = screen.getByRole("columnheader", { name: "Name" }).className.split(" ");
+    expect(label).toEqual(expect.arrayContaining(["lg:text-sm", "lg:font-normal", "lg:text-muted"]));
+    expect(screen.getByRole("rowheader", { name: "Beautiful widget" }).className).not.toContain("text-muted");
+  });
+});
+
 describe("sortable table headers", () => {
   it("exposes a native non-submitting sort button", () => {
     renderHead({ sortDirection: "none", onClick: vi.fn() });

@@ -106,4 +106,36 @@ describe("design tokens", () => {
   it("rounds controls at 8px", () => {
     expect(token(tailwind, "radius")).toBe("0.5rem");
   });
+
+  // 8, 12 and 16px at the stock radius; a store's corner setting scales all three and "none" squares them.
+  it("rounds boxes and cards more than controls, scaled by the store's corner setting", () => {
+    const rem = (formula: RegExp, radius: number) => {
+      const match = formula.exec(design);
+      if (!match) throw new Error(`no match for ${formula}`);
+      return Math.min(radius * Number(match[1]), Math.max(radius, Number(match[2])));
+    };
+    const box = /--radius-box:\s*min\(calc\(var\(--radius\) \* ([\d.]+)\), max\(var\(--radius\), ([\d.]+)rem\)\)/u;
+    const card = /--radius-card:\s*min\(calc\(var\(--radius\) \* ([\d.]+)\), max\(var\(--radius\), ([\d.]+)rem\)\)/u;
+
+    expect([rem(box, 0.5), rem(card, 0.5)]).toEqual([0.75, 1]);
+    expect([rem(box, 0), rem(card, 0)]).toEqual([0, 0]);
+    expect([rem(box, 0.25), rem(card, 0.25)]).toEqual([0.375, 0.5]);
+    expect([rem(box, 1), rem(card, 1)]).toEqual([1, 1]);
+  });
+
+  const heading = (level: number, css = design) => {
+    const rule = new RegExp(`(^|[\\s}])h${level} \\{([^}]*)\\}`, "u").exec(css)?.[2];
+    if (rule === undefined) throw new Error(`no h${level} rule`);
+    return rule;
+  };
+
+  it("sets headings in bold on the emails' scale", () => {
+    expect(heading(1)).toMatch(/font-size:\s*2\.25rem;[\s\S]*font-weight:\s*bold/u);
+    expect(heading(2)).toMatch(/font-size:\s*1\.5rem;[\s\S]*font-weight:\s*bold/u);
+    expect(heading(3)).toMatch(/font-size:\s*1\.125rem;[\s\S]*font-weight:\s*bold/u);
+  });
+
+  it("leaves the marketing pages' headings on their own scale", () => {
+    expect(design).toMatch(/\.marketing-type h1 \{[^}]*font-size:\s*2\.5rem;[^}]*font-weight:\s*normal/u);
+  });
 });

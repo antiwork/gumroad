@@ -800,8 +800,8 @@ describe("server banner status", () => {
   it("shows payout setup already underway as information above the payout schedule", () => {
     const banner = renderBanner(underwayMessage, "info");
 
-    expect(banner.className).toContain("border-info");
-    expect(banner.className).not.toContain("border-danger");
+    expect(banner.className).toContain("bg-info/20");
+    expect(banner.className).not.toContain("bg-danger/20");
     expect(
       banner.compareDocumentPosition(screen.getByRole("heading", { name: "Payout schedule" })) &
         Node.DOCUMENT_POSITION_FOLLOWING,
@@ -811,8 +811,8 @@ describe("server banner status", () => {
   it("keeps a server error without a status in the danger style", () => {
     const banner = renderBanner("Bank payouts are not supported in your country yet. Please use PayPal instead.");
 
-    expect(banner.className).toContain("border-danger");
-    expect(banner.className).not.toContain("border-info");
+    expect(banner.className).toContain("bg-danger/20");
+    expect(banner.className).not.toContain("bg-info/20");
   });
 });
 

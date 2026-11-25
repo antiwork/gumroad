@@ -17,6 +17,10 @@
     border-width: 0;
     // A bare `border` utility sets no colour and would fall back to currentColor.
     border-color: #{$border-color};
+    // Surfaces round more than the controls inside them, and a store's corner setting scales all
+    // three: 8, 12 and 16px at the stock radius, all square at "none".
+    --radius-box: min(calc(var(--radius) * 1.5), max(var(--radius), 0.75rem));
+    --radius-card: min(calc(var(--radius) * 2), max(var(--radius), 1rem));
     --border: #{$border};
     --outline: #{$outline};
     @for $i from 1 through length($grays) {
@@ -40,10 +44,27 @@
     color: full-color(color);
   }
 
+  // The emails' heading scale: 36, 24, 18 and 16px, bold, tighter at the top.
+  $heading-sizes: (2.25rem, 1.5rem, 1.125rem, 1rem, 0.875rem);
+  $heading-line-heights: (1.2, 1.3, 1.4, 1.5, 1.4);
+  $heading-tracking: (-0.02em, -0.01em, normal, normal, normal);
   @for $i from 1 through 5 {
     h#{$i} {
-      @include font-size(6 - $i);
-      font-weight: normal;
+      font-size: nth($heading-sizes, $i);
+      line-height: nth($heading-line-heights, $i);
+      letter-spacing: nth($heading-tracking, $i);
+      font-weight: bold;
+    }
+  }
+
+  // The marketing pages set their own display type and keep the former scale.
+  .marketing-type {
+    @for $i from 1 through 5 {
+      h#{$i} {
+        @include font-size(6 - $i);
+        letter-spacing: inherit;
+        font-weight: normal;
+      }
     }
   }
 

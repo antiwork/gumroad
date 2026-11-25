@@ -20,7 +20,7 @@ export const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTM
         <table
           ref={ref}
           className={classNames(
-            "grid w-full border-spacing-0 gap-4 lg:table lg:rounded-sm lg:border lg:border-border",
+            "grid w-full border-spacing-0 gap-4 lg:table lg:rounded-(--radius-card) lg:border lg:border-border lg:bg-background",
             className,
           )}
           {...props}
@@ -34,7 +34,7 @@ export const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTM
 Table.displayName = "Table";
 
 export const TableCaption = ({ className, children, ...props }: React.HTMLAttributes<HTMLTableCaptionElement>) => (
-  <caption className={classNames("block text-left text-base text-xl lg:mb-4 lg:table-caption", className)} {...props}>
+  <caption className={classNames("block text-left text-xl font-bold lg:mb-4 lg:table-caption", className)} {...props}>
     {children}
   </caption>
 );
@@ -98,7 +98,7 @@ export const TableRow = ({
     <tr
       aria-selected={selected}
       className={classNames(
-        "block rounded-sm border border-border lg:table-row",
+        "block rounded-(--radius-box) border border-border lg:table-row",
         rowGroup === "body" && "bg-background",
         selected != null && "cursor-pointer hover:bg-active-bg",
         selected && "bg-active-bg",
@@ -114,7 +114,7 @@ export const TableRow = ({
 };
 
 const cellRoundingClasses =
-  "lg:[table_>_:last-child_>_tr:last-child_>_&:first-child]:rounded-bl-sm lg:[table_>_:last-child_>_tr:last-child_>_&:last-child]:rounded-br-sm";
+  "lg:[table_>_:last-child_>_tr:last-child_>_&:first-child]:rounded-bl-(--radius-card) lg:[table_>_:last-child_>_tr:last-child_>_&:last-child]:rounded-br-(--radius-card)";
 
 export const TableHead = ({
   className,
@@ -137,6 +137,8 @@ export const TableHead = ({
       className={classNames(
         "px-4 py-3 text-left align-middle lg:table-cell lg:whitespace-nowrap",
         rowGroup === "body" && "lg:border-t lg:border-border",
+        // Column labels step back, as in the emails' tables; the rows carry the weight.
+        rowGroup === "header" && "lg:text-sm lg:font-normal lg:text-muted",
         cellRoundingClasses,
         scope === "row" && "font-normal",
         sortDirection && "cursor-pointer",

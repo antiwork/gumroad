@@ -8,7 +8,7 @@ import { classNames } from "$app/utils/classNames";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 const statsVariants = cva(
-  "text-4xl leading-tight p-8 border border-border rounded grid content-between gap-2 bg-background",
+  "text-4xl leading-tight p-8 border border-border rounded-(--radius-box) grid content-between gap-2 bg-background",
   {
     variants: {
       variant: {
@@ -60,7 +60,7 @@ export const Stats = ({
 
   return (
     <section className={classNames(statsVariants({ variant }), className)}>
-      <h2 className="flex gap-2 text-base">
+      <h2 className="flex gap-2 text-sm font-normal tracking-normal text-muted">
         {title}
         {description ? (
           <WithTooltip tip={description} position="top">
@@ -68,7 +68,7 @@ export const Stats = ({
           </WithTooltip>
         ) : null}
       </h2>
-      <div ref={containerRef} className="overflow-hidden break-words">
+      <div ref={containerRef} className="overflow-hidden font-bold break-words">
         <span style={adjustedFontSize ? { fontSize: adjustedFontSize } : undefined}>{value ?? "-"}</span>
       </div>
     </section>

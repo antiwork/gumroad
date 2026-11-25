@@ -6,7 +6,11 @@ import { classNames } from "$app/utils/classNames";
 
 export const Rows = React.forwardRef<HTMLDivElement, React.HTMLProps<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
-    <div className={classNames("rounded-sm border border-border bg-background", className)} {...props} ref={ref} />
+    <div
+      className={classNames("rounded-(--radius-card) border border-border bg-background", className)}
+      {...props}
+      ref={ref}
+    />
   ),
 );
 Rows.displayName = "Rows";
