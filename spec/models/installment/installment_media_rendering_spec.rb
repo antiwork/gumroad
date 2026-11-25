@@ -37,5 +37,40 @@ describe Installment do
         end
       end
     end
+
+    # The editor saves an image without an alt and has no field for one.
+    context "with an image" do
+      let(:caption) { "Our new studio" }
+      let(:image) { %(<img src="https://example.com/studio.jpg">) }
+      let(:message) { %(<figure>#{image}<p class="figcaption">#{caption}</p></figure>) }
+
+      it "describes the image with its caption" do
+        expect(rendered_message).to have_css("img[src='https://example.com/studio.jpg'][alt='Our new studio']")
+      end
+
+      context "when it has no caption" do
+        let(:caption) { "" }
+
+        it "leaves the alt for the seller to write instead of calling the image decorative" do
+          expect(rendered_message).to have_css("img[src='https://example.com/studio.jpg']:not([alt])")
+        end
+      end
+
+      context "when it is linked" do
+        let(:image) { %(<a href="https://example.com/studio" target="_blank" rel="noopener noreferrer nofollow"><img src="https://example.com/studio.jpg"></a>) }
+
+        it "names the link after the caption" do
+          expect(rendered_message).to have_link("Our new studio", href: "https://example.com/studio", exact: true)
+        end
+
+        context "when it has no caption" do
+          let(:caption) { "" }
+
+          it "still names the link" do
+            expect(rendered_message).to have_link("Image", href: "https://example.com/studio", exact: true)
+          end
+        end
+      end
+    end
   end
 end

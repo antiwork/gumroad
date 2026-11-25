@@ -414,6 +414,14 @@ class Installment < ApplicationRecord
       node.replace(%(<p><a href="#{target_url}" target="_blank" rel="noopener noreferrer">#{content}</a></p>))
     end
 
+    # The editor saves images without an alt. A caption can stand in for one and a linked image
+    # needs some name; an image with neither is not decorative, so it is left without.
+    doc.search("img:not([alt])").each do |image|
+      alt = image.ancestors("figure").first&.at_css(".figcaption")&.text.to_s.strip.presence
+      alt ||= "Image" if image.ancestors("a").any?
+      image["alt"] = alt if alt
+    end
+
     # The editor saves buttons with Gumroad pink inline, so the seller's accent replaces it here.
     if seller.present?
       seller_profile = seller.seller_profile
