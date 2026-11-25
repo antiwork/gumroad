@@ -373,6 +373,8 @@ export const DashboardPage = ({
                 href={Routes.new_product_path()}
                 color="accent"
                 className={loggedInUser.headerNav ? "lg:hidden" : undefined}
+                // Lets the page header collapse when this is all it would have held.
+                {...(loggedInUser.headerNav && { "data-in-header-nav": true })}
               >
                 New product
               </NavigationButton>

@@ -5,6 +5,7 @@ import MetaTags, { type MetaTag } from "$app/layouts/components/MetaTags";
 
 import { Nav } from "$app/components/client-components/Nav";
 import { CurrentSellerProvider, parseCurrentSeller } from "$app/components/CurrentSeller";
+import { HeaderNavContext } from "$app/components/HeaderNavContext";
 import { type LoggedInUser, LoggedInUserProvider, parseLoggedInUser } from "$app/components/LoggedInUser";
 import Alert, { type AlertPayload } from "$app/components/server-components/Alert";
 import { useFlashMessage } from "$app/components/useFlashMessage";
@@ -55,7 +56,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         >
           {logged_in_user && !is_mobile_app_web_view ? <Nav title="Dashboard" /> : null}
           <main scroll-region="" className="flex flex-1 flex-col overflow-y-auto [contain:paint]">
-            {children}
+            <HeaderNavContext.Provider value={!!loggedInUser?.headerNav}>{children}</HeaderNavContext.Provider>
           </main>
         </div>
       </CurrentSellerProvider>

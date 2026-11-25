@@ -5,6 +5,20 @@ import * as React from "react";
 import { classNames } from "$app/utils/classNames";
 import { selectAdjacentRadio, useRadioGroupTabStop } from "$app/utils/radioGroupKeyboard";
 
+import { TextTabsContext } from "$app/components/HeaderNavContext";
+
+// Wide screens only: a phone keeps the pills, which are easier to tap. The negative margins cancel
+// the page header's padding, so the selected tab's bar sits on the header's bottom border.
+// Important throughout: these override the pill's own classes, which come later in the stylesheet.
+const textTabsClasses = { row: "lg:-my-3! lg:gap-6!", stacked: "lg:-mb-8! lg:gap-6!" };
+const textTabClasses = {
+  row: "lg:py-5!",
+  stacked: "lg:pt-0! lg:pb-4!",
+  shared:
+    "lg:rounded-none! lg:border-0! lg:bg-transparent! lg:px-0! lg:hover:shadow-[inset_0_-0.125rem_0_var(--color-border)]",
+};
+const selectedTextTabClasses = "lg:font-bold lg:shadow-[inset_0_-0.125rem_0_currentColor]!";
+
 const tabsVariants = cva("", {
   variants: {
     variant: {
@@ -77,6 +91,8 @@ export const Tabs = React.forwardRef<HTMLDivElement, TabsProps>(
       if ("fonts" in document) void document.fonts.ready.then(align);
     }, []);
 
+    const textTabsContext = React.useContext(TextTabsContext);
+    const textTabs = (variant ?? "pills") === "pills" ? textTabsContext : null;
     const isRadioGroup = role === "radiogroup";
     useRadioGroupTabStop(listRef, isRadioGroup);
 
@@ -92,7 +108,7 @@ export const Tabs = React.forwardRef<HTMLDivElement, TabsProps>(
                 }
               : onKeyDown
           }
-          className={classNames(tabsVariants({ variant }), className)}
+          className={classNames(tabsVariants({ variant }), textTabs && textTabsClasses[textTabs], className)}
           {...props}
           ref={listRef}
         >
@@ -116,11 +132,20 @@ interface TabProps extends Omit<React.HTMLProps<HTMLAnchorElement>, "selected"> 
 
 export const Tab = ({ children, isSelected, className, asChild, ...props }: TabProps) => {
   const variant = React.useContext(TabVariantContext);
+  const textTabsContext = React.useContext(TextTabsContext);
+  const textTab = variant === "pills" ? textTabsContext : null;
   const Component = asChild ? Slot : "a";
 
   return (
     <Component
-      className={classNames("border no-underline", tabVariants({ variant, active: isSelected }), className)}
+      className={classNames(
+        "border no-underline",
+        tabVariants({ variant, active: isSelected }),
+        textTab && textTabClasses.shared,
+        textTab && textTabClasses[textTab],
+        textTab && isSelected && selectedTextTabClasses,
+        className,
+      )}
       role="tab"
       aria-selected={isSelected}
       {...props}
