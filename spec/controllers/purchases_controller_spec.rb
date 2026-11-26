@@ -1994,7 +1994,7 @@ describe PurchasesController, :vcr do
           get :receipt, params: { id: purchase.external_id, email: "test@example.com" }
 
           expect(response).to be_successful
-          expect(Nokogiri::HTML(response.body).css("table.product h4").map { _1.text.squish }).to eq(["Paid edition"])
+          expect(Nokogiri::HTML(response.body).css(".card:not(.recommendation) table.product h4").map { _1.text.squish }).to eq(["Paid edition"])
         end
       end
 
@@ -2012,7 +2012,7 @@ describe PurchasesController, :vcr do
           get :receipt, params: { id: purchase.external_id, email: "test@example.com" }
 
           expect(response).to be_successful
-          expect(Nokogiri::HTML(response.body).css("table.product h4").map { _1.text.squish }).to eq(["Declined edition"])
+          expect(Nokogiri::HTML(response.body).css(".card:not(.recommendation) table.product h4").map { _1.text.squish }).to eq(["Declined edition"])
         end
       end
 
