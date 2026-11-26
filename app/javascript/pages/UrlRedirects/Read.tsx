@@ -425,7 +425,7 @@ const PdfReader = ({
       <div role="application" className="scoped-tailwind-preflight flex h-dvh flex-col">
         <div role="menubar" className="flex text-sm md:text-base">
           <div className="border-r">
-            <button aria-label="Back" onClick={() => history.back()} className="cursor-pointer p-4 all-unset">
+            <button aria-label="Back" onClick={() => history.back()} className="cursor-pointer all-unset p-4">
               <X className="size-5" />
             </button>
           </div>
@@ -833,7 +833,7 @@ const EpubReader = ({
       <div role="application" className="scoped-tailwind-preflight flex h-dvh flex-col">
         <div role="menubar" className="flex text-sm md:text-base">
           <div className="border-r">
-            <button aria-label="Back" onClick={() => history.back()} className="cursor-pointer p-4 all-unset">
+            <button aria-label="Back" onClick={() => history.back()} className="cursor-pointer all-unset p-4">
               <X className="size-5" />
             </button>
           </div>
@@ -876,7 +876,7 @@ const EpubReader = ({
                       tabIndex={theme === name ? 0 : -1}
                       aria-label={label}
                       onClick={() => updateTheme(cast<EpubThemeName>(name))}
-                      className="cursor-pointer rounded border p-2 all-unset"
+                      className="cursor-pointer rounded border all-unset p-2"
                       style={{
                         background,
                         color,

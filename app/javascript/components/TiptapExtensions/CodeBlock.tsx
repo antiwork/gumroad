@@ -87,7 +87,7 @@ const CodeBlockComponent = ({ node, updateAttributes, editor }: NodeViewProps) =
         ) : (
           <CopyToClipboard text={node.textContent}>
             <button
-              className="cursor-pointer text-foreground all-unset"
+              className="cursor-pointer all-unset text-foreground"
               style={{ padding: "0 var(--spacer-1)" }}
               aria-label="Copy"
             >

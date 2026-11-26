@@ -146,7 +146,7 @@ export const MenuItem = ({
   <MenuItemTooltip tip={name} position={position}>
     <button
       type="button"
-      className="cursor-pointer rounded px-2 py-1 all-unset hover:bg-active-bg aria-pressed:text-accent"
+      className="cursor-pointer rounded all-unset px-2 py-1 hover:bg-active-bg aria-pressed:text-accent"
       aria-pressed={active}
       disabled={disabled}
       aria-label={name}
@@ -610,7 +610,7 @@ export const RichTextEditorToolbar = ({
         onMouseLeave={() => setShowTooltip(false)}
       >
         <Popover>
-          <PopoverTrigger aria-label="Text formats" className="rounded px-2 py-1 all-unset hover:bg-active-bg">
+          <PopoverTrigger aria-label="Text formats" className="rounded all-unset px-2 py-1 hover:bg-active-bg">
             {activeFormatOption?.name ?? "Text"} <ChevronDown className="size-5" />
           </PopoverTrigger>
           <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
@@ -701,7 +701,7 @@ export const RichTextEditorToolbar = ({
                   className="m-2 hidden border-r border-border sm:flex"
                 />
                 <Popover>
-                  <PopoverTrigger className="rounded px-2 py-1 all-unset hover:bg-active-bg">
+                  <PopoverTrigger className="rounded all-unset px-2 py-1 hover:bg-active-bg">
                     Insert <ChevronDown className="size-5" />
                   </PopoverTrigger>
                   <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">

@@ -7,6 +7,6 @@ import { classNames } from "$app/utils/classNames";
 export type LinkButtonProps = Omit<React.ComponentPropsWithoutRef<"button">, "type">;
 
 export const LinkButton = React.forwardRef<HTMLButtonElement, LinkButtonProps>(({ className, ...props }, ref) => (
-  <button ref={ref} className={classNames("cursor-pointer underline all-unset", className)} {...props} type="button" />
+  <button ref={ref} className={classNames("cursor-pointer all-unset underline", className)} {...props} type="button" />
 ));
 LinkButton.displayName = "LinkButton";

@@ -212,7 +212,7 @@ export const EditorMenu = ({
               isSubmenu(item) ? (
                 <CardContent className="p-0" key={key}>
                   <button
-                    className="flex w-full cursor-pointer items-center justify-between p-4 all-unset"
+                    className="flex w-full cursor-pointer items-center justify-between all-unset p-4"
                     onClick={() => setMenuState(key)}
                   >
                     <h5 className="grow font-bold">{item.props.heading}</h5>
@@ -745,7 +745,7 @@ export const AddSectionButton = ({ side, index }: { index: number; side?: "top" 
       <PopoverTrigger aria-label="Add section" asChild>
         <button
           className={classNames(
-            "absolute -top-px box-border aspect-square cursor-pointer place-self-center font-[inherit] text-[inherit] all-unset",
+            "absolute -top-px box-border aspect-square cursor-pointer place-self-center all-unset font-[inherit] text-[inherit]",
             { "top-full": side === "top" },
             sectionButtonClasses,
             "rounded-b border",

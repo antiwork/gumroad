@@ -124,7 +124,7 @@ const WishlistItemCard = ({
                   disabled={isDeleting}
                   aria-label="Remove this product"
                   onClick={() => void destroy()}
-                  className="grid cursor-pointer p-4 all-unset"
+                  className="grid cursor-pointer all-unset p-4"
                 >
                   <Trash className="size-5" />
                 </button>

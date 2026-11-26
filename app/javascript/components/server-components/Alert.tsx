@@ -105,7 +105,7 @@ const ToastAlert = ({ initial }: { initial: AlertPayload | null }) => {
           </div>
           <button
             type="button"
-            className="relative flex size-[1lh] shrink-0 cursor-pointer items-center justify-center text-muted all-unset before:absolute before:-inset-2 before:content-[''] hover:text-primary"
+            className="relative flex size-[1lh] shrink-0 cursor-pointer items-center justify-center all-unset text-muted before:absolute before:-inset-2 before:content-[''] hover:text-primary"
             aria-label="Close"
             onClick={dismiss}
           >
