@@ -129,9 +129,9 @@ describe("Omnibar", () => {
     const input = openBar();
 
     expect(document.activeElement).toBe(input);
-    expect(optionNames()).toEqual(["Products", "Sales", "Payouts", "Community", "Discover", "New product"]);
+    expect(optionNames()).toEqual(["New product", "Products", "Sales", "Payouts", "Community", "Discover"]);
     expect(within(screen.getByRole("group", { name: "Go to" })).getAllByRole("option")).toHaveLength(5);
-    expect(activeOption(input)?.textContent).toBe("Products");
+    expect(activeOption(input)?.textContent).toBe("New product");
     expect(screen.getByRole("status").textContent).toBe("6 results");
   });
 
@@ -147,12 +147,12 @@ describe("Omnibar", () => {
     const input = openBar();
 
     fireEvent.keyDown(input, { key: "ArrowDown" });
-    expect(activeOption(input)?.textContent).toBe("Sales");
+    expect(activeOption(input)?.textContent).toBe("Products");
     expect(activeOption(input)?.getAttribute("aria-selected")).toBe("true");
 
     fireEvent.keyDown(input, { key: "ArrowUp" });
     fireEvent.keyDown(input, { key: "ArrowUp" });
-    expect(activeOption(input)?.textContent).toBe("New product");
+    expect(activeOption(input)?.textContent).toBe("Discover");
   });
 
   it("opens the active row on Enter and closes", () => {
@@ -161,7 +161,7 @@ describe("Omnibar", () => {
     fireEvent.keyDown(input, { key: "ArrowDown" });
     fireEvent.keyDown(input, { key: "Enter" });
 
-    expect(visit).toHaveBeenCalledWith("/customers");
+    expect(visit).toHaveBeenCalledWith("/products");
     expect(screen.queryByRole("combobox")).toBeNull();
   });
 
@@ -199,7 +199,7 @@ describe("Omnibar", () => {
 
     fireEvent.keyDown(input, { key: "Enter", metaKey: true });
 
-    expect(open).toHaveBeenCalledWith("/products", "_blank", "noopener");
+    expect(open).toHaveBeenCalledWith("/products/new", "_blank", "noopener");
     expect(visit).not.toHaveBeenCalled();
     expect(screen.getByRole("combobox")).toBeTruthy();
   });
@@ -376,7 +376,7 @@ describe("Omnibar", () => {
         expect(screen.queryByRole("combobox")).toBeNull();
       });
 
-      it("opens the Sales page's search when nothing matched", async () => {
+      it("goes nowhere when nothing matched", async () => {
         searchProducts.mockResolvedValue([]);
         searchSales.mockResolvedValue([]);
         const input = openBar();
@@ -385,7 +385,9 @@ describe("Omnibar", () => {
         fireEvent.keyDown(input, { key: "Enter" });
         await settleSearch();
 
-        expect(visit).toHaveBeenCalledWith("/customers?query=nobody%40example.com");
+        expect(visit).not.toHaveBeenCalled();
+        expect(screen.queryAllByRole("option")).toEqual([]);
+        expect(screen.getByRole("status").textContent).toBe("No products or sales match “nobody@example.com”.");
       });
 
       it("is forgotten when the seller keeps typing", async () => {

@@ -106,10 +106,13 @@ export const buildOmnibarGroups = ({
             },
           ]
         : [];
+  const goTo = { title: "Go to", items: shortcutItems("page", pages, trimmed) };
+  const quickActions = { title: "Quick actions", items: shortcutItems("action", actions, trimmed) };
   const groups: OmnibarGroup[] = [
     { title: "On this page", items: onThisPage },
-    { title: "Go to", items: shortcutItems("page", pages, trimmed) },
-    { title: "Quick actions", items: shortcutItems("action", actions, trimmed) },
+    // Unfiltered, the places fill the panel, so the few actions lead. Once typing, places lead:
+    // "pro" and Enter opens Products, not a new product.
+    ...(trimmed ? [goTo, quickActions] : [quickActions, goTo]),
   ];
   const productsSettled = results.products !== undefined;
   const settled = productsSettled && results.sales !== undefined;
@@ -136,7 +139,10 @@ export const buildOmnibarGroups = ({
         })),
       });
     }
-    if (settled) {
+    // The two list pages run the same searches, so with nothing found they would be empty too.
+    const found = (results.products?.length ?? 0) + (results.sales?.length ?? 0);
+    const failed = results.products === null || results.sales === null;
+    if (settled && (found > 0 || failed)) {
       groups.push({
         title: "Search",
         items: [

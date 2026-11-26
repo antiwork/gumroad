@@ -71,12 +71,21 @@ describe "Dashboard omnibar", type: :system, js: true do
     visit dashboard_path
 
     open_omnibar
-    search_for "nobody@example.com"
-    expect(page).to have_text("No products or sales match “nobody@example.com”.")
-    choose_result "Search sales for “nobody@example.com”"
+    search_for "widget"
+    choose_result "Search sales for “widget”"
 
-    expect(page).to have_current_path(customers_path(query: "nobody@example.com"))
+    expect(page).to have_current_path(customers_path(query: "widget"))
     expect(page).to have_section("No sales found")
+  end
+
+  it "says so when nothing matches, without offering searches that would come back empty" do
+    visit dashboard_path
+
+    open_omnibar
+    search_for "nobody@example.com"
+
+    expect(page).to have_text("No products or sales match “nobody@example.com”.")
+    expect(page).not_to have_selector("[role=option]")
   end
 
   it "opens with the keyboard shortcut from any dashboard page and closes with Escape" do

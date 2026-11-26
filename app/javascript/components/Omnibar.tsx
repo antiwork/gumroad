@@ -403,8 +403,13 @@ const OmnibarPanel = ({ onClose, pages, actions, pageSearch, dictate, agents = [
                       )}
                     >
                       <KindIcon kind={item.kind} />
-                      <span className="min-w-0 flex-1 truncate">{item.title}</span>
-                      {item.detail ? <span className="max-w-1/2 min-w-0 truncate text-sm">{item.detail}</span> : null}
+                      {/* Stacked on a phone, so the buyer and the product each get the row's width. */}
+                      <span className="flex min-w-0 flex-1 flex-col sm:flex-row sm:items-center sm:gap-3">
+                        <span className="min-w-0 truncate sm:flex-1">{item.title}</span>
+                        {item.detail ? (
+                          <span className="min-w-0 truncate text-sm sm:max-w-1/2">{item.detail}</span>
+                        ) : null}
+                      </span>
                     </a>
                   );
                 })}
@@ -443,7 +448,7 @@ export const OmnibarDialog = ({ open, onClose, ...panel }: PanelProps & { open: 
         <Dialog.Overlay className="fixed inset-0 z-50 bg-backdrop" />
         <Dialog.Content
           aria-describedby={undefined}
-          className="fixed inset-x-0 top-0 z-51 mx-auto flex max-h-dvh w-full flex-col bg-background text-foreground shadow-lg sm:top-[10vh] sm:max-h-[70vh] sm:max-w-xl sm:rounded sm:border sm:border-border"
+          className="fixed inset-x-0 top-0 z-51 mx-auto flex max-h-dvh w-full flex-col border-b border-border bg-background text-foreground sm:top-[10vh] sm:max-h-[70vh] sm:max-w-xl sm:rounded sm:border sm:shadow-lg"
           onOpenAutoFocus={() => {
             returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
           }}

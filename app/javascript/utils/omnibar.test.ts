@@ -69,8 +69,8 @@ describe("buildOmnibarGroups", () => {
   it("offers every place and action before anything is typed", () => {
     const groups = build("");
 
-    expect(titles(groups)).toEqual(["Go to", "Quick actions"]);
-    expect(groups[0]?.items.map((item) => item.title)).toEqual(["Products", "Sales", "Payouts"]);
+    expect(titles(groups)).toEqual(["Quick actions", "Go to"]);
+    expect(groups[1]?.items.map((item) => item.title)).toEqual(["Products", "Sales", "Payouts"]);
   });
 
   it("narrows places and actions as the seller types", () => {
@@ -92,6 +92,11 @@ describe("buildOmnibarGroups", () => {
     });
 
     expect(groups[0]?.items[0]?.onSelect).toBe(onSelect);
+  });
+
+  it("leaves out the search rows when nothing was found, and keeps them when a search failed", () => {
+    expect(titles(build("zz", { products: [], sales: [] }))).toEqual([]);
+    expect(titles(build("zz", { products: [], sales: null }))).toEqual(["Search"]);
   });
 
   describe("as results arrive", () => {
@@ -145,7 +150,7 @@ describe("buildOmnibarGroups", () => {
     });
 
     it("encodes the query in the search rows' links", () => {
-      const search = build("ada+test@example.com", { products: [], sales: [] }).at(-1);
+      const search = build("ada+test@example.com", { products: [], sales: [ada] }).at(-1);
 
       expect(search?.items[0]?.href).toBe("/customers?query=ada%2Btest%40example.com");
     });
@@ -211,7 +216,7 @@ describe("a page with its own search", () => {
   });
 
   it("does not repeat the page's search among the search rows", () => {
-    const search = buildOn("wid", false, { products: [], sales: [] }).find((group) => group.title === "Search");
+    const search = buildOn("wid", false, { products: [widget], sales: [] }).find((group) => group.title === "Search");
 
     expect(search?.items.map((item) => item.id)).toEqual(["search:sales"]);
   });
