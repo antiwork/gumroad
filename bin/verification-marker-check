@@ -122,19 +122,30 @@ def check(body, head, draft=False, changed=None):
     return False, "no Verification: line in the body"
 
 
+def _paths(items):
+    """The changed-file list arrives as gh's `{path: …}` dicts or as bare strings, depending on who
+    is calling; both are accepted because a crash here reads as a broken gate to whoever hit it."""
+    out = []
+    for item in items or []:
+        if isinstance(item, dict):
+            out.append(item.get("path") or item.get("filename") or "")
+        else:
+            out.append(str(item))
+    return out
+
+
 def _load():
     if len(sys.argv) > 1 and not sys.argv[1].startswith("-"):
         with open(sys.argv[1]) as f:
             pr = json.load(f)
-        changed = [f.get("path") or f.get("filename") or "" for f in (pr.get("files") or [])]
-        return pr.get("body"), pr.get("headRefOid"), bool(pr.get("isDraft")), changed
+        return pr.get("body"), pr.get("headRefOid"), bool(pr.get("isDraft")), _paths(pr.get("files"))
 
     body = os.environ.get("PR_BODY")
     head = os.environ.get("PR_HEAD")
     draft = (os.environ.get("PR_DRAFT") or "").lower() == "true"
     raw = os.environ.get("PR_FILES") or ""
     try:
-        changed = [f.get("path") or f.get("filename") or "" for f in json.loads(raw)]
+        changed = _paths(json.loads(raw))
     except ValueError:
         changed = [ln.strip() for ln in raw.splitlines() if ln.strip()]
     return body, head, draft, changed

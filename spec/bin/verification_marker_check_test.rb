@@ -90,6 +90,13 @@ assert(code == 1, "the unfilled PR template is owed (got #{code})")
 code, = run_env(body: verified, files: ["app/models/user.rb"])
 assert(code.zero?, "the environment input path clear (got #{code})")
 
+# `PR_FILES` may be gh's dicts or bare paths; the second shape is what the docstring promises and
+# what a hand-run of the checker tends to pass.
+env = { "PR_BODY" => "Verification: exempt (docs) @ #{SHA}", "PR_HEAD" => SHA, "PR_DRAFT" => "false",
+        "PR_FILES" => JSON.generate(["CONTRIBUTING.md"]) }
+_, env_err, env_status = Open3.capture3(env, "python3", CHECKER)
+assert(env_status.exitstatus.zero?, "a JSON array of bare paths is accepted: #{env_err}")
+
 if $failures.empty?
   puts "verification-marker-check: #{$count} assertions OK"
 else
