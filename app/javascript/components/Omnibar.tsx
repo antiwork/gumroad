@@ -398,8 +398,8 @@ const OmnibarPanel = ({ onClose, pages, actions, pageSearch, dictate, agents = [
                       onMouseMove={() => setActiveId(item.id)}
                       className={classNames(
                         "flex items-center gap-3 rounded px-3 py-2 no-underline",
-                        // The bar marks the row without relying on the tint's 1.2:1 against the surface.
-                        active && "bg-active-bg shadow-[inset_0.25rem_0_0_var(--color-foreground)]",
+                        // The outline marks the row without relying on the tint's 1.2:1 against the surface.
+                        active && "bg-active-bg outline-1 -outline-offset-1 outline-foreground",
                       )}
                     >
                       <KindIcon kind={item.kind} />
