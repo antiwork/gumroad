@@ -1808,7 +1808,7 @@ const Form = ({
                             <button
                               type="button"
                               aria-label={`Remove tier ${index + 1}`}
-                              className="cursor-pointer rounded p-1 all-unset sm:order-last sm:ml-auto"
+                              className="cursor-pointer rounded all-unset p-1 sm:order-last sm:ml-auto"
                               onClick={() => setTiers((prev) => prev.filter((row) => row.id !== tier.id))}
                             >
                               <X className="size-5" />

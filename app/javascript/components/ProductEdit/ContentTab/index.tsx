@@ -964,7 +964,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
                 <button
                   type="button"
                   aria-label="Dismiss"
-                  className="relative flex size-[1lh] shrink-0 cursor-pointer items-center justify-center text-muted all-unset before:absolute before:-inset-2 before:content-[''] hover:text-primary"
+                  className="relative flex size-[1lh] shrink-0 cursor-pointer items-center justify-center all-unset text-muted before:absolute before:-inset-2 before:content-[''] hover:text-primary"
                   onClick={() => setDisableDownloadsResult(null)}
                 >
                   <X className="size-4" />
@@ -1189,7 +1189,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
                   open={insertMenuState != null}
                   onOpenChange={(open) => setInsertMenuState(open ? "open" : null)}
                 >
-                  <PopoverTrigger className="rounded px-2 py-1 all-unset hover:bg-active-bg">
+                  <PopoverTrigger className="rounded all-unset px-2 py-1 hover:bg-active-bg">
                     Insert <ChevronDown className="size-5" />
                   </PopoverTrigger>
                   <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
@@ -1284,7 +1284,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
                   className="m-2 hidden border-r border-solid border-border sm:flex"
                 />
                 <button
-                  className="cursor-pointer rounded px-2 py-1 all-unset hover:bg-active-bg"
+                  className="cursor-pointer rounded all-unset px-2 py-1 hover:bg-active-bg"
                   onClick={handleCreatePageClick}
                 >
                   <Plus className="size-5" /> Page

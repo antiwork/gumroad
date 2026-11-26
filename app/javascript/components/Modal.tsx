@@ -48,7 +48,7 @@ export const Modal = ({
           <div className="flex items-start justify-between gap-4">
             <Dialog.Title>{title}</Dialog.Title>
             {allowClose ? (
-              <Dialog.Close className="cursor-pointer text-base all-unset" aria-label="Close">
+              <Dialog.Close className="cursor-pointer all-unset text-base" aria-label="Close">
                 <X className="size-5" />
               </Dialog.Close>
             ) : null}

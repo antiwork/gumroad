@@ -337,7 +337,7 @@ const OverlayMenu = ({
       >
         <Dialog.Title className="sr-only">{buttonLabel ?? "Categories"}</Dialog.Title>
         <Dialog.Close
-          className="absolute top-4 right-4 z-40 cursor-pointer bg-transparent all-unset"
+          className="absolute top-4 right-4 z-40 cursor-pointer all-unset bg-transparent"
           aria-label="Close Menu"
         >
           <X className="size-6 text-white" />

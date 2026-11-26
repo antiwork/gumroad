@@ -61,7 +61,7 @@ export const DisableDownloadsForAllFiles = ({ onResult }: { onResult: (result: D
     <>
       <button
         type="button"
-        className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 all-unset hover:bg-active-bg"
+        className="flex cursor-pointer items-center gap-2 rounded all-unset px-2 py-1 hover:bg-active-bg"
         onClick={() => setConfirming(true)}
       >
         <ArrowInDownSquareHalf className="size-5" />

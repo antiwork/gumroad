@@ -69,7 +69,7 @@ export const ChatMessageInput = React.forwardRef<HTMLTextAreaElement, Props>(
         />
         <button
           className={classNames(
-            "hover:rgb(var(--primary)) flex cursor-pointer items-center rounded-md border border-solid bg-black px-2 py-1.5 text-white all-unset dark:bg-[rgb(var(--primary))] dark:text-black",
+            "hover:rgb(var(--primary)) flex cursor-pointer items-center rounded-md border border-solid all-unset bg-black px-2 py-1.5 text-white dark:bg-[rgb(var(--primary))] dark:text-black",
             {
               "cursor-default opacity-50": !draft?.content.trim(),
             },
