@@ -5,7 +5,8 @@
 <html lang="en" xmlns:o="urn:schemas-microsoft-com:office:office">
   <head>
     <title>{{subject}}</title>
-    <%= render("layouts/mailers/head") %>
+    <% follows_reader_color_scheme = @post.user.seller_profile.email_follows_reader_color_scheme? %>
+    <%= render("layouts/mailers/head", color_scheme: follows_reader_color_scheme ? "light dark" : nil) %>
     <style><%= @post.user.seller_profile.custom_styles.to_s.html_safe %></style>
     <%= vite_entrypoint_stylesheet_tag "email" %>
     <%# Outlook on Windows resolves neither `inherit` nor `currentColor`, so a post's links and
@@ -18,6 +19,19 @@
       div.email.post .footer .wordmark, div.email.post .product-byline a, div.email.post th a { color: <%= text_color %>; }
       div.email.post .button { border-color: <%= text_color %>; color: <%= text_color %>; }
     </style>
+    <% if follows_reader_color_scheme %>
+      <%# For a dark-mode reader: no background, so the mail client's own dark page shows, and
+          light text. A filled button keeps its colours, and a code block keeps its light box.
+          Only a client that reads prefers-color-scheme uses this (Apple Mail, Outlook.com);
+          Gmail inverts an email itself. Premailer cannot inline a media query, hence the ignore. %>
+      <style data-premailer="ignore">
+        @media (prefers-color-scheme: dark) {
+          body, .email.post { background-color: transparent !important; color: #ffffff !important; }
+          .email.post a:not(.button), .email.post .button:not(.primary):not(.accent) { color: #ffffff !important; }
+          .email.post .button:not(.primary):not(.accent) { border-color: #ffffff !important; }
+        }
+      </style>
+    <% end %>
   </head>
   <body>
     <%= render("shared/preheader_text", text: CGI.unescapeHTML(@post.truncated_description)) %>
@@ -69,7 +83,8 @@
         <% end %>
         <a class="wordmark" href="<%= @gumroad_url %>">
           {{t_powered_by}}
-          <img src="<%= image_url(@post.user.seller_profile.email_wordmark_image_path) %>" alt="Gumroad" width="92" height="12">
+          <%# The halo file is taller than the plain mark by its halo. %>
+          <img src="<%= image_url(@post.user.seller_profile.email_wordmark_image_path) %>" alt="Gumroad" width="92" height="<%= follows_reader_color_scheme ? 15 : 12 %>">
         </a>
       </div>
       <!--[if mso]></td></tr></table><![endif]-->
