@@ -34,7 +34,7 @@ import { type OmnibarAgent, type OmnibarShortcut } from "$app/utils/omnibar";
 import { initTeamMemberReadOnlyAccess } from "$app/utils/team_member_read_only";
 
 import NavbarFooter from "$app/components/client-components/Nav/footer";
-import { CreateMenu, HeaderNav } from "$app/components/client-components/Nav/header";
+import { HeaderNav } from "$app/components/client-components/Nav/header";
 import { CloseOnNavigate } from "$app/components/CloseOnNavigate";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain, useDiscoverUrl } from "$app/components/DomainSettings";
@@ -427,7 +427,6 @@ export const Nav = (props: Props) => {
                 className="flex h-10 min-w-0 flex-1"
               />
             ),
-            create: <CreateMenu actions={headerActions} />,
             searchExpanded: searchExpanding || omnibar.open,
           },
         })}

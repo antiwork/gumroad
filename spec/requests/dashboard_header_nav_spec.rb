@@ -124,16 +124,15 @@ describe "Dashboard header nav", type: :system, js: true do
     end
 
     context "on a phone", :mobile_view do
-      it "has search, a create menu and the drawer in its bar" do
+      it "has search and the drawer in its bar, and leaves creating to the page" do
         visit products_path
 
-        expect(page).not_to have_link("New product")
         within(header) do
           expect(page).to have_button("Search")
-          toggle_disclosure "Create"
-          # The menu's rows are menu items, not links.
-          expect(page).to have_selector("[role=menuitem]", text: "New product", count: 1)
+          expect(page).to have_button("Toggle navigation")
+          expect(page).not_to have_button("Create")
         end
+        expect(page).to have_link("New product", count: 1)
       end
 
       it "keeps the page's tabs in the drawer" do

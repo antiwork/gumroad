@@ -246,10 +246,11 @@ describe("DashboardPage New product button", () => {
     expect(screen.getByRole("link", { name: "New product" })).toBeTruthy();
   });
 
-  // The header nav carries its own at every width: the button on a wide screen, the plus on a phone.
-  it("is left to the header nav under the trial", () => {
+  // The header nav has its own on a wide screen. A phone's bar does not, so the page keeps it there.
+  it("shows on phones only under the header nav", () => {
     renderDashboard(minor, {}, { ...creator, headerNav: true });
 
-    expect(screen.queryByRole("link", { name: "New product" })).toBeNull();
+    const wrapper = screen.getByRole("link", { name: "New product" }).parentElement;
+    expect(wrapper?.className.split(" ")).toContain("lg:hidden");
   });
 });

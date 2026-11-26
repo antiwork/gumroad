@@ -125,9 +125,9 @@ type Props = {
   headerAction?: React.ReactNode;
   search?: React.ReactNode;
   className?: string;
-  // The header nav's phone bar: the wordmark, a search field, a create menu, the menu button.
+  // The header nav's phone bar: the wordmark, a search field, the menu button.
   // `searchExpanded` gives the field the whole bar while search is opening or open.
-  phoneBar?: { search: React.ReactNode; create: React.ReactNode; searchExpanded: boolean };
+  phoneBar?: { search: React.ReactNode; searchExpanded: boolean };
 };
 
 // A part of the phone bar that slides shut and fades as the search field takes the bar.
@@ -199,7 +199,6 @@ export const Nav = ({ title, children, footer, headerAction, search, className, 
               inert={phoneBar.searchExpanded}
               className={classNames("gap-4", collapsible(phoneBar.searchExpanded, "-ml-3"))}
             >
-              {phoneBar.create}
               <button className="all-unset" aria-label="Toggle navigation" onClick={toggle}>
                 {open ? <X className="size-5" /> : <Menu className="size-5" />}
               </button>

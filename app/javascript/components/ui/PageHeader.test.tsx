@@ -71,7 +71,7 @@ describe("PageHeader", () => {
     expect(screen.getByRole("link", { name: "Start selling" })).toBeTruthy();
   });
 
-  it("drops an action the header nav already offers", () => {
+  it("keeps an action the header nav already offers for phones only", () => {
     const renderAction = (headerNav: boolean) =>
       render(
         <HeaderNavContext.Provider value={headerNav}>
@@ -85,8 +85,11 @@ describe("PageHeader", () => {
     expect(screen.getByRole("link", { name: "New product" })).toBeTruthy();
     cleanup();
 
+    // A wide screen has it in the header; a phone's bar has no create button.
     renderAction(true);
-    expect(screen.queryByRole("link", { name: "New product" })).toBeNull();
+    const wrapper = screen.getByRole("link", { name: "New product" }).parentElement;
+    expect(wrapper?.className.split(" ")).toEqual(expect.arrayContaining(["contents", "lg:hidden"]));
+    expect(wrapper?.hasAttribute("data-in-header-nav")).toBe(true);
   });
 
   it("puts a form page's buttons in the bar under the page, and keeps its title on a phone", () => {

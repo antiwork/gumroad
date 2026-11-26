@@ -7,11 +7,21 @@ import { HeaderNavContext, isSectionTitle, TextTabsContext } from "$app/componen
 import { usePageSlots } from "$app/components/PageSlots";
 
 /**
- * Wraps a page action the header nav already offers on every page ("New product"), at every
- * width, so the page does not show it a second time.
+ * Wraps a page action the header nav already offers on every page ("New product"), so wide
+ * screens do not show it twice. A phone's bar has no create button, so there the page keeps it.
  */
 export const InHeaderNav = ({ children }: { children: React.ReactNode }) =>
-  React.useContext(HeaderNavContext) ? null : children;
+  React.useContext(HeaderNavContext) ? (
+    <div data-in-header-nav className="contents lg:hidden">
+      {children}
+    </div>
+  ) : (
+    children
+  );
+
+// A wide screen does not show what InHeaderNav wraps, so there it does not count as a control.
+const EMPTY_ON_WIDE =
+  "lg:[&:not(:has(:is(a,button,input,select,[role=tab]):not([data-in-header-nav],[data-in-header-nav]_*)))]:hidden";
 
 /**
  * For an empty page's placeholder: an action its page header would have carried, shown only where
@@ -42,9 +52,8 @@ export const PageHeader = React.forwardRef<
   // every width, and its buttons sit in a bar pinned under the page, where a form ends.
   const { footer } = usePageSlots();
   const actionsInFooter = headerNav && !titleInHeader && footer !== null;
-  // Hidden while it holds no control: a search that is not filtering and an action the header
-  // nav already has both render nothing.
-  const hiddenWhileEmpty = "[&:not(:has(:is(a,button,input,select,[role=tab])))]:hidden";
+  // Hidden while it holds no control: a search that is not filtering renders nothing.
+  const hiddenWhileEmpty = classNames("[&:not(:has(:is(a,button,input,select,[role=tab])))]:hidden", EMPTY_ON_WIDE);
 
   return (
     <header
@@ -53,7 +62,7 @@ export const PageHeader = React.forwardRef<
         titleInHeader &&
           "lg:min-h-16 lg:flex-row-reverse lg:flex-wrap lg:items-center lg:justify-between lg:gap-y-2 lg:py-2",
         // On a wide screen the title is hidden, so a header holding no control is an empty box.
-        titleInHeader && "lg:[&:not(:has(:is(a,button,input,select,[role=tab])))]:hidden",
+        titleInHeader && EMPTY_ON_WIDE,
         className,
       )}
       ref={ref}

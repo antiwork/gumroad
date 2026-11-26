@@ -1,4 +1,4 @@
-import { ChevronDown, Plus } from "@boxicons/react";
+import { ChevronDown } from "@boxicons/react";
 import { Link } from "@inertiajs/react";
 import * as React from "react";
 
@@ -148,35 +148,6 @@ const CreateButton = ({ actions }: { actions: OmnibarShortcut[] }) => {
         </Popover>
       ) : null}
     </div>
-  );
-};
-
-// The phone bar's create button: everything the user may create, behind a plus.
-export const CreateMenu = ({ actions }: { actions: OmnibarShortcut[] }) => {
-  const [open, setOpen] = React.useState(false);
-  if (actions.length === 0) return null;
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        aria-label="Create"
-        // The padding takes the target past 24px; the matching margin keeps the bar's layout.
-        className={classNames("-m-1 rounded p-1", insetRing, "focus-visible:outline-solid")}
-      >
-        <Plus className="size-5" aria-hidden />
-      </PopoverTrigger>
-      <PopoverContent align="end" className="p-0" aria-label="Create">
-        <Menu className="border-0 shadow-none">
-          {actions.map((action) => (
-            <MenuItem key={action.id} asChild>
-              <Link href={action.href} className="no-underline" onClick={() => setOpen(false)}>
-                {action.title}
-              </Link>
-            </MenuItem>
-          ))}
-        </Menu>
-      </PopoverContent>
-    </Popover>
   );
 };
 
