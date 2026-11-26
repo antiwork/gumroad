@@ -9,6 +9,16 @@ class SyncStuckPayoutsJob
   include RecurringLockTtl
   recurring_lock_ttl max_attempt: 2.hours
 
+  # PayPal's TransactionSearch only searches the last three years, and the sync searches from the
+  # day before the payout was created. A PayPal payout older than that can therefore never be
+  # found: every weekly run raised "No PayPal transaction found" once for each of the ~670 payouts
+  # from 2012-2020, and that volume on its own trips the production error-spike alert.
+  #
+  # Their state is deliberately left alone — reverting #8111 established that an empty search cannot
+  # tell a returned payout from a claimed payout whose IPN we missed, so failing or cancelling them
+  # risks paying the same money twice. There is nothing to sync for them, so they are not searched.
+  PAYPAL_TRANSACTION_SEARCH_HORIZON = 3.years
+
   def perform(processor)
     stuck_payments(processor).find_each do |payment|
       Rails.logger.info("Syncing #{processor} payout #{payment.id} stuck in #{payment.state} state")
@@ -40,6 +50,11 @@ class SyncStuckPayoutsJob
       stuck_payment_states << "unclaimed" if processor != PayoutProcessorType::STRIPE
 
       base_scope = Payment.where(processor:, state: stuck_payment_states)
+
+      if processor == PayoutProcessorType::PAYPAL
+        # One day of slack so a payout sitting right on the horizon still gets its one attempt.
+        return base_scope.where("created_at >= ?", PAYPAL_TRANSACTION_SEARCH_HORIZON.ago - 1.day)
+      end
 
       return base_scope if processor != PayoutProcessorType::STRIPE
 

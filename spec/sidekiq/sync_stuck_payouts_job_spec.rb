@@ -93,6 +93,29 @@ describe SyncStuckPayoutsJob do
         expect(ErrorNotifier).to have_received(:notify).with(/rejected:.*Correlation can't be blank/)
         expect(payment.reload.state).to eq("processing")
       end
+
+      it "does not search for a PayPal payout older than PayPal's transaction-search horizon" do
+        stale = create(:payment, processor: PayoutProcessorType::PAYPAL, state: "unclaimed",
+                                 txn_id: "5TL42211DF7694405", correlation_id: "45de75215a693",
+                                 created_at: 8.years.ago)
+
+        expect(PaypalPayoutProcessor).not_to receive(:search_payment_on_paypal)
+
+        described_class.new.perform(PayoutProcessorType::PAYPAL)
+
+        expect(stale.reload.state).to eq("unclaimed")
+      end
+
+      it "still searches for a PayPal payout inside the transaction-search horizon" do
+        create(:payment, processor: PayoutProcessorType::PAYPAL, state: "unclaimed",
+                         txn_id: "3GT833818E300932E", correlation_id: "5279c6d905795",
+                         created_at: 1.month.ago)
+
+        expect(PaypalPayoutProcessor).to receive(:search_payment_on_paypal).once
+          .and_return({ state: Payment::UNCLAIMED })
+
+        described_class.new.perform(PayoutProcessorType::PAYPAL)
+      end
     end
 
     context "when processor type is Stripe" do
