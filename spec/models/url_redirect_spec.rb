@@ -307,7 +307,7 @@ describe UrlRedirect do
       bundle_purchase.create_artifacts_and_send_receipt!
       redirect = bundle_purchase.url_redirect
 
-      stamped_ids = bundle.bundle_products.flat_map { |bundle_product| bundle_product.product.product_files.alive.select(&:must_be_pdf_stamped?).map(&:id) }
+      stamped_ids = bundle.bundle_products.flat_map { |bundle_product| bundle_product.product.product_files.alive.filter_map { _1.id if _1.must_be_pdf_stamped? } }
       file_ids = redirect.bundle_archive_product_files.map(&:id)
 
       expect(stamped_ids).not_to be_empty
