@@ -21,6 +21,8 @@ class SellerProfile < ApplicationRecord
     google_fonts_css_source(FONT_CHOICES.without("ABC Favorit"))
   end
 
+  DEFAULT_BACKGROUND_COLOR = "#ffffff"
+
   belongs_to :seller, class_name: "User"
 
   validates :font, inclusion: { in: FONT_CHOICES }
@@ -45,7 +47,7 @@ class SellerProfile < ApplicationRecord
 
   after_initialize do
     self.font ||= "ABC Favorit"
-    self.background_color ||= "#ffffff"
+    self.background_color ||= DEFAULT_BACKGROUND_COLOR
     self.highlight_color ||= "#ff90e8"
     self.border_radius ||= "small"
     self.button_hover ||= "lift"
@@ -129,9 +131,20 @@ class SellerProfile < ApplicationRecord
     "background-color: #{background_color}; color: #{text_color_on_background}; font-family: #{font_family.tr('"', "'")};"
   end
 
+  # A seller on the default white background has chosen no look for their emails, so a post follows
+  # the reader's colour scheme: light for a light-mode reader, dark for a dark-mode one. A seller
+  # who picked a background keeps it for every reader.
+  def email_follows_reader_color_scheme?
+    background_color.to_s.casecmp?(DEFAULT_BACKGROUND_COLOR) && Feature.active?(:post_email_reader_color_scheme, seller)
+  end
+
   # The email footer wordmark is a fixed-colour PNG, so unlike text it cannot follow the theme:
-  # the dark asset disappears on a store whose background resolves to light text.
+  # the dark asset disappears on a store whose background resolves to light text. Where the page
+  # can be white or dark by reader, the dark asset carries a white halo: unseen on white, and an
+  # outline on dark.
   def email_wordmark_image_path
+    return "email/wordmark_logo_on_white.png" if email_follows_reader_color_scheme?
+
     text_color_on_background == ContrastColor::WHITE ? "email/wordmark_logo_light.png" : "email/wordmark_logo.png"
   end
 

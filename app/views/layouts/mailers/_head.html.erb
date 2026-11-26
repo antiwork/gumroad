@@ -1,8 +1,10 @@
 <meta content="text/html; charset=UTF-8" http-equiv="Content-Type">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="x-apple-disable-message-reformatting">
-<meta name="color-scheme" content="light only">
-<meta name="supported-color-schemes" content="light only">
+<%# locals: color_scheme: "light only". An email that carries its own dark rules passes "light dark". %>
+<% color_scheme = local_assigns[:color_scheme] || "light only" %>
+<meta name="color-scheme" content="<%= color_scheme %>">
+<meta name="supported-color-schemes" content="<%= color_scheme %>">
 <!--[if mso]>
   <noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript>
 <![endif]-->

@@ -73,6 +73,39 @@ describe PostResendApi, :freeze_time do
       expect(src).not_to include("wordmark_logo_light.png")
     end
 
+    describe "following the reader's colour scheme" do
+      def color_scheme_meta
+        html_doc(sent_email_content).at_css('meta[name="color-scheme"]')["content"]
+      end
+
+      it "lets a dark-mode reader see a default-theme post dark" do
+        @post.seller.seller_profile.update!(background_color: "#ffffff")
+        Feature.activate_user(:post_email_reader_color_scheme, @post.seller)
+        send_default_email
+
+        expect(color_scheme_meta).to eq("light dark")
+        expect(sent_email_content).to include("@media (prefers-color-scheme: dark)")
+        expect(sent_email_content).to include("background-color: transparent !important")
+        expect(html_doc(sent_email_content).at_css("a.wordmark img")["src"]).to include("wordmark_logo_on_white.png")
+      end
+
+      it "keeps a default-theme post light only while the feature is off" do
+        @post.seller.seller_profile.update!(background_color: "#ffffff")
+        send_default_email
+
+        expect(color_scheme_meta).to eq("light only")
+        expect(sent_email_content).not_to include("prefers-color-scheme")
+      end
+
+      it "keeps a themed post in the seller's colours for every reader" do
+        Feature.activate_user(:post_email_reader_color_scheme, @post.seller)
+        send_default_email
+
+        expect(color_scheme_meta).to eq("light only")
+        expect(sent_email_content).not_to include("prefers-color-scheme")
+      end
+    end
+
     it "includes them as CSS" do
       expect(sent_email_content).to include("body {\nbackground-color: #000000; color: #ffffff; font-family: \"Roboto Mono\", \"ABC Favorit\", monospace;\n}")
       # The seller's body rule has to outrank the stylesheet's fallback colour and font.
