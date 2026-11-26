@@ -17,7 +17,7 @@ class Api::V2::OfferCodesController < Api::V2::BaseController
   before_action :parse_validity_period, only: %i[create update]
 
   def index
-    return success_with_object(:offer_codes, @product.product_and_universal_offer_codes) if @product
+    return success_with_object(:offer_codes, offer_codes_json(@product.product_and_universal_offer_codes)) if @product
 
     codes = current_resource_owner.offer_codes.alive.order(created_at: :desc, id: :desc)
     if params.key?(:auto_apply)
@@ -37,7 +37,7 @@ class Api::V2::OfferCodesController < Api::V2::BaseController
     end
     page = codes.limit(RESULTS_PER_PAGE + 1).to_a
     additional = page.size > RESULTS_PER_PAGE ? pagination_info(page[RESULTS_PER_PAGE - 1]) : {}
-    success_with_object(:offer_codes, page.first(RESULTS_PER_PAGE), additional)
+    success_with_object(:offer_codes, offer_codes_json(page.first(RESULTS_PER_PAGE)), additional)
   end
 
   def create
@@ -95,6 +95,13 @@ class Api::V2::OfferCodesController < Api::V2::BaseController
   end
 
   private
+    # The API's `times_used` is a purchases aggregate per code; rendering a page reads it once per
+    # usage mode for the whole page instead, so the query count no longer scales with the codes.
+    def offer_codes_json(codes)
+      times_used = OfferCode.times_used_by_id(codes)
+      codes.map { |code| code.as_json_for_api(times_used: times_used.fetch(code.id, 0)) }
+    end
+
     def product_scoped?
       request.path_parameters[:link_id].present?
     end

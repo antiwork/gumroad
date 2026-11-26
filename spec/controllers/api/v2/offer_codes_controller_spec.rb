@@ -38,6 +38,66 @@ describe Api::V2::OfferCodesController do
 
         expect(result).to eq(success: true, offer_codes: [offer_code].as_json(api_scopes: ["view_public"]))
       end
+
+      it "counts a page of codes' usage in a fixed number of queries" do
+        codes = Array.new(5) do |index|
+          code = create(:offer_code, user: @user, products: [@product], code: "bulk#{index}")
+          create(:purchase, link: @product, seller: @user, offer_code: code, quantity: 2)
+          code
+        end
+        # A legacy once-per-cart redemption and a completed allocation are counted by their own
+        # aggregates, so the batched read has to agree with the per-code one on all three modes.
+        per_cart = create(:offer_code, user: @user, products: [@product], code: "percart")
+        create(:purchase, link: @product, seller: @user, offer_code: per_cart).create_purchase_offer_code_discount!(
+          offer_code: per_cart, offer_code_amount: 100, offer_code_is_percent: false, once_per_cart: true,
+          pre_discount_minimum_price_cents: @product.price_cents
+        )
+        allocation = create(:offer_code, user: @user, products: [@product], code: "allocation")
+        create(:purchase, link: @product, seller: @user, offer_code: allocation).create_purchase_offer_code_discount!(
+          offer_code: allocation, offer_code_amount: 100, offer_code_is_percent: false, once_per_cart: true,
+          once_per_cart_allocation_id: SecureRandom.uuid, pre_discount_minimum_price_cents: @product.price_cents
+        )
+
+        query_counts = Hash.new(0)
+        callback = lambda do |_name, _start, _finish, _id, payload|
+          table = payload[:sql].to_s[/FROM [`](\w+)[`]/, 1]
+          query_counts[table] += 1 if table
+        end
+
+        ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+          get @action, params: @params
+        end
+
+        expect(response).to be_successful
+        (codes + [per_cart, allocation]).each do |code|
+          expect(response.parsed_body["offer_codes"].find { _1["name"] == code.code }["times_used"]).to eq(code.times_used)
+        end
+        # One grouped aggregate per usage mode for the whole page, not three reads per code.
+        expect(query_counts.fetch("purchases", 0)).to eq(3)
+      end
+    end
+
+    it "counts a page of the seller's own codes' usage in a fixed number of queries" do
+      token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "view_sales")
+      Array.new(Api::V2::OfferCodesController::RESULTS_PER_PAGE + 2) do |index|
+        code = create(:offer_code, user: @user, products: [@product], code: "mine#{index}")
+        create(:purchase, link: @product, seller: @user, offer_code: code)
+      end
+
+      query_counts = Hash.new(0)
+      callback = lambda do |_name, _start, _finish, _id, payload|
+        table = payload[:sql].to_s[/FROM [`](\w+)[`]/, 1]
+        query_counts[table] += 1 if table
+      end
+
+      ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+        get :index, params: { access_token: token.token }
+      end
+
+      expect(response).to be_successful
+      expect(response.parsed_body["offer_codes"].size).to eq(Api::V2::OfferCodesController::RESULTS_PER_PAGE)
+      expect(response.parsed_body["offer_codes"]).to all(include("times_used" => 1))
+      expect(query_counts.fetch("purchases", 0)).to eq(3)
     end
 
     it "grants access with the account scope" do
