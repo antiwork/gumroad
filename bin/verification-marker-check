@@ -1,0 +1,179 @@
+#!/usr/bin/env python3
+"""Verification-marker check for a pull request.
+
+CONTRIBUTING.md's #1 rule is that a change shows its evidence; this is the machine-readable shape of
+that rule, and the check named `verification/ready`
+(.github/workflows/verification-readiness.yml). The point is that a reviewer can decide from the
+marker whether the diff needs reading at all.
+
+The PR body carries ONE line, pinned to the head commit:
+
+    Verification: verified @ <head-sha> (ran: <command or flow>; saw: <what it printed or showed>)
+    Verification: exempt (<short reason>) @ <head-sha>
+
+`verified` needs both refs, and both must say something: `ran:` names what was actually executed,
+`saw:` names the observable result — a spec tally, a price on the served page, a still. `exempt` is
+only for a diff that touches no code (documentation, agent skill files), where the diff is the
+reviewable artifact; the check refuses it once any other path is in the diff, so it cannot quietly
+become the way everything merges.
+
+The pin is what makes it evidence rather than a claim: any later push re-arms it, the same idiom as
+`Premerge review: clean @ <sha>` and `Marketing: ready @ <sha>`.
+
+Inputs: arg 1 is a JSON file in the `gh pr view --json body,headRefOid,isDraft,files` shape the
+workflow writes; otherwise the environment (PR_BODY, PR_HEAD, PR_DRAFT, PR_FILES as a JSON array or a
+newline-separated list). Exit 0 clear, 1 owed. `--self-test` asserts the grammar offline.
+"""
+import json
+import os
+import re
+import sys
+
+VERIFIED = re.compile(r"Verification:\s*verified\s*@\s*([0-9a-f]{7,40})", re.I)
+EXEMPT = re.compile(r"Verification:\s*exempt\s*\(([^)\n]{3,})\)[^\n]*?@\s*([0-9a-f]{7,40})", re.I)
+RAN = re.compile(r"\bran:\s*([^;)]+)", re.I)
+SAW = re.compile(r"\bsaw:\s*([^;)]+)", re.I)
+
+# The refs are prose, so "nothing" is a legal token; these are the ones that mean the author did not
+# actually run or observe anything.
+EMPTY_REF = {"", "-", "--", "n/a", "na", "none", "nothing", "tbd", "todo", "nil", "?"}
+
+# A diff that touches only these is its own evidence: there is nothing to boot, and CONTRIBUTING.md
+# already waives the walkthrough video for it.
+DOC_ONLY = (
+    re.compile(r"\.md$", re.I),
+    re.compile(r"^docs/", re.I),
+    re.compile(r"^\.agents/", re.I),
+    re.compile(r"^\.claude/", re.I),
+)
+
+MESSAGE = """⛔ verification/ready: {why}
+
+One line in the description, pinned to the head commit — any push re-arms it:
+
+  Verification: verified @ {sha} (ran: <command or flow>; saw: <what it printed or showed>)
+  Verification: exempt (<short reason>) @ {sha}
+
+  verified  ran: what you actually executed — bin/rspec <path>, a rails runner, the checkout flow in
+            a browser. saw: the observable result — 12 examples, 0 failures / the price reads $20 on
+            the served page / the still attached below. "ran: specs; saw: passed" passes this check
+            and tells the reviewer nothing.
+  exempt    only when the diff touches no code: documentation and agent skill files.
+
+Standard: .agents/skills/verify-pr. Editing the description re-runs this check — no push needed."""
+
+
+def _ref(line, pattern):
+    m = pattern.search(line)
+    if not m:
+        return None
+    value = m.group(1).strip().strip("`*_ ")
+    return value if value.lower() not in EMPTY_REF and re.search(r"[A-Za-z0-9]", value) else None
+
+
+def _line_for(body, match):
+    start = body.rfind("\n", 0, match.start()) + 1
+    end = body.find("\n", match.end())
+    return body[start : end if end != -1 else len(body)]
+
+
+def code_path(changed):
+    """First changed path that is not documentation-only, or '' when the diff is docs alone."""
+    for path in changed or []:
+        if not any(p.search(path) for p in DOC_ONLY):
+            return path
+    return ""
+
+
+def check(body, head, draft=False, changed=None):
+    """(ok, detail). A draft is skipped: it cannot merge, and the marker is owed before it is
+    presented for merge (the check re-runs on ready_for_review)."""
+    if draft:
+        return True, "draft — the marker is owed before this is presented for merge"
+    body, head = body or "", (head or "").lower()
+    code = code_path(changed)
+    stale = ""
+
+    for m in EXEMPT.finditer(body):
+        if not head.startswith(m.group(2).lower()):
+            continue
+        if code and changed:
+            return False, f"exempt is for documentation-only diffs, and this one changes {code}"
+        if not changed:
+            stale = "an exempt marker arrived without the changed-file list, so it could not be checked"
+            continue
+        return True, f"exempt ({m.group(1).strip()})"
+
+    for m in VERIFIED.finditer(body):
+        line = _line_for(body, m)
+        if not head.startswith(m.group(1).lower()):
+            continue
+        ran, saw = _ref(line, RAN), _ref(line, SAW)
+        if ran and saw:
+            return True, f"ran: {ran} / saw: {saw}"
+        missing = " and ".join(n for n, v in (("ran:", ran), ("saw:", saw)) if not v)
+        stale = f"the marker is missing a real {missing} value"
+        break
+
+    if stale:
+        return False, stale
+    if VERIFIED.search(body) or EXEMPT.search(body):
+        return False, "the marker is pinned to an older commit — update the sha after a push"
+    return False, "no Verification: line in the body"
+
+
+def _load():
+    if len(sys.argv) > 1 and not sys.argv[1].startswith("-"):
+        with open(sys.argv[1]) as f:
+            pr = json.load(f)
+        changed = [f.get("path") or f.get("filename") or "" for f in (pr.get("files") or [])]
+        return pr.get("body"), pr.get("headRefOid"), bool(pr.get("isDraft")), changed
+
+    body = os.environ.get("PR_BODY")
+    head = os.environ.get("PR_HEAD")
+    draft = (os.environ.get("PR_DRAFT") or "").lower() == "true"
+    raw = os.environ.get("PR_FILES") or ""
+    try:
+        changed = [f.get("path") or f.get("filename") or "" for f in json.loads(raw)]
+    except ValueError:
+        changed = [ln.strip() for ln in raw.splitlines() if ln.strip()]
+    return body, head, draft, changed
+
+
+def self_test():
+    sha = "a" * 40
+    line = "Verification: verified @ %s (ran: bin/rspec spec/models/user_spec.rb; saw: 12 examples, 0 failures)"
+    good = line % sha
+    assert check(good, sha)[0] is True, check(good, sha)
+    assert check(good, "b" * 40)[0] is False  # a push re-arms it
+    assert check(None, sha)[0] is False
+    assert check("Prose only.\n", sha)[0] is False
+    assert check("Verification: exempt (docs) @ %s" % sha, sha, False, ["README.md"])[0] is True
+    assert check("Verification: exempt (docs) @ %s" % sha, sha, False, ["app/models/user.rb"])[0] is False
+    assert check("Verification: exempt (docs) @ %s" % sha, sha, False, None)[0] is False
+    # A hollow receipt is not a receipt.
+    assert check("Verification: verified @ %s (ran: n/a; saw: n/a)" % sha, sha)[0] is False
+    assert check("Verification: verified @ %s (ran: specs; saw: passed)" % sha, sha)[0] is True
+    assert check("Verification: verified @ %s (ran: bin/rspec; )" % sha, sha)[0] is False
+    # Multiple lines: one covering head is enough, and a stale one must not clear it.
+    both = "Verification: verified @ %s (ran: old; saw: old)\n%s" % ("c" * 40, good)
+    assert check(both, sha)[0] is True
+    assert check(good, sha, True)[0] is True  # drafts are skipped
+    print("verification-marker-check self-test OK")
+    return 0
+
+
+def main():
+    if "--self-test" in sys.argv[1:]:
+        return self_test()
+    body, head, draft, changed = _load()
+    ok, detail = check(body, head, draft, changed)
+    if ok:
+        print(f"verification: {detail}")
+        return 0
+    print(MESSAGE.format(sha=(head or "<head-sha>")[:12], why=detail), file=sys.stderr)
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

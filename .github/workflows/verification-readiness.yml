@@ -1,0 +1,47 @@
+name: Verification readiness
+
+# CONTRIBUTING.md's #1 rule is that a change shows its evidence. This job is the machine-readable
+# half of it: the check named `verification/ready`, produced by bin/verification-marker-check, which
+# asks the PR description for one SHA-pinned marker line naming what was run and what was seen.
+# The point is that a reviewer can decide from the marker whether the diff needs reading at all.
+#
+# The PR is read through the API rather than the event payload, so the check reflects the body as it
+# is NOW — editing the description re-runs it, with no push. A draft is skipped (it cannot merge) and
+# the check re-runs on ready_for_review. `workflow_dispatch` takes a PR number so a human or an agent
+# can re-run it by hand.
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request to check
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  verification:
+    name: verification/ready
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # A check whose parser is broken reports green for every PR, so prove the grammar before
+      # trusting the verdict it reaches: the parser's own table, then the CLI contract (exit codes,
+      # the message an author acts on, the shipped template failing until it is filled in).
+      - name: Self-test the marker grammar
+        run: python3 bin/verification-marker-check --self-test
+      - name: Contract-test the marker checker
+        run: ruby spec/bin/verification_marker_check_test.rb
+      - name: Check the verification marker
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+        run: |
+          gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
+            --json body,headRefOid,isDraft,files > pr.json
+          python3 bin/verification-marker-check pr.json
