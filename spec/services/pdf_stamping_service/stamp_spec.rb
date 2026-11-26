@@ -213,4 +213,24 @@ describe PdfStampingService::Stamp do
       end
     end
   end
+
+  describe "watermark legibility" do
+    let(:fixture_path) { Rails.root.join("spec", "support", "fixtures", "billion-dollar-company-chapter-0.pdf").to_s }
+
+    it "draws the stamp large and dark enough to be found on the delivered copy" do
+      watermark_path = described_class.send(
+        :create_watermark_pdf!,
+        original_pdf_path: fixture_path,
+        watermark_text: "customer@example.com",
+      )
+      content = PDF::Reader.new(watermark_path).page(1).raw_content
+
+      # The drawn size, colour and logo scale are only observable in the content stream.
+      expect(content.scan(%r{/F\d+ (\d+) Tf}).flatten.map(&:to_i)).to all(eq(15))
+      expect(content[%r{([\d.]+) \1 \1 scn}, 1].to_f).to be_within(0.01).of(0.541) # #8A8A8A
+      expect(content.scan(%r{([\d.]+) 0\.0 0\.0 ([\d.]+) [\d.]+ [\d.]+ cm}).flatten.map(&:to_f)).to all(eq(32.0))
+    ensure
+      File.unlink(watermark_path) if watermark_path && File.exist?(watermark_path)
+    end
+  end
 end
