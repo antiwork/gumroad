@@ -8,6 +8,17 @@ describe Marketing::Channel do
     expect(described_class.live?(described_class::ABANDONED_CART)).to eq(false)
   end
 
+  it "makes Instagram live only for a seller with Instagram posting enabled" do
+    seller = create(:user)
+    expect(described_class.live?("instagram")).to eq(false)
+    expect(described_class.live?("instagram", seller)).to eq(false)
+
+    Feature.activate_user(:marketing_instagram_posting, seller)
+    expect(described_class.live?("instagram", seller)).to eq(true)
+    expect(described_class.live?("instagram", create(:user))).to eq(false)
+    expect(described_class.executor_for("instagram")).to eq(Marketing::Channels::Instagram)
+  end
+
   it "records the cart channel under the workflow's own abandoned-cart type" do
     expect(described_class::ABANDONED_CART).to eq(Workflow::ABANDONED_CART_TYPE)
   end

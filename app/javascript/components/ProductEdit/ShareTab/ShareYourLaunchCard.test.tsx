@@ -69,6 +69,18 @@ const xChannel = (overrides: Partial<MarketingChannel> = {}): MarketingChannel =
   ...overrides,
 });
 
+const instagramChannel = (overrides: Partial<MarketingChannel> = {}): MarketingChannel => ({
+  channel: "instagram",
+  label: "Instagram",
+  live: true,
+  connected: true,
+  handle: "edgar",
+  connect_path: "/settings/social_connections",
+  has_image: true,
+  action: action({ id: "act-ig", channel: "instagram" }),
+  ...overrides,
+});
+
 const renderCard = async (channels: MarketingChannel[]) => {
   fetchMarketingRecommendations.mockResolvedValue(channels);
   render(<ShareYourLaunchCard productPermalink="abc" />);
@@ -182,6 +194,56 @@ describe("ShareYourLaunchCard", () => {
     expect(screen.getByText(/couldn't confirm whether this post went through/u)).toBeDefined();
     expect(screen.getByRole("link", { name: "Share on X" })).toBeDefined();
     expect(screen.queryByRole("button", { name: "Post on X" })).toBeNull();
+  });
+
+  it("offers Instagram as a destination and posts to it after confirmation", async () => {
+    const approved = action({ id: "act-ig", channel: "instagram", status: "approved" });
+    approveMarketingAction.mockResolvedValue(approved);
+    executeMarketingAction.mockResolvedValue({
+      action: { ...approved, status: "posted", external_url: "https://www.instagram.com/p/abc/" },
+      intent_url: "",
+      connect_path: "/settings/social_connections",
+    });
+    await renderCard([instagramChannel()]);
+
+    expect(screen.getByText(/cover image and link are added automatically/u)).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Post on Instagram" }));
+    fireEvent.click(screen.getByRole("button", { name: "Post now" }));
+
+    await waitFor(() => expect(executeMarketingAction).toHaveBeenCalledWith("abc", "act-ig"));
+    expect(await screen.findByRole("link", { name: "View post on Instagram" })).toBeDefined();
+  });
+
+  it("asks for a cover image before Instagram can be posted to", async () => {
+    await renderCard([instagramChannel({ has_image: false })]);
+
+    expect(screen.getByText(/Instagram posts need an image/u)).toBeDefined();
+    expect(screen.getByRole("button", { name: "Post on Instagram" })).toHaveProperty("disabled", true);
+  });
+
+  it("asks a seller whose Instagram connection cannot post to reconnect", async () => {
+    await renderCard([instagramChannel({ connected: false })]);
+
+    expect(screen.getByRole("link", { name: "Reconnect Instagram and allow posting" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Post on Instagram" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Continue on X" })).toBeNull();
+  });
+
+  it("offers a first connection to a seller who has not connected Instagram", async () => {
+    await renderCard([instagramChannel({ connected: false, handle: null })]);
+
+    expect(screen.getByRole("link", { name: "Connect Instagram for direct posting" })).toBeDefined();
+  });
+
+  it("tells the seller to check Instagram when a post's result is unknown", async () => {
+    await renderCard([
+      instagramChannel({
+        action: action({ channel: "instagram", status: "failed", error_code: "instagram_post_result_unknown" }),
+      }),
+    ]);
+
+    expect(screen.getByText(/Check your Instagram account before posting again/u)).toBeDefined();
+    expect(screen.queryByRole("link", { name: "Share on X" })).toBeNull();
   });
 
   it("keeps one composer and restores each destination draft", async () => {

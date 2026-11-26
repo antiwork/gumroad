@@ -22,6 +22,49 @@ describe Marketing::Recommendations do
     expect(channels.find { _1[:channel] == "tiktok" }.keys).to match_array(%i[channel label live])
   end
 
+  describe "Instagram" do
+    subject(:instagram) { channels.find { _1[:channel] == "instagram" } }
+
+    before { Feature.activate_user(:marketing_instagram_posting, seller) }
+
+    it "is live with its own action and tagged link once posting is enabled for the seller" do
+      expect(instagram).to include(live: true, connected: false, handle: nil, has_image: false)
+      expect(instagram[:action]).to have_attributes(channel: "instagram", copy: "Gumstein Letters: Ten years of letters from the Andes.")
+      expect(instagram[:action].utm_link).to have_attributes(utm_source: "instagram", utm_medium: "social", utm_campaign: "launch")
+    end
+
+    it "is connected only when the seller's connection can publish" do
+      identity = create(:user_instagram_identity, user: seller, handle: "edgar")
+      expect(described_class.new(product:, seller:).call.find { _1[:channel] == "instagram" }).to include(connected: false, handle: "edgar")
+
+      identity.update!(access_token: "ig-token", access_token_expires_at: 30.days.from_now)
+      expect(described_class.new(product:, seller:).call.find { _1[:channel] == "instagram" }).to include(connected: true)
+    end
+
+    it "binds the confirmation to the Instagram account, not the X one" do
+      create(:user_instagram_identity, user: seller, handle: "edgar")
+      action = instagram[:action]
+      token = action.confirmation_token
+
+      seller.update!(twitter_handle: "someone_else")
+      expect(action.reload.confirmation_token).to eq(token)
+
+      seller.instagram_identity.update!(handle: "new_handle")
+      expect(action.reload.confirmation_token).not_to eq(token)
+    end
+
+    it "clears the missing-image reason once the product has a cover" do
+      action = instagram[:action]
+      action.update!(error_code: Marketing::Action::INSTAGRAM_IMAGE_MISSING)
+      allow(Marketing::InstagramImage).to receive(:new).and_return(instance_double(Marketing::InstagramImage, available?: true))
+
+      refreshed = described_class.new(product:, seller:).call.find { _1[:channel] == "instagram" }
+
+      expect(refreshed).to include(has_image: true)
+      expect(refreshed[:action].error_code).to be_nil
+    end
+  end
+
   it "builds the X action from the product name and first description sentence with a launch UtmLink" do
     x = channels.first
     action = x[:action]

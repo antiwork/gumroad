@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_26_000009) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_26_000010) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -3376,6 +3376,8 @@ create_table "ping_deliveries", charset: "utf8mb4", collation: "utf8mb4_unicode_
     t.string "handle"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.text "encrypted_access_token"
+    t.datetime "access_token_expires_at"
     t.index ["instagram_user_id"], name: "index_user_instagram_identities_on_instagram_user_id"
     t.index ["user_id"], name: "index_user_instagram_identities_on_user_id", unique: true
   end

@@ -190,7 +190,8 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
       return redirect_to social_connect_destination
     end
     identity = logged_in_user.instagram_identity || logged_in_user.build_instagram_identity
-    identity.update!(instagram_user_id: verification.uid, handle: verification.handle)
+    identity.update!(instagram_user_id: verification.uid, handle: verification.handle,
+                     **instagram_publishing_token(token))
     redirect_to social_connect_destination
   rescue StandardError => e
     Rails.logger.error("Instagram connect failed for user #{logged_in_user.id}: #{e.class}")
@@ -273,6 +274,21 @@ class User::OmniauthCallbacksController < Devise::OmniauthCallbacksController
   end
 
   private
+    # The login token lasts an hour, so posting later needs the 60-day one. Without the
+    # publish permission there is nothing to post with, and a stale token is cleared.
+    def instagram_publishing_token(short_lived_token)
+      cleared = { access_token: nil, access_token_expires_at: nil }
+      return cleared unless Feature.active?(:marketing_instagram_posting, logged_in_user)
+
+      granted = Array(request.env.dig("omniauth.auth", "extra", "raw_info", "permissions")).flat_map { _1.to_s.split(",") }
+      return cleared unless granted.include?(OmniAuth::Strategies::Instagram::PUBLISH_SCOPE)
+
+      exchanged = Marketing::InstagramApi.exchange_for_long_lived_token(short_lived_token)
+      return cleared unless exchanged.ok? && exchanged.access_token.present?
+
+      { access_token: exchanged.access_token, access_token_expires_at: exchanged.expires_in.seconds.from_now }
+    end
+
     def sanitize_oauth_error_param(value)
       return if value.blank?
 

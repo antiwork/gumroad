@@ -14,6 +14,7 @@ module OmniAuth
 
       option :name, "instagram"
       option :scope, "instagram_business_basic"
+      PUBLISH_SCOPE = "instagram_business_content_publish"
       option :authorize_params, { enable_fb_login: "false", force_reauth: "true" }
       option :client_options,
              site: "https://api.instagram.com",
@@ -34,6 +35,14 @@ module OmniAuth
         return unavailable_connection unless instagram_connect_enabled?
 
         super
+      end
+
+      # Asked for only behind its flag: Meta shows every seller a consent line for it, and
+      # refuses the whole login for a permission the app has not been approved for.
+      def authorize_params
+        super.tap do |params|
+          params[:scope] = "#{params[:scope]},#{PUBLISH_SCOPE}" if Feature.active?(:marketing_instagram_posting, instagram_connect_actor)
+        end
       end
 
       def callback_phase

@@ -271,6 +271,9 @@ const ChannelComposer = ({
   // The read-only banner already explains why posting cannot work yet; the button would only fail.
   // Reconnecting clears the reason and re-enables it.
   const readOnlyToken = action.error_code === "x_write_permission_missing" && channel.connected;
+  const isInstagram = channel.channel === "instagram";
+  // Instagram has no text-only posts, so without a cover there is nothing to publish.
+  const missingImage = isInstagram && channel.has_image === false;
 
   const run = async (fn: () => Promise<void>) => {
     onBusyChange(true);
@@ -347,6 +350,12 @@ const ChannelComposer = ({
             </div>
           </div>
         </Alert>
+      ) : action.error_code === "instagram_post_result_unknown" ? (
+        <Alert role="status" variant="warning">
+          <span>
+            We couldn't confirm whether this post went through. Check your Instagram account before posting again.
+          </span>
+        </Alert>
       ) : action.error_code === "x_post_result_unknown" ? (
         <Alert role="status" variant="warning">
           <div className="flex flex-col justify-between gap-2 sm:flex-row">
@@ -363,6 +372,14 @@ const ChannelComposer = ({
         </Alert>
       ) : null}
 
+      {!terminal && missingImage ? (
+        <Alert role="status" variant="warning">
+          <span>
+            Instagram posts need an image. Add a cover image to this product in the Product tab, then come back to post.
+          </span>
+        </Alert>
+      ) : null}
+
       {!terminal ? (
         <>
           <fieldset>
@@ -375,7 +392,9 @@ const ChannelComposer = ({
               rows={3}
             />
             <small className="text-muted">
-              Your product link is added automatically. Sales from this post appear in your analytics.
+              {isInstagram
+                ? "Your product's cover image and link are added automatically. Instagram shows the link as plain text, so also keep it in your bio."
+                : "Your product link is added automatically. Sales from this post appear in your analytics."}
             </small>
           </fieldset>
 
@@ -383,7 +402,7 @@ const ChannelComposer = ({
             <div className="flex flex-wrap gap-2">
               <Button
                 color="primary"
-                disabled={busy || readOnlyToken || copy.trim() === ""}
+                disabled={busy || readOnlyToken || missingImage || copy.trim() === ""}
                 onClick={() => setConfirming(true)}
               >
                 Post on {channel.label}
@@ -407,7 +426,9 @@ const ChannelComposer = ({
                 </TwitterShareButton>
               ) : null}
               <a href={channel.connect_path} className="flex min-h-11 items-center">
-                Connect {channel.label} for direct posting
+                {isInstagram && channel.handle
+                  ? "Reconnect Instagram and allow posting"
+                  : `Connect ${channel.label} for direct posting`}
               </a>
             </div>
           )}

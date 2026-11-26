@@ -25,6 +25,8 @@ export type MarketingChannel = {
   handle?: string | null;
   connect_path?: string;
   intent_url?: string;
+  // Instagram only: a post there needs an image, taken from the product's cover.
+  has_image?: boolean;
   action?: MarketingAction;
   // The email channel prepares a draft instead of posting, so the card shows either the
   // reason the seller cannot email yet or the draft's state and reach.
