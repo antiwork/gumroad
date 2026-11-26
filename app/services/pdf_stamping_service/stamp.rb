@@ -97,15 +97,19 @@ module PdfStampingService::Stamp
         }
       )
 
-      pdf.fill_color "C1C1C1"
+      # Sellers reported the stamp was hard to find on the delivered copy, so the text is drawn
+      # larger and darker; the line gap tracks the font size so the two lines never collide.
+      stamp_text_size = 15
+
+      pdf.fill_color "8A8A8A"
       pdf.font("ABC Favorit", style: :bold)
-      pdf.text_box("Sold to", at: [watermark_x, watermark_y], width: 300, align: :right, size: 11, fallback_fonts: %w[Helvetica])
+      pdf.text_box("Sold to", at: [watermark_x, watermark_y], width: 300, align: :right, size: stamp_text_size, fallback_fonts: %w[Helvetica])
 
-      pdf.fill_color "C1C1C1"
+      pdf.fill_color "8A8A8A"
       pdf.font("ABC Favorit", style: :normal)
-      pdf.text_box(watermark_text, at: [watermark_x, watermark_y - 14], width: 300, align: :right, size: 11, fallback_fonts: %w[Helvetica])
+      pdf.text_box(watermark_text, at: [watermark_x, watermark_y - (stamp_text_size + 4)], width: 300, align: :right, size: stamp_text_size, fallback_fonts: %w[Helvetica])
 
-      pdf.image("#{Rails.root}/public/images/pdf_stamp.png", at: [watermark_x + 305, watermark_y], width: 24)
+      pdf.image("#{Rails.root}/public/images/pdf_stamp.png", at: [watermark_x + 305, watermark_y], width: 32)
 
       pdf.render_file(watermark_pdf_path)
       watermark_pdf_path
