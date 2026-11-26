@@ -78,7 +78,7 @@ assert(err.include?("app/models/user.rb"), "and names the path that needs a real
 code, = run_with(pr("nothing at all", draft: true))
 assert(code.zero?, "a draft is skipped (got #{code})")
 
-out, err, status = Open3.capture3("python3", CHECKER, "--self-test")
+_, err, status = Open3.capture3("python3", CHECKER, "--self-test")
 assert(status.exitstatus.zero?, "the checker's own self-test passes: #{err}")
 
 # The shipped template must not satisfy the gate by itself: a PR created from it and never filled in
