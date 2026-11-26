@@ -189,24 +189,23 @@ class UrlRedirect < ApplicationRecord
   def bundle_archive_product_files
     return ProductFile.none unless purchase&.is_bundle_purchase?
 
-    return ProductFile.none if bundle_member_redirects.any? { _1.with_product_files.has_stampable_pdfs? }
-
     file_ids = ([self] + bundle_member_redirects).flat_map do |url_redirect|
       next [] unless url_redirect.with_product_files.is_downloadable?
 
-      url_redirect.alive_product_files.filter_map { _1.id if _1.archivable? }
+      url_redirect.alive_product_files.filter_map { _1.id if _1.archivable? && !_1.must_be_pdf_stamped? }
     end.uniq
 
     ProductFile.where(id: file_ids).in_order
   end
 
-  # The bundle ZIP is shared, so it leaves out stream-only files even when this buyer was granted one.
+  # The bundle ZIP is shared, so it leaves out stream-only files and per-buyer stamped PDFs even when
+  # this buyer was granted them.
   # No `is_downloadable?` gate here: a member whose files are all stream-only still holds the grant.
   def bundle_archive_omits_granted_files?
     return false unless purchase&.is_bundle_purchase?
 
     ([self] + bundle_member_redirects).any? do |url_redirect|
-      url_redirect.alive_product_files.any? { !_1.archivable? && url_redirect.is_file_downloadable?(_1) }
+      url_redirect.alive_product_files.any? { (!_1.archivable? || _1.must_be_pdf_stamped?) && url_redirect.is_file_downloadable?(_1) }
     end
   end
 

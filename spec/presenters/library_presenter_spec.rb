@@ -1291,13 +1291,14 @@ describe LibraryPresenter do
         expect(archived_link_ids).not_to include(removed_bundle_product.product_id)
       end
 
-      it "does not create a combined ZIP when a member product has stampable pdfs" do
-        create(:readable_document, pdf_stamp_enabled: true, link: purchase1.product_purchases.first.link)
+      it "keeps the combined ZIP row and flags the omitted stampable pdf when a member has one" do
+        stamped = create(:readable_document, pdf_stamp_enabled: true, link: purchase1.product_purchases.first.link)
 
         props = library_props(bundle_ids: [purchase1.link.external_id])
 
-        expect(props[:bundle_downloads]).to eq([])
-        expect(purchase1.link.product_files_archives.alive).to be_empty
+        expect(props[:bundle_downloads].map { _1[:id] }).to eq([purchase1.link.external_id])
+        expect(props[:bundle_downloads].first[:omits_granted_files]).to eq(true)
+        expect(purchase1.link.product_files_archives.alive.entity_archives.sole.product_files.map(&:id)).not_to include(stamped.id)
       end
 
       it "queues a replacement ZIP when the matching archive has failed" do

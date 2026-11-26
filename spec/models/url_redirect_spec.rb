@@ -301,12 +301,19 @@ describe UrlRedirect do
       end
     end
 
-    it "returns nil and does not create an archive when a member product has stampable pdfs" do
+    it "keeps the bundle's own files in the archive and leaves out a member's stampable pdf" do
       add_member_files(stampable: true)
+      own_file = create(:product_file, link: bundle, display_name: "bundle-own")
       bundle_purchase.create_artifacts_and_send_receipt!
+      redirect = bundle_purchase.url_redirect
 
-      expect(bundle_purchase.url_redirect.bundle_archive).to eq(nil)
-      expect(bundle.product_files_archives.alive).to be_empty
+      stamped_ids = bundle.bundle_products.flat_map { |bundle_product| bundle_product.product.product_files.alive.select(&:must_be_pdf_stamped?).map(&:id) }
+      file_ids = redirect.bundle_archive_product_files.map(&:id)
+
+      expect(stamped_ids).not_to be_empty
+      expect(file_ids).to include(own_file.id)
+      expect(file_ids & stamped_ids).to be_empty
+      expect(redirect.bundle_archive_omits_granted_files?).to eq(true)
     end
 
     it "includes the bundle's own files alongside the members'" do
