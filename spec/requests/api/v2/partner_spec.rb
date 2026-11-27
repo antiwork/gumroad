@@ -175,6 +175,49 @@ describe "Partner API", type: :request do
       expect(response.parsed_body["products"].map { _1["id"] }).to match_array([product.external_id, other_product.external_id])
     end
 
+    it "hides every product of a seller whose product grid is empty" do
+      grid_product = create(:product, user: seller)
+      create(:seller_profile_products_section, seller:)
+      index_model_records(Link)
+
+      get_products(external_user_id: "ext-1")
+
+      expect(response.parsed_body).to include("products" => [], "total" => 0)
+      expect(response.parsed_body["products"].map { _1["id"] }).not_to include(grid_product.external_id)
+    end
+
+    it "hides a seller's products while their featured section has no product yet" do
+      create(:seller_profile_featured_product_section, seller:)
+      index_model_records(Link)
+
+      get_products(external_user_id: "ext-1")
+
+      expect(response.parsed_body).to include("products" => [], "total" => 0)
+    end
+
+    it "hides each sectioned seller's hidden products in one query as the roster grows" do
+      shown_products = []
+      hidden_products = []
+      6.times do
+        sectioned_seller = create(:partner_seller, oauth_application: partner_application).user
+        shown_products << create(:product, user: sectioned_seller)
+        hidden_products << create(:product, user: sectioned_seller)
+        create(:seller_profile_products_section, seller: sectioned_seller, shown_products: [shown_products.last.id])
+      end
+      index_model_records(Link)
+
+      statements = []
+      ActiveSupport::Notifications.subscribed(->(*, payload) { statements << payload[:sql] }, "sql.active_record") { get_products }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["products"].map { _1["id"] }).to match_array(([product, other_product] + shown_products).map(&:external_id))
+      expect(response.parsed_body["products"].map { _1["id"] }).not_to include(*hidden_products.map(&:external_id))
+
+      hidden_ids_statement = statements.find { |sql| sql.include?("FROM `links`") && sql.include?("user_id") }
+      expect(hidden_ids_statement).to include("`user_id` IN (")
+      expect(hidden_ids_statement.scan(/`user_id` = /).size).to eq(0)
+    end
+
     it "narrows to one creator by external user ID" do
       get_products(external_user_id: "ext-2")
 

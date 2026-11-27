@@ -912,6 +912,10 @@ changed.each do |path|
   elsif path == "bin/classify-main-spec-failure" || path == "spec/bin/classify_main_spec_failure_test.rb"
     # Same: standalone ruby (ruby spec/bin/classify_main_spec_failure_test.rb), not rspec.
     next
+  elsif path == "bin/verification-marker-check" || path == "spec/bin/verification_marker_check_test.rb"
+    # Same: standalone ruby (ruby spec/bin/verification_marker_check_test.rb), which the
+    # Verification readiness job runs on every PR.
+    next
   elsif ["bin/deploy-before-main-suite", "bin/deploy-before-main-suite-gate", "spec/bin/deploy_before_main_suite_gate_test.rb",
          "bin/unblock-buildkite-deploy", "spec/bin/unblock_buildkite_deploy_test.rb"].include?(path)
     # Same: standalone ruby self-tests that the Migration versions job runs.

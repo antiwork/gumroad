@@ -49,6 +49,35 @@ describe "Sales navigation", type: :system, js: true do
     page.execute_script('sessionStorage.removeItem("sales-navigation-quota-test")')
   end
 
+  ["getItem", "removeItem"].each do |method|
+    it "opens a sale when the return-route flag's #{method} is denied" do
+      visit customers_path(query: purchase.email)
+      expect(page).to have_table("All sales (1)")
+
+      page.execute_script <<~JS, method
+        const method = arguments[0];
+        window.originalSalesStorageMethod = Storage.prototype[method];
+        Storage.prototype[method] = function(key, ...args) {
+          if (key === "CustomersPage:canGoBack") throw new DOMException("Storage unavailable", "SecurityError");
+          return window.originalSalesStorageMethod.call(this, key, ...args);
+        };
+      JS
+
+      find(:table_row, { "Email" => purchase.email }).click
+      expect(page).to have_current_path(customer_sale_path(purchase.external_id))
+      expect(page).to have_text("Test Buyer")
+      find("a[aria-label='Back to customers']").click
+      expect(page).to have_current_path(customers_path)
+    ensure
+      page.execute_script <<~JS, method
+        if (window.originalSalesStorageMethod) {
+          Storage.prototype[arguments[0]] = window.originalSalesStorageMethod;
+          delete window.originalSalesStorageMethod;
+        }
+      JS
+    end
+  end
+
   ["QuotaExceededError", "SecurityError"].each do |error_name|
     it "opens a sale when session storage writes raise #{error_name}" do
       visit customers_path

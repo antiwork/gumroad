@@ -148,9 +148,14 @@ const CustomerDetailPage = ({
 
   const [canGoBackToCustomers] = React.useState(() => {
     if (typeof window === "undefined") return false;
-    const flag = window.sessionStorage.getItem("CustomersPage:canGoBack") === "1";
-    if (flag) window.sessionStorage.removeItem("CustomersPage:canGoBack");
-    return flag;
+    try {
+      const flag = window.sessionStorage.getItem("CustomersPage:canGoBack") === "1";
+      if (flag) window.sessionStorage.removeItem("CustomersPage:canGoBack");
+      return flag;
+    } catch {
+      // Fall back to the Sales link if the optional return-route flag is unavailable.
+      return false;
+    }
   });
 
   const [customer, setCustomer] = React.useState(initialCustomer);

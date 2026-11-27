@@ -47,6 +47,7 @@ Explain the reasoning behind your changes, not just the change itself. Describe 
 - **Must**: Include a video for every PR. For user-facing changes, show before/after with light/dark mode and mobile/desktop. For non-user-facing changes, record a short walkthrough of the relevant existing functionality to demonstrate understanding and confirm nothing broke. Exception: PRs that only touch documentation or agent skill files need no video — the diff is the reviewable artifact.
 - Include updates to any tests, especially end-to-end tests!
 - Boot the branch locally and include QA steps with local-app evidence; preview deploys are optional. Exception: PRs that only touch documentation or agent skill files have nothing to boot — the diff is the QA evidence.
+- **Verification marker**: one `Verification: verified @ <head-sha> (ran: <command or flow>; saw: <what it printed or showed>)` line in the description, pinned to the head commit, so evidence gathered at one commit cannot vouch for the next. Docs- and agent-skill-only diffs write `Verification: exempt (<reason>) @ <head-sha>` instead. `.github/workflows/verification-readiness.yml` surfaces it as the `verification/ready` check (`bin/verification-marker-check`); the standard is `.agents/skills/verify-pr`.
 
 ### PR description structure
 

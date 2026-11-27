@@ -92,10 +92,12 @@ class Api::V2::Partner::BaseController < Api::V2::BaseController
       end
       return [] if shown_ids_by_seller_id.empty?
 
-      hidden_products = shown_ids_by_seller_id.map do |seller_id, shown_ids|
-        Link.where(user_id: seller_id).where.not(id: shown_ids.to_a)
-      end.reduce(&:or)
-      hidden_products.alive.not_archived.pluck(:id)
+      # Subtracting in Ruby keeps this to one `user_id IN (…)` statement. The equivalent
+      # `(user_id = ? AND id NOT IN (?)) OR …` needs a branch per sectioned seller, and MySQL
+      # cannot drive the user_id index from that shape, so a large roster scanned the whole table.
+      Link.where(user_id: shown_ids_by_seller_id.keys).alive.not_archived.pluck(:id, :user_id).filter_map do |id, seller_id|
+        id unless shown_ids_by_seller_id.fetch(seller_id).include?(id)
+      end
     end
 
     def render_bad_request(message)

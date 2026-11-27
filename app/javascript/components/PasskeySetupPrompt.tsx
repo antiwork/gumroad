@@ -24,20 +24,22 @@ export const PasskeySetupPrompt = () => {
 
   React.useEffect(() => setSupported(isPasskeySupported()), []);
 
-  if (
-    !prompt_passkey_setup ||
-    !currentSeller ||
-    !supported ||
-    dismissed ||
-    Number(localStorage.getItem(snoozeKey)) > Date.now()
-  ) {
+  if (!prompt_passkey_setup || !currentSeller || !supported || dismissed) {
     return null;
   }
 
-  const snooze = () => localStorage.setItem(snoozeKey, String(Date.now() + SNOOZE_MS));
+  try {
+    if (Number(localStorage.getItem(snoozeKey)) > Date.now()) return null;
+  } catch {
+    // A stored snooze is optional when the browser denies storage access.
+  }
 
   const dismiss = () => {
-    snooze();
+    try {
+      localStorage.setItem(snoozeKey, String(Date.now() + SNOOZE_MS));
+    } catch {
+      // Dismiss for this page even when the snooze cannot be persisted.
+    }
     setDismissed(true);
   };
 

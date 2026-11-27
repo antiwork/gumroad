@@ -311,6 +311,28 @@ describe SellerProfile do
       expect(subject.email_wordmark_image_path).to eq("email/wordmark_logo_light.png")
       expect(build(:seller_profile, background_color: "#ffffff").email_wordmark_image_path).to eq("email/wordmark_logo.png")
     end
+
+    describe "#email_follows_reader_color_scheme?" do
+      let(:seller) { create(:user) }
+
+      it "is true for a seller on the default background once the feature is on for them" do
+        profile = build(:seller_profile, seller:, background_color: "#FFFFFF")
+        expect(profile.email_follows_reader_color_scheme?).to eq(false)
+
+        Feature.activate_user(:post_email_reader_color_scheme, seller)
+
+        expect(profile.email_follows_reader_color_scheme?).to eq(true)
+        expect(profile.email_wordmark_image_path).to eq("email/wordmark_logo_on_white.png")
+      end
+
+      it "is false for a seller who picked a background, so their look stays the same for every reader" do
+        Feature.activate_user(:post_email_reader_color_scheme, seller)
+        profile = build(:seller_profile, seller:, background_color: "#fafafa")
+
+        expect(profile.email_follows_reader_color_scheme?).to eq(false)
+        expect(profile.email_wordmark_image_path).to eq("email/wordmark_logo.png")
+      end
+    end
   end
 
   describe "danger colour helpers" do

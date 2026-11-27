@@ -209,7 +209,10 @@ class OfferCode < ApplicationRecord
     end
   end
 
-  def as_json_for_api
+  # `times_used` is precomputed for a whole page by OfferCode.times_used_by_id, which otherwise
+  # makes the API index's query count scale with the number of codes it renders.
+  def as_json_for_api(times_used: nil)
+    times_used ||= self.times_used
     json = {
       id: external_id,
       # The `code` is returned as `name` for backwards compatibility of the API
@@ -279,6 +282,26 @@ class OfferCode < ApplicationRecord
     ) if excluding_once_per_cart_allocation_ids.present?
     allocation_uses = allocation_uses.distinct.count("purchase_offer_code_discounts.once_per_cart_allocation_id")
     per_item + legacy_per_cart + allocation_uses
+  end
+
+  # The page-level counterpart of `times_used`: one grouped pass per usage mode, keyed by code id.
+  def self.times_used_by_id(codes)
+    code_ids = codes.map(&:id)
+    return {} if code_ids.empty?
+
+    uses = Purchase.counts_towards_offer_code_uses.where(offer_code_id: code_ids)
+    per_item = uses.left_joins(:purchase_offer_code_discount)
+                   .where(purchase_offer_code_discounts: { once_per_cart: [false, nil] })
+                   .group(:offer_code_id).sum(:quantity)
+    legacy_per_cart = uses.joins(:purchase_offer_code_discount)
+                          .where(purchase_offer_code_discounts: { once_per_cart: true, once_per_cart_allocation_id: nil })
+                          .group(:offer_code_id).count
+    allocation_uses = Purchase.completed_once_per_cart_allocation_uses.where(offer_code_id: code_ids)
+                            .group(:offer_code_id)
+                            .distinct.count("purchase_offer_code_discounts.once_per_cart_allocation_id")
+    used = per_item.merge(legacy_per_cart) { |_id, item_uses, cart_uses| item_uses + cart_uses }
+                   .merge(allocation_uses) { |_id, completed_uses, allocation_count| completed_uses + allocation_count }
+    code_ids.index_with { |id| used.fetch(id, 0) }
   end
 
   def active_once_per_cart_reservations(excluding_purchase: nil, excluding_purchases: nil, excluding_order: nil, excluding_once_per_cart_allocation_ids: nil, lock: false)
