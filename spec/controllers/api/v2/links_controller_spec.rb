@@ -333,6 +333,31 @@ describe Api::V2::LinksController do
         expect(product.tags.pluck(:name)).to match_array(["ruby", "rails"])
       end
 
+      it "stores additional_details as the product's custom attributes" do
+        post @action, params: @params.merge(
+          additional_details: [{ name: "Pages", value: "40" }, { name: "Format", value: "PDF" }]
+        )
+
+        expect(response).to be_successful
+        product = @user.links.last
+        expect(product.custom_attributes).to eq([{ "name" => "Pages", "value" => "40" }, { "name" => "Format", "value" => "PDF" }])
+        expect(response.parsed_body["product"]["additional_details"]).to eq([{ "name" => "Pages", "value" => "40" }, { "name" => "Format", "value" => "PDF" }])
+      end
+
+      it "rejects additional_details that is not an array of rows" do
+        post @action, params: @params.merge(additional_details: "Pages: 40")
+
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["message"]).to eq("additional_details must be an array of {name, value} objects.")
+      end
+
+      it "rejects an additional detail whose value carries no name" do
+        post @action, params: @params.merge(additional_details: [{ value: "40" }])
+
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["message"]).to eq("each additional detail needs a name; a value on its own is not saved.")
+      end
+
       it "creates a membership and derives is_recurring_billing from native_type" do
         post @action, params: @params.merge(
           native_type: "membership",
@@ -1186,6 +1211,22 @@ describe Api::V2::LinksController do
         expect(response.parsed_body["product"]).to have_key("has_same_rich_content_for_all_variants")
       end
 
+      it "includes additional_details as the editor's name and value rows" do
+        @product.save_custom_attributes([{ "name" => "Pages", "value" => "40" }, { "name" => "Format", "value" => "PDF" }])
+
+        get :show, params: @params
+
+        expect(response.parsed_body["product"]["additional_details"]).to eq([{ "name" => "Pages", "value" => "40" }, { "name" => "Format", "value" => "PDF" }])
+      end
+
+      it "leaves an additional detail carrying neither a name nor a value out of the payload" do
+        @product.save_custom_attributes([{ "name" => "Pages", "value" => "40" }, { "name" => "", "value" => "" }])
+
+        get :show, params: @params
+
+        expect(response.parsed_body["product"]["additional_details"]).to eq([{ "name" => "Pages", "value" => "40" }])
+      end
+
       it "includes files array with signed URLs for uploaded files" do
         file = create(:product_file, link: @product, url: "#{S3_BASE_URL}specs/test.pdf")
 
@@ -1528,6 +1569,38 @@ describe Api::V2::LinksController do
         put @action, params: @params.merge(custom_summary: "A custom summary")
         expect(response.parsed_body["success"]).to be(true)
         expect(@product.reload.json_data["custom_summary"]).to eq("A custom summary")
+      end
+
+      it "replaces the product's additional details with the rows it is sent" do
+        @product.save_custom_attributes([{ "name" => "Pages", "value" => "40" }])
+
+        put @action, params: @params.merge(additional_details: [{ name: "Format", value: "PDF" }])
+
+        expect(response.parsed_body["success"]).to be(true)
+        expect(@product.reload.custom_attributes).to eq([{ "name" => "Format", "value" => "PDF" }])
+        expect(response.parsed_body["product"]["additional_details"]).to eq([{ "name" => "Format", "value" => "PDF" }])
+      end
+
+      it "clears the additional details when the rows it is sent carry nothing" do
+        @product.save_custom_attributes([{ "name" => "Pages", "value" => "40" }])
+
+        put @action, params: @params.merge(additional_details: [{ name: "", value: "" }])
+
+        expect(response.parsed_body["success"]).to be(true)
+        expect(@product.reload.custom_attributes).to eq([])
+      end
+
+      it "drops an additional detail with neither a name nor a value" do
+        put @action, params: @params.merge(additional_details: [{ name: "Pages", value: "40" }, { name: "", value: "" }])
+
+        expect(@product.reload.custom_attributes).to eq([{ "name" => "Pages", "value" => "40" }])
+      end
+
+      it "rejects an additional detail whose value is not text" do
+        put @action, params: @params.merge(additional_details: [{ name: "Pages", value: ["40"] }])
+
+        expect(response.parsed_body["success"]).to be(false)
+        expect(response.parsed_body["message"]).to eq("additional detail value must be a string.")
       end
 
       it "stores the receipt text and the receipt button text in json_data" do

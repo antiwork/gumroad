@@ -104,6 +104,9 @@ module Product::AsJson
         "deleted" => deleted_at.present?,
         "custom_fields" => custom_field_descriptors.as_json,
         "custom_summary" => custom_summary,
+        # The editor's Additional details rows, which the MCP connector already reads and writes
+        # (Mcp::Server#additional_details_payload). The seller API has to report them too.
+        "additional_details" => additional_details_for_api,
         # `custom_receipt` above is the legacy column; the product editor and the receipt render
         # these two json_data attributes, so the API has to report them as well.
         "custom_receipt_text" => custom_receipt_text,
@@ -192,6 +195,14 @@ module Product::AsJson
       end
 
       json
+    end
+
+    # The rows the product page shows under Additional details, in the shape the MCP connector and
+    # the editor use: a name and a value, with the rows carrying neither left out.
+    def additional_details_for_api
+      custom_attributes.filter_map do |row|
+        { "name" => row["name"], "value" => row["value"] } if row["name"].present? || row["value"].present?
+      end
     end
 
     # Product-level refund policy override state, exposed on show/create/update
