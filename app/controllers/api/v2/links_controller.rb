@@ -111,6 +111,10 @@ class Api::V2::LinksController < Api::V2::BaseController
       end
     end
 
+    if (additional_details_error = additional_details_param_error)
+      return render_response(false, message: additional_details_error)
+    end
+
     if (refund_policy_error = validate_product_refund_policy_params)
       return render_response(false, message: refund_policy_error)
     end
@@ -170,6 +174,10 @@ class Api::V2::LinksController < Api::V2::BaseController
 
     if params[:custom_summary].present?
       @product.json_data["custom_summary"] = params[:custom_summary]
+    end
+
+    if params.key?(:additional_details)
+      @product.json_data["custom_attributes"] = normalized_additional_details(additional_details_rows)
     end
 
     @product.created_via_cli = true if request_from_cli?
@@ -345,6 +353,10 @@ class Api::V2::LinksController < Api::V2::BaseController
       end
     end
 
+    if (additional_details_error = additional_details_param_error)
+      return render_response(false, message: additional_details_error)
+    end
+
     if params.key?(:rich_content)
       if !params[:rich_content].is_a?(Array) || params[:rich_content].any? { |p| !p.respond_to?(:key?) }
         return render_response(false, message: "rich_content must be an array of content page objects.")
@@ -499,6 +511,10 @@ class Api::V2::LinksController < Api::V2::BaseController
 
         if params.key?(:custom_summary)
           @product.json_data["custom_summary"] = params[:custom_summary]
+        end
+
+        if params.key?(:additional_details)
+          @product.json_data["custom_attributes"] = normalized_additional_details(additional_details_rows)
         end
 
         # The receipt render reads these two off the product, so a non-string (a JSON array or
@@ -792,6 +808,43 @@ class Api::V2::LinksController < Api::V2::BaseController
       return if Feature.active?(:custom_html_pages, current_resource_owner)
 
       render_response(false, message: "You do not have access to custom HTML pages.")
+    end
+
+    # A JSON client sends the rows as an array; a form client sends Rails' collection encoding,
+    # additional_details[0][name], which Rack reads back as a hash keyed by that index.
+    def additional_details_rows
+      rows = params[:additional_details]
+      return rows if rows.is_a?(Array)
+      return nil unless rows.respond_to?(:keys)
+
+      rows.keys.sort_by { |index| index.to_i }.map { |index| rows[index] }
+    end
+
+    # Mirrors the MCP connector's rule for the same rows (Mcp::Server#normalized_additional_details):
+    # the param replaces the whole list, a row is text name and value, and a value with no name is
+    # refused because the editor keeps a row by its name.
+    def additional_details_param_error
+      return nil unless params.key?(:additional_details)
+
+      rows = additional_details_rows
+      return "additional_details must be an array of {name, value} objects." if rows.nil?
+      return "additional_details must be an array of {name, value} objects." if rows.any? { |row| !row.respond_to?(:key?) }
+
+      rows.each do |row|
+        return "additional detail name must be a string." unless row[:name].nil? || row[:name].is_a?(String)
+        return "additional detail value must be a string." unless row[:value].nil? || row[:value].is_a?(String)
+        return "each additional detail needs a name; a value on its own is not saved." if row[:name].to_s.blank? && row[:value].to_s.present?
+      end
+
+      nil
+    end
+
+    def normalized_additional_details(rows)
+      rows.filter_map do |row|
+        name = row[:name].to_s
+        value = row[:value].to_s
+        { "name" => name, "value" => value } if name.present? || value.present?
+      end
     end
 
     # Validates the product-level refund policy params shared by create and
