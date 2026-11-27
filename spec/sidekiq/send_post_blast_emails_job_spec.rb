@@ -1909,6 +1909,156 @@ describe SendPostBlastEmailsJob, :freeze_time do
     end
   end
 
+  describe "the daily large-blast slot goes to the earliest request" do
+    let(:slot_key) { RedisKey.seller_large_blast_quota(@seller.id, Date.current) }
+
+    before do
+      # Two followers, so a threshold of 2 makes every blast of this seller "large".
+      $redis.set(RedisKey.seller_large_blast_threshold, 2)
+      create_list(:active_follower, 2, user: @seller)
+    end
+
+    after do
+      $redis.del(RedisKey.seller_large_blast_threshold, slot_key)
+    end
+
+    def blast_for(requested_at:)
+      create(:blast, :just_requested, post: create(:audience_post, :published, seller: @seller), requested_at:)
+    end
+
+    def clear_state(*blasts)
+      blasts.each do |b|
+        $redis.del(RedisKey.blast_quota_admitted(b.id), RedisKey.blast_quota_deferred_until(b.id), RedisKey.blast_audience_snapshot(b.id))
+      end
+    end
+
+    it "does not let a later blast take the slot while the earlier one is still loading its audience" do
+      earlier = blast_for(requested_at: 2.minutes.ago)
+      later = blast_for(requested_at: Time.current)
+
+      described_class.new.perform(later.id)
+
+      expect($redis.get(slot_key)).to be_nil
+      expect($redis.exists?(RedisKey.blast_quota_admitted(later.id))).to eq(false)
+      expect(later.reload.completed_at).to be_nil
+      expect(described_class).to have_enqueued_sidekiq_job(later.id).at(SellerLargeBlastQuota::EARLIER_BLAST_RECHECK_DELAY.from_now)
+
+      # The earlier one finishes loading and takes the slot.
+      described_class.new.perform(earlier.id)
+
+      expect($redis.get(slot_key)).to eq("post_blast:#{earlier.id}")
+      expect(earlier.reload.completed_at).to be_present
+
+      # The later one comes back, finds the slot spent and waits for the next day.
+      $redis.del(RedisKey.blast_quota_deferred_until(later.id))
+      run_at = Time.zone.tomorrow.beginning_of_day + 5.hours
+      allow(SellerLargeBlastQuota).to receive(:deferred_run_at).and_return(run_at)
+      described_class.new.perform(later.id)
+
+      expect(later.reload.completed_at).to be_nil
+      expect(described_class).to have_enqueued_sidekiq_job(later.id).at(run_at)
+    ensure
+      clear_state(earlier, later) if earlier && later
+    end
+
+    it "defers until the next day, not minutes, when the earlier blast is known to be large" do
+      earlier = blast_for(requested_at: 2.minutes.ago)
+      later = blast_for(requested_at: Time.current)
+      $redis.rpush(RedisKey.blast_audience_snapshot(earlier.id), [1, 2])
+      run_at = Time.zone.tomorrow.beginning_of_day + 5.hours
+      allow(SellerLargeBlastQuota).to receive(:deferred_run_at).and_return(run_at)
+
+      described_class.new.perform(later.id)
+
+      expect($redis.get(slot_key)).to be_nil
+      expect(described_class).to have_enqueued_sidekiq_job(later.id).at(run_at)
+    ensure
+      clear_state(earlier, later) if earlier && later
+    end
+
+    it "lets the later blast send when the earlier one turned out small" do
+      earlier = blast_for(requested_at: 2.minutes.ago)
+      later = blast_for(requested_at: Time.current)
+      $redis.rpush(RedisKey.blast_audience_snapshot(earlier.id), [1])
+
+      described_class.new.perform(later.id)
+
+      expect($redis.get(slot_key)).to eq("post_blast:#{later.id}")
+      expect(later.reload.completed_at).to be_present
+    ensure
+      clear_state(earlier, later) if earlier && later
+    end
+
+    it "ignores an earlier blast that already has a quota decision, is finished or expired, or was requested yesterday" do
+      admitted = blast_for(requested_at: 4.minutes.ago)
+      $redis.set(RedisKey.blast_quota_admitted(admitted.id), Time.current.utc.iso8601)
+      completed = blast_for(requested_at: 3.minutes.ago)
+      completed.update!(completed_at: Time.current)
+      expired = blast_for(requested_at: 2.minutes.ago)
+      expired.update!(expired_at: Time.current)
+      yesterday = blast_for(requested_at: Time.current.beginning_of_day - 1.minute)
+      later = blast_for(requested_at: Time.current)
+
+      described_class.new.perform(later.id)
+
+      expect($redis.get(slot_key)).to eq("post_blast:#{later.id}")
+      expect(later.reload.completed_at).to be_present
+    ensure
+      clear_state(*[admitted, completed, expired, yesterday, later].compact)
+    end
+
+    it "does not hold a later blast behind an earlier one that never finished loading, past the grace period" do
+      stuck = blast_for(requested_at: SellerLargeBlastQuota::UNKNOWN_SIZE_GRACE.ago - 1.minute)
+      later = blast_for(requested_at: Time.current)
+
+      described_class.new.perform(later.id)
+
+      expect($redis.get(slot_key)).to eq("post_blast:#{later.id}")
+    ensure
+      clear_state(stuck, later) if stuck && later
+    end
+
+    it "does not hold back an earlier blast for a later one" do
+      earlier = blast_for(requested_at: 2.minutes.ago)
+      later = blast_for(requested_at: Time.current)
+      $redis.rpush(RedisKey.blast_audience_snapshot(later.id), [1, 2])
+
+      described_class.new.perform(earlier.id)
+
+      expect($redis.get(slot_key)).to eq("post_blast:#{earlier.id}")
+    ensure
+      clear_state(earlier, later) if earlier && later
+    end
+
+    it "does not look at other sellers' blasts" do
+      other_seller = create(:named_user)
+      create(:blast, :just_requested, post: create(:audience_post, :published, seller: other_seller), requested_at: 2.minutes.ago)
+      later = blast_for(requested_at: Time.current)
+
+      described_class.new.perform(later.id)
+
+      expect($redis.get(slot_key)).to eq("post_blast:#{later.id}")
+    ensure
+      clear_state(later) if later
+    end
+
+    it "fails closed when Redis cannot be read while looking for earlier blasts" do
+      blast_for(requested_at: 2.minutes.ago)
+      later = blast_for(requested_at: Time.current)
+      allow($redis).to receive(:exists?).and_call_original
+      allow($redis).to receive(:exists?).with(RedisKey.blast_quota_admitted(PostEmailBlast.where.not(id: later.id).last.id)).and_raise(Redis::CannotConnectError)
+      allow(ErrorNotifier).to receive(:notify)
+      allow(SellerLargeBlastQuota).to receive(:deferred_run_at).and_return(Time.zone.tomorrow.beginning_of_day + 5.hours)
+
+      described_class.new.perform(later.id)
+
+      expect($redis.get(slot_key)).to be_nil
+      expect(later.reload.completed_at).to be_nil
+    ensure
+      clear_state(later) if later
+    end
+  end
+
   describe "splitting large blasts into slice jobs" do
     # Each example builds its own seller + audience so follower counts are exact and no
     # example's audience leaks into the next (the audience filter is all-of-the-seller's).

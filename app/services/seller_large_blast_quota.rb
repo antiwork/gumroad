@@ -18,6 +18,49 @@ class SellerLargeBlastQuota
   DEFERRAL_WINDOW_START = 3.hours
   DEFERRAL_WINDOW_LENGTH = 4.hours
 
+  # How long a blast whose audience size is still unknown (it has not finished loading) can hold
+  # back a later blast from the same seller. A stuck earlier blast must not block the day.
+  UNKNOWN_SIZE_GRACE = 2.hours
+
+  # How soon a blast that yielded to an earlier one still loading looks again.
+  EARLIER_BLAST_RECHECK_DELAY = 5.minutes
+
+  MAX_EARLIER_BLASTS_CHECKED = 100
+
+  # The slot goes to the earliest-requested large blast, not to whichever finishes loading its
+  # audience first. Called by a blast that is about to claim, before it does.
+  #
+  # Looks only at blasts the same seller requested earlier today (UTC) that are unfinished,
+  # undelivered and have no quota decision yet. Size is read from the audience snapshot the earlier
+  # blast already wrote (a Redis list length): no audience is scanned. Returns
+  #   :large   an earlier blast with a large snapshot is still waiting for the slot
+  #   :loading an earlier blast has no snapshot yet, so its size is unknown; it may still claim
+  #   nil      nothing earlier is waiting, the caller may claim
+  # Fails closed (:large) when Redis cannot be read.
+  def self.earlier_blast_waiting(blast:)
+    candidates = PostEmailBlast
+      .where(seller_id: blast.seller_id, completed_at: nil, expired_at: nil, first_email_delivered_at: nil)
+      .where(requested_at: Time.current.beginning_of_day..)
+      .where("requested_at < :at OR (requested_at = :at AND id < :id)", at: blast.requested_at, id: blast.id)
+      .order(:requested_at, :id)
+      .limit(MAX_EARLIER_BLASTS_CHECKED)
+      .pluck(:id, :requested_at)
+
+    waiting = nil
+    candidates.each do |id, requested_at|
+      next if $redis.exists?(RedisKey.blast_quota_admitted(id))
+
+      size = $redis.llen(RedisKey.blast_audience_snapshot(id))
+      return :large if size >= threshold
+
+      waiting = :loading if size.zero? && requested_at > UNKNOWN_SIZE_GRACE.ago
+    end
+    waiting
+  rescue Redis::BaseError, RedisClient::Error => e
+    ErrorNotifier.notify(e, seller_id: blast.seller_id)
+    :large
+  end
+
   def self.allow?(seller_id:, blast_id:, recipient_count:, kind: "blast")
     return true if recipient_count.to_i < threshold
 
