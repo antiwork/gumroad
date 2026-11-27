@@ -31,8 +31,7 @@ class Api::Internal::Installments::RecipientCountsController < Api::Internal::Ba
 
     render json: {
       audience_count: AudienceMember.count_for_seller(current_seller),
-      recipient_count: installment.displayed_audience_members_count,
-      large_email_limit: SellerLargeBlastQuota.publish_warning(seller_id: current_seller.id)
+      recipient_count: installment.displayed_audience_members_count
     }
   end
 end

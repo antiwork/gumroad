@@ -12,7 +12,7 @@ import {
   Installment,
   WITHHELD_COUNT_TEXT,
 } from "$app/data/installments";
-import { type EmailTab, type LargeEmailLimit, TYPE_TO_TAB } from "$app/data/installments";
+import { type EmailTab, TYPE_TO_TAB } from "$app/data/installments";
 import { assertDefined } from "$app/utils/assert";
 import Countdown from "$app/utils/countdown";
 import { asyncVoid } from "$app/utils/promise";
@@ -30,7 +30,6 @@ import {
   isFileUploading,
   mapEmailFilesToFileState,
 } from "$app/components/EmailAttachments";
-import { largeEmailLimitWarning } from "$app/components/EmailsPage/largeEmailLimit";
 import { EvaporateUploaderProvider } from "$app/components/EvaporateUploader";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
@@ -259,7 +258,6 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
     count: number | null;
     total: number;
     loading: boolean;
-    largeEmailLimit?: LargeEmailLimit | null;
   }>({ count: 0, total: 0, loading: false });
   const [singleRecipient, setSingleRecipient] = React.useState<{ purchaseId: string; email: string } | null>(null);
   const activeRecipientCountRequest = React.useRef<{ cancel: () => void } | null>(null);
@@ -633,7 +631,6 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
           count: response.recipient_count,
           total: response.audience_count,
           loading: false,
-          largeEmailLimit: response.large_email_limit ?? null,
         });
         activeRecipientCountRequest.current = null;
       } catch (error) {
@@ -644,17 +641,6 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
     })();
   }, [JSON.stringify(filtersPayload), singleRecipient?.purchaseId]);
   const isPublished = !!(installment?.external_id && installment.published_at);
-  const largeEmailWarning = (sendAt: Date) =>
-    singleRecipient || !channel.email
-      ? null
-      : largeEmailLimitWarning({
-          limit: recipientCount.largeEmailLimit ?? null,
-          recipients: recipientCount.count,
-          sendAt,
-          timeZone: currentSeller.timeZone.name,
-        });
-  const sendNowWarning = largeEmailWarning(new Date());
-  const scheduleWarning = scheduleDate ? largeEmailWarning(scheduleDate) : null;
 
   const validate = (action: SaveAction) => {
     const invalidFieldRefsAndErrors: [React.RefObject<HTMLElement> | null, string][] = [];
@@ -1006,7 +992,6 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
                 </PopoverAnchor>
                 <PopoverContent>
                   <div className="grid gap-3">
-                    {sendNowWarning ? <Alert variant="warning">{sendNowWarning}</Alert> : null}
                     <div style={{ display: "grid", gridTemplateColumns: "1fr max-content" }}>
                       {isPublishing && secondsLeftToPublish > 0 ? (
                         <>
@@ -1063,7 +1048,6 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
                         }}
                       />
                     </Fieldset>
-                    {scheduleWarning && !isPublished ? <Alert variant="warning">{scheduleWarning}</Alert> : null}
                     <Button disabled={isPublished || isBusy} onClick={() => save("save_and_schedule")}>
                       Schedule
                     </Button>

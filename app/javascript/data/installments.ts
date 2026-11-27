@@ -158,16 +158,6 @@ type RecipientCountRequestPayload = {
   not_clicked_post_id: string | null;
   opened_post_id: string | null;
 };
-// Read from the seller's daily large-email slot; see SellerLargeBlastQuota.publish_warning.
-export type LargeEmailLimit = {
-  threshold: number;
-  // "used": today's slot is claimed. "waiting": an earlier large email goes first. null: no delay.
-  reason: "used" | "waiting" | null;
-  // The UTC day the slot belongs to, as YYYY-MM-DD.
-  date: string;
-  next_send_window: { starts_at: string; ends_at: string } | null;
-};
-
 export function getRecipientCount(requestPayload: RecipientCountRequestPayload) {
   const abort = new AbortController();
   const response = request({
@@ -180,9 +170,7 @@ export function getRecipientCount(requestPayload: RecipientCountRequestPayload) 
       if (!res.ok) throw new ResponseError();
       return res.json();
     })
-    .then((json) =>
-      cast<{ recipient_count: number | null; audience_count: number; large_email_limit?: LargeEmailLimit }>(json),
-    );
+    .then((json) => cast<{ recipient_count: number | null; audience_count: number }>(json));
 
   return {
     response,

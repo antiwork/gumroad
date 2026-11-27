@@ -7,12 +7,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  getRecipientCount,
-  type Installment,
-  type InstallmentFormContext,
-  type LargeEmailLimit,
-} from "$app/data/installments";
+import { getRecipientCount, type Installment, type InstallmentFormContext } from "$app/data/installments";
 import { assertDefined } from "$app/utils/assert";
 
 import { CurrentSellerProvider, type CurrentSeller } from "$app/components/CurrentSeller";
@@ -779,67 +774,5 @@ describe('EmailForm "Has not clicked"', () => {
     } finally {
       if (actual) vi.mocked(getRecipientCount).mockImplementation(actual);
     }
-  });
-});
-
-describe("EmailForm daily limit for large emails", () => {
-  const today = new Date().toISOString().slice(0, 10);
-  const limit: LargeEmailLimit = {
-    threshold: 10000,
-    reason: "used",
-    date: today,
-    next_send_window: { starts_at: "2099-01-02T03:00:00Z", ends_at: "2099-01-02T07:00:00Z" },
-  };
-  const withRecipientCount = async (
-    recipientCount: number,
-    largeEmailLimit: LargeEmailLimit | null,
-    run: () => Promise<void>,
-  ) => {
-    const actual = vi.mocked(getRecipientCount).getMockImplementation();
-    vi.mocked(getRecipientCount).mockImplementation(() => ({
-      response: Promise.resolve({
-        recipient_count: recipientCount,
-        audience_count: recipientCount,
-        ...(largeEmailLimit ? { large_email_limit: largeEmailLimit } : {}),
-      }),
-      cancel: () => undefined,
-    }));
-    try {
-      await run();
-    } finally {
-      if (actual) vi.mocked(getRecipientCount).mockImplementation(actual);
-    }
-  };
-  const openPublishMenu = async () => {
-    await waitFor(() => expect(screen.getByLabelText("Recipient count").textContent).not.toContain("0 / 0"));
-    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
-  };
-
-  it("warns, with the window in the seller's time zone, before a large email that will wait", async () => {
-    await withRecipientCount(12000, limit, async () => {
-      renderForm();
-      await openPublishMenu();
-
-      // Once above "Publish now" and once under the schedule date: the default schedule time is today.
-      const warnings = await screen.findAllByText(/You've already used your daily limit for large emails today/u);
-      expect(warnings[0]?.textContent).toContain("Jan 2, 2099, 3:00 AM and 7:00 AM (UTC)");
-      expect(screen.getByRole("button", { name: "Publish now" })).toBeTruthy();
-    });
-  });
-
-  it("does not warn for an email under the threshold, or while the limit is free", async () => {
-    await withRecipientCount(9999, limit, async () => {
-      renderForm();
-      await openPublishMenu();
-      await screen.findByRole("button", { name: "Publish now" });
-      expect(screen.queryByText(/daily limit for large emails/u)).toBeNull();
-    });
-    cleanup();
-    await withRecipientCount(12000, { ...limit, reason: null }, async () => {
-      renderForm();
-      await openPublishMenu();
-      await screen.findByRole("button", { name: "Publish now" });
-      expect(screen.queryByText(/daily limit for large emails/u)).toBeNull();
-    });
   });
 });
