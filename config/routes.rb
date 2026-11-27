@@ -524,6 +524,13 @@ Rails.application.routes.draw do
             end
           end
 
+          # A blast the daily large-email limit deferred to the next night, sent now by staff.
+          resources :post_email_blasts, only: [] do
+            member do
+              post :send_now
+            end
+          end
+
           resources :payouts, only: [:index] do
             collection do
               post :pause
