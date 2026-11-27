@@ -7,7 +7,12 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { getRecipientCount, type Installment, type InstallmentFormContext } from "$app/data/installments";
+import {
+  getRecipientCount,
+  type Installment,
+  type InstallmentFormContext,
+  type LargeEmailLimit,
+} from "$app/data/installments";
 import { assertDefined } from "$app/utils/assert";
 
 import { CurrentSellerProvider, type CurrentSeller } from "$app/components/CurrentSeller";
@@ -779,15 +784,15 @@ describe('EmailForm "Has not clicked"', () => {
 
 describe("EmailForm daily limit for large emails", () => {
   const today = new Date().toISOString().slice(0, 10);
-  const limit = {
+  const limit: LargeEmailLimit = {
     threshold: 10000,
-    reason: "used" as const,
+    reason: "used",
     date: today,
     next_send_window: { starts_at: "2099-01-02T03:00:00Z", ends_at: "2099-01-02T07:00:00Z" },
   };
   const withRecipientCount = async (
     recipientCount: number,
-    largeEmailLimit: typeof limit | null,
+    largeEmailLimit: LargeEmailLimit | null,
     run: () => Promise<void>,
   ) => {
     const actual = vi.mocked(getRecipientCount).getMockImplementation();
@@ -795,7 +800,7 @@ describe("EmailForm daily limit for large emails", () => {
       response: Promise.resolve({
         recipient_count: recipientCount,
         audience_count: recipientCount,
-        large_email_limit: largeEmailLimit ?? undefined,
+        ...(largeEmailLimit ? { large_email_limit: largeEmailLimit } : {}),
       }),
       cancel: () => undefined,
     }));
