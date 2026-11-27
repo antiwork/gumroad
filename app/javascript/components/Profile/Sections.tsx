@@ -129,6 +129,9 @@ const ProductsSectionView = ({
       }
       currencyCode={currencyCode}
       defaults={defaultParams}
+      // Only the first page is rendered up front; scroll-only pagination leaves the rest
+      // looking missing to the seller who selected them.
+      pagination="button"
       prependFilters={
         <CardContent>
           <Input

@@ -2,7 +2,7 @@
 
 require("spec_helper")
 
-describe("Product panel on creator profile - infinite scroll pagination", type: :system, js: true) do
+describe("Product panel on creator profile - button pagination", type: :system, js: true) do
   before do
     @creator = create(:named_user)
     purchaser_email = "one@gr.test"
@@ -47,7 +47,7 @@ describe("Product panel on creator profile - infinite scroll pagination", type: 
     Link.import(refresh: true, force: true)
   end
 
-  describe "infinite scroll pagination" do
+  describe "button pagination" do
     before do
       28.times do |count|
         create(:product, user: @creator, name: "product #{count + 1}", price_cents: (100 + count) * 100)
@@ -57,16 +57,17 @@ describe("Product panel on creator profile - infinite scroll pagination", type: 
       Link.import(refresh: true, force: true)
     end
 
-    it "allows other users to be able to load results" do
+    it "loads the next page of products each time the visitor asks for it" do
       visit "/#{@creator.username}?sort=price_asc"
       wait_for_ajax
 
       expect(page).to have_product_card(count: 9)
+      expect(page).to have_text("1-9 of 38")
       expect(page).to have_product_card(@a)
       expect(page).to have_product_card(@c)
       expect(page).to_not have_product_card(text: "product 7")
 
-      page.scroll_to :bottom
+      click_on "Load more"
       wait_for_ajax
 
       expect(page).to have_product_card(count: 18)
@@ -75,7 +76,7 @@ describe("Product panel on creator profile - infinite scroll pagination", type: 
       expect(page).to have_product_card(text: "product 8")
       expect(page).to_not have_product_card(text: "product 13")
 
-      page.scroll_to :bottom
+      click_on "Load more"
       wait_for_ajax
 
       expect(page).to have_product_card(count: 27)
@@ -84,7 +85,7 @@ describe("Product panel on creator profile - infinite scroll pagination", type: 
       expect(page).to have_product_card(text: "product 14")
       expect(page).to_not have_product_card(text: "product 20")
 
-      page.scroll_to :bottom
+      click_on "Load more"
       wait_for_ajax
 
       expect(page).to have_product_card(count: 36)
@@ -94,7 +95,7 @@ describe("Product panel on creator profile - infinite scroll pagination", type: 
       expect(page).to_not have_product_card(text: "product 27")
       expect(page).to have_product_card(count: 36)
 
-      page.scroll_to :bottom
+      click_on "Load more"
       wait_for_ajax
 
       expect(page).to have_product_card(count: 38)
@@ -103,11 +104,7 @@ describe("Product panel on creator profile - infinite scroll pagination", type: 
       expect(page).to have_product_card(text: "product 28")
       expect(page).to have_product_card(count: 38)
 
-      page.scroll_to :bottom
-      wait_for_ajax
-
-      expect(page).to have_product_card(count: 38)
-      expect(page).to have_text("1-38 of 38")
+      expect(page).to_not have_button("Load more")
     end
   end
 end
