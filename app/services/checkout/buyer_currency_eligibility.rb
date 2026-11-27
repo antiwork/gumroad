@@ -184,7 +184,11 @@ class Checkout::BuyerCurrencyEligibility
     # below happens to exclude most of them, but it is computed by the caller — free trials and
     # out-of-ramp later-charge products are facts about the product, and are checked as such.
     return false if line_items.any? { unquotable_product?(_1.product) }
-    return false if line_items.any? { _1.later_charge_kind.present? }
+    # A same-currency membership signup is chargeable as listed cents; its renewals re-fix
+    # from the listed price (Purchase::LaterChargePresentmentService). Method-forced rails
+    # keep every later-charge shape out.
+    allowed_later_kinds = require_listed_direct_charge ? [nil, "", "subscription"] : [nil, ""]
+    return false if line_items.any? { !allowed_later_kinds.include?(_1.later_charge_kind) }
     # Method-forced allocations convert per-line shipping at the signed page rate, so a physical
     # line must stay eligible there or the Element mounts without the shipping prepare includes.
     return false if require_listed_direct_charge && line_items.any? { _1.shipping_cents.to_i.positive? }
@@ -472,7 +476,7 @@ class Checkout::BuyerCurrencyEligibility
         self.class.listed_currency_direct_charge_enabled?(seller) &&
         StripeChargeProcessor.listed_amount_matches_charge_units?(buyer_currency) &&
         listed_currency_displayed?(buyer_currency) &&
-        purchases.none? { Purchase::FixLaterChargePresentmentService.kind_for(_1).present? } &&
+        purchases.none? { Purchase::FixLaterChargePresentmentService.kind_for(_1).in?(%w[preorder commission installment]) } &&
         purchases.none? { _1.shipping_cents.to_i.positive? } &&
         listed_lane_rates_uniform?(purchases)
 
