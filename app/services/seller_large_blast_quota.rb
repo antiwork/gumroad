@@ -47,14 +47,14 @@ class SellerLargeBlastQuota
   def self.earlier_large_blast_waiting?(seller_id:)
     ids = PostEmailBlast
       .where(seller_id:, completed_at: nil, expired_at: nil, first_email_delivered_at: nil, requested_at: Time.current.beginning_of_day..)
-      .limit(MAX_EARLIER_BLASTS_CHECKED).pluck(:id)
+      .limit(PUBLISH_WARNING_BLASTS_CHECKED).pluck(:id)
     ids.any? do |id|
       !$redis.exists?(RedisKey.blast_quota_admitted(id)) && $redis.llen(RedisKey.blast_audience_snapshot(id)) >= threshold
     end
   end
   private_class_method :earlier_large_blast_waiting?
 
-  MAX_EARLIER_BLASTS_CHECKED = 100
+  PUBLISH_WARNING_BLASTS_CHECKED = 100
 
   def self.allow?(seller_id:, blast_id:, recipient_count:, kind: "blast")
     return true if recipient_count.to_i < threshold
