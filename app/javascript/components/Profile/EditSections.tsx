@@ -511,6 +511,9 @@ const ProductsSectionView = ({ section, controls = true }: { section: ProductsSe
         currencyCode={state.currency_code}
         defaults={params}
         disableFilters
+        // Match the live section: the preview shows the first page, so it needs the same
+        // control to reach the rest.
+        pagination="button"
       />
     </SectionLayout>
   );
