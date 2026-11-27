@@ -3700,6 +3700,23 @@ describe UrlRedirectsController, inertia: true do
           .to raise_error(ActionController::RoutingError)
       end
 
+      it "404s the download page and file delivery when the seller is suspended" do
+        seller.update!(user_risk_state: "suspended_for_tos_violation")
+
+        expect { get :download_page, params: { id: url_redirect.token } }
+          .to raise_error(ActionController::RoutingError)
+        expect { get :download_product_files, params: { id: url_redirect.token, product_file_ids: [installment.product_files.last.external_id] } }
+          .to raise_error(ActionController::RoutingError)
+      end
+
+      it "redirects a poll to the expired page when the seller is suspended" do
+        seller.update!(user_risk_state: "suspended_for_fraud")
+
+        poll_for_media_locations
+
+        expect(response).to redirect_to(url_redirect_expired_page_path(url_redirect.token))
+      end
+
       it "still 404s an installment without files on an ordinary page load" do
         installment.product_files.last.mark_deleted!
 

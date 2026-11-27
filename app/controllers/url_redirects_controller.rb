@@ -552,7 +552,7 @@ class UrlRedirectsController < ApplicationController
       # 404 if the installment had some files when this url redirect was created but now it does not (i.e. if the installment was deleted, or the creator removed the files).
       return unless @url_redirect.installment.present?
       return if CONTENT_UNAVAILABLE_ACTIONS.include?(action_name)
-      return withdrawn_content_response if @url_redirect.installment.deleted?
+      return withdrawn_content_response if @url_redirect.installment.deleted? || @url_redirect.installment.seller&.suspended?
       return if @url_redirect.referenced_link&.is_recurring_billing
       return withdrawn_content_response if @url_redirect.with_product_files.nil?
 
