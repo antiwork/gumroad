@@ -344,6 +344,15 @@ describe Api::V2::LinksController do
         expect(response.parsed_body["product"]["additional_details"]).to eq([{ "name" => "Pages", "value" => "40" }, { "name" => "Format", "value" => "PDF" }])
       end
 
+      it "stores additional_details that arrive as an indexed form" do
+        post @action, params: @params.merge(
+          additional_details: { "0" => { name: "Pages", value: "40" }, "1" => { name: "Format", value: "PDF" } }
+        )
+
+        expect(response).to be_successful
+        expect(@user.links.last.custom_attributes).to eq([{ "name" => "Pages", "value" => "40" }, { "name" => "Format", "value" => "PDF" }])
+      end
+
       it "rejects additional_details that is not an array of rows" do
         post @action, params: @params.merge(additional_details: "Pages: 40")
 
@@ -1579,6 +1588,17 @@ describe Api::V2::LinksController do
         expect(response.parsed_body["success"]).to be(true)
         expect(@product.reload.custom_attributes).to eq([{ "name" => "Format", "value" => "PDF" }])
         expect(response.parsed_body["product"]["additional_details"]).to eq([{ "name" => "Format", "value" => "PDF" }])
+      end
+
+      it "replaces the additional details sent as an indexed form" do
+        @product.save_custom_attributes([{ "name" => "Pages", "value" => "40" }])
+
+        put @action, params: @params.merge(
+          additional_details: { "0" => { name: "Format", value: "PDF" }, "1" => { name: "Pages", value: "40" } }
+        )
+
+        expect(response.parsed_body["success"]).to be(true)
+        expect(@product.reload.custom_attributes).to eq([{ "name" => "Format", "value" => "PDF" }, { "name" => "Pages", "value" => "40" }])
       end
 
       it "clears the additional details when the rows it is sent carry nothing" do
