@@ -420,4 +420,46 @@ describe Purchase::LaterChargePresentmentService do
         end
     end
   end
+
+  context "when the product is listed in the stored currency and the rail does not force one" do
+    let(:product) do
+      create(:membership_product, user: seller, price_currency_type: Currency::GBP, price_cents: 3500)
+    end
+
+    def create_gbp_fixing
+      create(:later_charge_presentment, owner: subscription, presentment_currency: Currency::GBP,
+                                        presentment_price_cents: 3500, canonical_price_cents: 4500,
+                                        signup_currency_units_per_usd: BigDecimal("0.78"),
+                                        effective_from: 1.day.ago)
+    end
+
+    def drift_renewal(**attrs)
+      renewal_purchase.update!(price_cents: 4400, total_transaction_cents: 4400,
+                               displayed_price_currency_type: Currency::GBP, displayed_price_cents: 3500,
+                               rate_converted_to_usd: BigDecimal("0.8"), **attrs)
+    end
+
+    it "re-fixes a drifted canonical price and charges the listed amount" do
+      create_gbp_fixing
+      drift_renewal
+
+      result = nil
+      expect { result = service(amount_cents: 4400).perform }.to change(LaterChargePresentment, :count).by(1)
+
+      expect(result.processor_currency).to eq(Currency::GBP)
+      expect(result.processor_amount_cents).to eq(3500)
+      expect(subscription.current_later_charge_presentment).to have_attributes(
+        presentment_price_cents: 3500, canonical_price_cents: 4400
+      )
+    end
+
+    it "falls back to canonical dollars when the renewal was not priced in the listed currency" do
+      create_gbp_fixing
+      drift_renewal(displayed_price_currency_type: Currency::USD)
+      renewal = service(amount_cents: 4400)
+
+      expect(renewal.perform).to be_nil
+      expect(renewal.fallback_reason).to eq(:stale_fixing)
+    end
+  end
 end

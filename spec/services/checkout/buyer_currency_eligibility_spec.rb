@@ -603,10 +603,27 @@ describe Checkout::BuyerCurrencyEligibility do
     expect(off_session_decision.fallback_reason).to eq(:off_session)
   end
 
-  it "falls back for a membership priced in the buyer's currency, whose renewals have no stored presentment" do
+  it "direct-lists a membership priced in the buyer's currency" do
     Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
     report_listed_currency_element(params)
     Feature.activate_user(described_class::SUBSCRIPTION_FEATURE_NAME, seller)
+    membership = create(:membership_product, user: seller, price_currency_type: Currency::CAD)
+    purchase.update!(link: membership,
+                     displayed_price_currency_type: Currency::CAD,
+                     rate_converted_to_usd: "0.8",
+                     is_original_subscription_purchase: true,
+                     subscription: create(:subscription, link: membership, user: purchase.purchaser))
+
+    expect(decision).to be_eligible
+    expect(decision.currency).to eq(Currency::CAD)
+    expect(decision.direct_listed_amount?).to eq(true)
+  ensure
+    Feature.deactivate_user(described_class::SUBSCRIPTION_FEATURE_NAME, seller)
+  end
+
+  it "falls back for a membership priced in the buyer's currency while the subscription ramp is off" do
+    Feature.activate_user(described_class::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+    report_listed_currency_element(params)
     membership = create(:membership_product, user: seller, price_currency_type: Currency::CAD)
     purchase.update!(link: membership,
                      displayed_price_currency_type: Currency::CAD,
@@ -614,9 +631,7 @@ describe Checkout::BuyerCurrencyEligibility do
                      subscription: create(:subscription, link: membership, user: purchase.purchaser))
 
     expect(decision).not_to be_eligible
-    expect(decision.fallback_reason).to eq(:listed_currency_is_buyer_currency)
-  ensure
-    Feature.deactivate_user(described_class::SUBSCRIPTION_FEATURE_NAME, seller)
+    expect(decision.fallback_reason).to eq(:unsupported_product_type)
   end
 
   it "allows direct listed charging when a buyer-currency purchase carries a tip" do
@@ -1335,6 +1350,18 @@ describe Checkout::BuyerCurrencyEligibility do
       membership = create(:membership_product, :with_free_trial_enabled, user: seller, price_currency_type: Currency::CAD)
 
       expect(eligible_for?(membership)).to be(false)
+    end
+
+    it "advertises a same-currency membership for the listed-card lane but not for method-forced mounts" do
+      merchant_account
+      Feature.activate_user(described_class::SUBSCRIPTION_FEATURE_NAME, seller)
+      membership = create(:membership_product, user: seller, price_currency_type: Currency::CAD)
+      items = [cad_line_item(membership, later_charge_kind: "subscription")]
+
+      expect(described_class.direct_listed_line_items_eligible?(line_items: items, buyer_currency: Currency::CAD)).to be(true)
+      expect(
+        described_class.direct_listed_line_items_eligible?(line_items: items, buyer_currency: Currency::CAD, require_listed_direct_charge: false)
+      ).to be(false)
     end
 
     it "refuses a membership reported with no later charge while the subscription ramp is off" do

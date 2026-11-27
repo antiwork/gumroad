@@ -44,8 +44,8 @@ class Purchase::LaterChargePresentmentService
 
   # Returns a Result in the stored currency, or nil to leave the caller charging canonical USD.
   #
-  # Ordinary cards fall back to canonical USD; a required-currency rail either re-fixes a
-  # direct-listed renewal or requires the buyer to update their payment method.
+  # A direct-listed renewal re-fixes from its renewal terms; otherwise ordinary cards fall back
+  # to canonical USD and a required-currency rail requires a payment method update.
   def perform
     presentment = stored_presentment
     return fallback(:no_stored_presentment) if presentment.blank?
@@ -59,7 +59,7 @@ class Purchase::LaterChargePresentmentService
 
     canonical_price_cents = LaterChargePresentment.canonical_price_cents_for(purchase)
     if presentment.canonical_price_cents != canonical_price_cents
-      presentment = refix_required_currency_presentment(presentment, purchase, canonical_price_cents)
+      presentment = refix_listed_currency_presentment(presentment, purchase, canonical_price_cents)
       return fallback(:stale_fixing) if presentment.blank? || presentment.canonical_price_cents != canonical_price_cents
     end
 
@@ -139,10 +139,13 @@ class Purchase::LaterChargePresentmentService
       end
     end
 
-    def refix_required_currency_presentment(presentment, purchase, canonical_price_cents)
-      return if required_currency.blank? || presentment.presentment_currency != required_currency
-      return unless purchase.link.price_currency_type.to_s.downcase == required_currency
-      return unless purchase.displayed_price_currency_type.to_s.downcase == required_currency
+    # A product listed in the stored presentment currency treats its listed price as the
+    # authority on every rail, so a drifted canonical price re-fixes instead of falling back.
+    def refix_listed_currency_presentment(presentment, purchase, canonical_price_cents)
+      currency = presentment.presentment_currency
+      return if required_currency.present? && currency != required_currency
+      return unless purchase.link.price_currency_type.to_s.downcase == currency
+      return unless purchase.displayed_price_currency_type.to_s.downcase == currency
 
       presentment_price_cents = purchase.displayed_price_cents.to_i
       currency_units_per_usd = purchase.rate_converted_to_usd&.to_d
@@ -153,14 +156,14 @@ class Purchase::LaterChargePresentmentService
 
       owner.with_lock do
         current = owner.current_later_charge_presentment
-        if current&.presentment_currency == required_currency && current.canonical_price_cents == canonical_price_cents
+        if current&.presentment_currency == currency && current.canonical_price_cents == canonical_price_cents
           current
-        elsif current&.presentment_currency != required_currency
+        elsif current&.presentment_currency != currency
           nil
         else
           owner.later_charge_presentments.create!(
             processor: StripeChargeProcessor.charge_processor_id,
-            presentment_currency: required_currency,
+            presentment_currency: currency,
             presentment_price_cents:,
             canonical_price_cents:,
             signup_currency_units_per_usd: currency_units_per_usd,
