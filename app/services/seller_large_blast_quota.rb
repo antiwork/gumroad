@@ -115,4 +115,42 @@ class SellerLargeBlastQuota
   def self.ttl_seconds
     [(Time.zone.now.end_of_day - Time.zone.now).to_i, 60].max
   end
+
+  PUBLISH_WARNING_BLASTS_CHECKED = 100
+
+  # What the publish screen shows before a seller confirms a large email. Cheap reads only: one
+  # EXISTS on the day's slot key and, when it is free, the seller's blasts requested today (indexed)
+  # against the audience snapshots they already wrote (a Redis list length). Never scans an audience.
+  #   reason: "used"    today's slot is already claimed
+  #           "waiting" an earlier large blast from today has not claimed it yet and will go first
+  #           nil       a large email would send right away
+  # A Redis error reads as no warning: it is a hint, and the send path still fails closed.
+  def self.publish_warning(seller_id:)
+    reason = if $redis.exists?(slot_key(seller_id:, kind: "post_blast"))
+      "used"
+    elsif earlier_large_blast_waiting?(seller_id:)
+      "waiting"
+    end
+    window_start = Time.zone.tomorrow.beginning_of_day + deferral_window_start_seconds
+
+    {
+      threshold:,
+      reason:,
+      date: Date.current.iso8601,
+      next_send_window: { starts_at: window_start.utc.iso8601, ends_at: (window_start + deferral_window_length_seconds).utc.iso8601 }
+    }
+  rescue Redis::BaseError, RedisClient::Error => e
+    ErrorNotifier.notify(e, seller_id:)
+    { threshold:, reason: nil, date: Date.current.iso8601, next_send_window: nil }
+  end
+
+  def self.earlier_large_blast_waiting?(seller_id:)
+    ids = PostEmailBlast
+      .where(seller_id:, completed_at: nil, expired_at: nil, first_email_delivered_at: nil, requested_at: Time.current.beginning_of_day..)
+      .limit(PUBLISH_WARNING_BLASTS_CHECKED).pluck(:id)
+    ids.any? do |id|
+      !$redis.exists?(RedisKey.blast_quota_admitted(id)) && $redis.llen(RedisKey.blast_audience_snapshot(id)) >= threshold
+    end
+  end
+  private_class_method :earlier_large_blast_waiting?
 end

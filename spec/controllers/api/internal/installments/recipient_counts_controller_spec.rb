@@ -46,7 +46,7 @@ describe Api::Internal::Installments::RecipientCountsController do
     it "returns counts for audience installment type" do
       get :show, params: { installment_type: "audience" }
       expect(response).to be_successful
-      expect(response.parsed_body).to eq("recipient_count" => 5, "audience_count" => 5)
+      expect(response.parsed_body).to include("recipient_count" => 5, "audience_count" => 5)
     end
 
     it "counts only followers on the waitlist of the selected product" do
@@ -56,7 +56,7 @@ describe Api::Internal::Installments::RecipientCountsController do
       get :show, params: { installment_type: "follower", waitlisted_products: [waitlist_product.unique_permalink] }
 
       expect(response).to be_successful
-      expect(response.parsed_body).to eq("recipient_count" => 1, "audience_count" => 5)
+      expect(response.parsed_body).to include("recipient_count" => 1, "audience_count" => 5)
     end
 
     it "withholds a has-opened count when the customers it leaves out are below the floor" do
@@ -69,19 +69,48 @@ describe Api::Internal::Installments::RecipientCountsController do
       get :show, params: { installment_type: "seller", opened_post_id: opened_post.external_id }
 
       expect(response).to be_successful
-      expect(response.parsed_body).to eq("recipient_count" => nil, "audience_count" => 8)
+      expect(response.parsed_body).to include("recipient_count" => nil, "audience_count" => 8)
+    end
+
+    context "large email limit" do
+      after { $redis.del(RedisKey.seller_large_blast_quota(seller.id, Date.current)) }
+
+      it "reports no warning while today's slot is free" do
+        get :show, params: { installment_type: "audience" }
+
+        expect(response.parsed_body["large_email_limit"]).to include(
+          "threshold" => SellerLargeBlastQuota::DEFAULT_THRESHOLD,
+          "reason" => nil,
+          "date" => Date.current.iso8601
+        )
+      end
+
+      it "reports the slot as used, with the overnight window the email would wait for" do
+        $redis.set(RedisKey.seller_large_blast_quota(seller.id, Date.current), "post_blast:1", ex: 1.hour.to_i)
+
+        get :show, params: { installment_type: "audience" }
+
+        window_start = Time.zone.tomorrow.beginning_of_day + SellerLargeBlastQuota::DEFERRAL_WINDOW_START
+        expect(response.parsed_body["large_email_limit"]).to include(
+          "reason" => "used",
+          "next_send_window" => {
+            "starts_at" => window_start.utc.iso8601,
+            "ends_at" => (window_start + SellerLargeBlastQuota::DEFERRAL_WINDOW_LENGTH).utc.iso8601
+          }
+        )
+      end
     end
 
     it "returns counts for seller installment type" do
       get :show, params: { installment_type: "seller" }
       expect(response).to be_successful
-      expect(response.parsed_body).to eq("recipient_count" => 3, "audience_count" => 5)
+      expect(response.parsed_body).to include("recipient_count" => 3, "audience_count" => 5)
     end
 
     it "returns counts for product installment type" do
       get :show, params: { installment_type: "product", link_id: product1.unique_permalink }
       expect(response).to be_successful
-      expect(response.parsed_body).to eq("recipient_count" => 3, "audience_count" => 5)
+      expect(response.parsed_body).to include("recipient_count" => 3, "audience_count" => 5)
     end
 
     it "serves both counts from Elasticsearch for follower installment type" do
@@ -91,53 +120,53 @@ describe Api::Internal::Installments::RecipientCountsController do
       get :show, params: { installment_type: "follower" }
 
       expect(response).to be_successful
-      expect(response.parsed_body).to eq("recipient_count" => 2, "audience_count" => 5)
+      expect(response.parsed_body).to include("recipient_count" => 2, "audience_count" => 5)
     end
 
     it "returns counts for audience installment type with created_after filter" do
       get :show, params: { installment_type: "audience", created_after: 10.days.ago.to_s }
       expect(response).to be_successful
-      expect(response.parsed_body).to eq("recipient_count" => 4, "audience_count" => 5)
+      expect(response.parsed_body).to include("recipient_count" => 4, "audience_count" => 5)
     end
 
     it "returns counts for audience installment type with created_before filter" do
       get :show, params: { installment_type: "audience", created_before: 5.days.ago.to_s }
       expect(response).to be_successful
-      expect(response.parsed_body).to eq("recipient_count" => 3, "audience_count" => 5)
+      expect(response.parsed_body).to include("recipient_count" => 3, "audience_count" => 5)
     end
 
     it "excludes recent buyers and keeps never-buyers with the not_purchased_since filter" do
       get :show, params: { installment_type: "audience", not_purchased_since: 3.days.ago.to_date.to_s }
       expect(response).to be_successful
-      expect(response.parsed_body).to eq("recipient_count" => 3, "audience_count" => 5)
+      expect(response.parsed_body).to include("recipient_count" => 3, "audience_count" => 5)
     end
 
     it "applies not_purchased_since to follower installments" do
       get :show, params: { installment_type: "follower", not_purchased_since: 3.days.ago.to_date.to_s }
-      expect(response.parsed_body).to eq("recipient_count" => 2, "audience_count" => 5)
+      expect(response.parsed_body).to include("recipient_count" => 2, "audience_count" => 5)
     end
 
     it "ignores an unparseable not_purchased_since" do
       get :show, params: { installment_type: "audience", not_purchased_since: "not-a-date" }
-      expect(response.parsed_body).to eq("recipient_count" => 5, "audience_count" => 5)
+      expect(response.parsed_body).to include("recipient_count" => 5, "audience_count" => 5)
     end
 
     it "ignores out-of-range year in created_before filter without raising a database error" do
       get :show, params: { installment_type: "audience", created_before: "252026-05-06" }
       expect(response).to be_successful
-      expect(response.parsed_body).to eq("recipient_count" => 5, "audience_count" => 5)
+      expect(response.parsed_body).to include("recipient_count" => 5, "audience_count" => 5)
     end
 
     it "ignores out-of-range year in created_after filter without raising a database error" do
       get :show, params: { installment_type: "audience", created_after: "252026-05-06" }
       expect(response).to be_successful
-      expect(response.parsed_body).to eq("recipient_count" => 5, "audience_count" => 5)
+      expect(response.parsed_body).to include("recipient_count" => 5, "audience_count" => 5)
     end
 
     it "ignores unparseable created_before filter without raising" do
       get :show, params: { installment_type: "audience", created_before: "not-a-date" }
       expect(response).to be_successful
-      expect(response.parsed_body).to eq("recipient_count" => 5, "audience_count" => 5)
+      expect(response.parsed_body).to include("recipient_count" => 5, "audience_count" => 5)
     end
 
     it "returns counts for seller installment type with paid_more_than_cents filter" do
@@ -148,7 +177,7 @@ describe Api::Internal::Installments::RecipientCountsController do
       sync_elasticsearch_audience_index
       get :show, params: { installment_type: "seller", paid_more_than_cents: 100 }
       expect(response).to be_successful
-      expect(response.parsed_body).to eq("recipient_count" => 2, "audience_count" => 5)
+      expect(response.parsed_body).to include("recipient_count" => 2, "audience_count" => 5)
     end
 
     it "returns counts for seller installment type with paid_less_than_cents filter" do
@@ -159,19 +188,19 @@ describe Api::Internal::Installments::RecipientCountsController do
       sync_elasticsearch_audience_index
       get :show, params: { installment_type: "seller", paid_less_than_cents: 1000 }
       expect(response).to be_successful
-      expect(response.parsed_body).to eq("recipient_count" => 3, "audience_count" => 5)
+      expect(response.parsed_body).to include("recipient_count" => 3, "audience_count" => 5)
     end
 
     it "returns counts for seller installment type with bought_products filter" do
       get :show, params: { installment_type: "seller", bought_products: [product2.unique_permalink] }
       expect(response).to be_successful
-      expect(response.parsed_body).to eq("recipient_count" => 2, "audience_count" => 5)
+      expect(response.parsed_body).to include("recipient_count" => 2, "audience_count" => 5)
     end
 
     it "returns counts for audience installment type with not_bought_products filter" do
       get :show, params: { installment_type: "audience", not_bought_products: [product2.unique_permalink] }
       expect(response).to be_successful
-      expect(response.parsed_body).to eq("recipient_count" => 3, "audience_count" => 5)
+      expect(response.parsed_body).to include("recipient_count" => 3, "audience_count" => 5)
     end
 
     context "with several not-bought exclusions" do
@@ -212,19 +241,19 @@ describe Api::Internal::Installments::RecipientCountsController do
     it "returns counts for seller installment type with bought_variants filter" do
       get :show, params: { installment_type: "seller", bought_variants: [product1_variant.external_id] }
       expect(response).to be_successful
-      expect(response.parsed_body).to eq("recipient_count" => 1, "audience_count" => 5)
+      expect(response.parsed_body).to include("recipient_count" => 1, "audience_count" => 5)
     end
 
     it "returns counts for audience installment type with not_bought_variants filter" do
       get :show, params: { installment_type: "audience", not_bought_variants: [product1_variant.external_id] }
       expect(response).to be_successful
-      expect(response.parsed_body).to eq("recipient_count" => 4, "audience_count" => 5)
+      expect(response.parsed_body).to include("recipient_count" => 4, "audience_count" => 5)
     end
 
     it "returns counts for seller installment type with bought_from filter" do
       get :show, params: { installment_type: "seller", bought_from: "Canada" }
       expect(response).to be_successful
-      expect(response.parsed_body).to eq("recipient_count" => 1, "audience_count" => 5)
+      expect(response.parsed_body).to include("recipient_count" => 1, "audience_count" => 5)
     end
   end
 end
