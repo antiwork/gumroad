@@ -90,7 +90,7 @@ class SendPostBlastEmailsJob
     return if expire_stale_quota_deferral
 
     unless admitted?
-      requeue_for_daily_blast_limit
+      requeue_for_daily_blast_limit(run_at: @recheck_at)
       return
     end
 
@@ -425,6 +425,8 @@ class SendPostBlastEmailsJob
       return false if decision == EXPIRED_QUOTA_DECISION
 
       unless @blast.first_email_delivered_at.present? || decision
+        return false if yield_slot_to_earlier_blast?
+
         return false unless SellerLargeBlastQuota.allow?(
           seller_id: @post.seller_id,
           kind: "post_blast",
@@ -447,6 +449,27 @@ class SendPostBlastEmailsJob
 
     EXPIRED_QUOTA_DECISION = "expired"
 
+    # The slot belongs to the earliest-requested large blast. A later large blast steps aside when an
+    # earlier one from the same seller is still waiting: until tomorrow if that one is known to be
+    # large, or a few minutes if it is still loading its audience and may turn out small. Sets
+    # `@recheck_at` for the second case.
+    def yield_slot_to_earlier_blast?
+      @recheck_at = nil
+      return false if @members.size < SellerLargeBlastQuota.threshold
+
+      case SellerLargeBlastQuota.earlier_blast_waiting(blast: @blast)
+      when :large
+        Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} yielding the daily large-blast slot to an earlier request")
+        true
+      when :loading
+        @recheck_at = SellerLargeBlastQuota::EARLIER_BLAST_RECHECK_DELAY.from_now
+        Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} waiting for an earlier request to finish loading before claiming the daily large-blast slot")
+        true
+      else
+        false
+      end
+    end
+
     # Overwrites a marker only once its time has passed. ISO 8601 UTC strings order as times.
     RESERVE_QUOTA_DEFERRAL = <<~LUA
       local current = redis.call("GET", KEYS[1])
@@ -458,12 +481,12 @@ class SendPostBlastEmailsJob
     # One deferred copy per blast: the marker is reserved before the enqueue, so concurrent
     # attempts that meet the same closed quota cannot each schedule the blast. The monitor
     # reads the marker as DEFERRED while it is ahead and as a lost job once it has passed.
-    def requeue_for_daily_blast_limit
+    def requeue_for_daily_blast_limit(run_at: nil)
       # A copy that lost the race to an expiry must not re-create the marker it cleared.
       return if $redis.get(RedisKey.blast_quota_admitted(@blast.id)) == EXPIRED_QUOTA_DECISION
 
       deferred_key = RedisKey.blast_quota_deferred_until(@blast.id)
-      run_at = SellerLargeBlastQuota.deferred_run_at
+      run_at ||= SellerLargeBlastQuota.deferred_run_at
       return expire_past_content_window if SellerLargeBlastQuota.past_content_window?(requested_at: @blast.requested_at, run_at:)
 
       argv = [run_at.utc.iso8601, Time.current.utc.iso8601, AlertOnStalledPostEmailBlastsJob::LOOKBACK.to_i]
