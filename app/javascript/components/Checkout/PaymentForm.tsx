@@ -535,7 +535,7 @@ const PaymentMethodRadioRow = ({
         disabled={disabled}
       />
       {icon}
-      <span className="min-w-0 font-medium [overflow-wrap:anywhere]">{label}</span>
+      <span className="min-w-0 font-bold [overflow-wrap:anywhere]">{label}</span>
     </Label>
   );
 };
@@ -1851,7 +1851,7 @@ const FlatPayPalRow = () => {
       className={classNames(
         // all-unset resets box-sizing to content-box, which would make w-full + padding + border
         // overflow the parent — box-border restores the border-box sizing every other row uses.
-        "box-border flex w-full cursor-pointer items-center gap-3 rounded border border-border p-4 text-left all-unset",
+        "box-border flex w-full cursor-pointer items-center gap-3 rounded border all-unset border-control p-4 text-left",
         disabled && "cursor-not-allowed opacity-50",
       )}
       onClick={(e) => {
@@ -1862,7 +1862,7 @@ const FlatPayPalRow = () => {
       }}
     >
       <Paypal pack="brands" className="size-5" />
-      <span className="font-medium">PayPal</span>
+      <span className="font-bold">PayPal</span>
     </button>
   );
 };
@@ -1971,7 +1971,7 @@ const PaymentMethodsSection = ({
         ) : (
           <div className="flex items-center gap-3 bg-body p-4">
             <CreditCard className="size-5" />
-            <span className="font-medium">Card</span>
+            <span className="font-bold">Card</span>
           </div>
         )}
         {state.paymentMethod === "card" ? (

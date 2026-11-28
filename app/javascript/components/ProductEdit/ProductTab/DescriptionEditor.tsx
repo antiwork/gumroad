@@ -134,7 +134,7 @@ export const DescriptionEditor = ({
   const editor = useRichTextEditor({
     id: uid,
     className:
-      "textarea px-4 py-3 border border-border rounded-b block w-full bg-background placeholder:text-muted focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-accent",
+      "textarea px-4 py-3 border border-control rounded-b block w-full bg-background placeholder:text-muted focus-within:outline-2 focus-within:outline-offset-0 focus-within:outline-indicator focus-within:outline-solid",
     ariaLabel: "Description",
     placeholder: "Describe your product...",
     initialValue: isMounted ? initialDescription : null,
@@ -334,7 +334,7 @@ export const DescriptionEditor = ({
               <RichTextEditorToolbar
                 editor={editor}
                 productId={id}
-                className="rounded-t rounded-b-none border border-b-0 border-border"
+                className="rounded-t rounded-b-none border border-b-0 border-control"
               />
             ) : null}
             <EditorContent className="rich-text" editor={editor} />

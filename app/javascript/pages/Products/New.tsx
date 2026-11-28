@@ -6,7 +6,6 @@ import { useState } from "react";
 import { isRecurringProductType } from "$app/data/products";
 import { isProductNativeType, ProductNativeType, ProductServiceType } from "$app/parsers/product";
 import { cast } from "$app/utils/cast";
-import { classNames } from "$app/utils/classNames";
 import { CurrencyCode, currencyCodeList, findCurrencyByCode, isCurrencyCode } from "$app/utils/currency";
 import { isNumber, isRecord, isString } from "$app/utils/guards";
 import { priceCommaHint, sanitizePriceRangeInput } from "$app/utils/price";
@@ -401,7 +400,6 @@ const NewProductPage = () => {
                   onChange={(e) => form.setData("link.name", e.target.value)}
                   aria-invalid={!!errors["link.name"]}
                   ref={nameInputRef}
-                  className="border-foreground/40"
                 />
                 <Errors errors={errors["link.name"]} label="Name" />
               </Fieldset>
@@ -583,14 +581,9 @@ const ProductTypeSelector = ({
     {types.map((type) => {
       const isSelected = type === selectedType;
       const typeButton = (
-        <Tab
-          key={type}
-          isSelected={isSelected}
-          asChild
-          className="not-active:hover:translate-0 not-active:hover:shadow-none"
-        >
+        <Tab key={type} isSelected={isSelected} asChild>
           <Button
-            className={classNames("flex-col hover:translate-0 hover:shadow-none", isSelected && "shadow-none")}
+            className="flex-col"
             role="radio"
             aria-checked={isSelected}
             data-type={type}

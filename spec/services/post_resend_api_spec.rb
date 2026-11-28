@@ -111,6 +111,14 @@ describe PostResendApi, :freeze_time do
       # The seller's body rule has to outrank the stylesheet's fallback colour and font.
       expect(html_doc(sent_email_content).at_css("body")["style"]).to include("background-color: #000000", "color: #ffffff", %(font-family: "Roboto Mono"))
     end
+
+    # custom_styles sits a white store on the web's tan page; an email has no page behind its body.
+    it "keeps the email's body white for a store on the default white background" do
+      @post.seller.seller_profile.update!(background_color: "#ffffff")
+      send_default_email
+
+      expect(html_doc(sent_email_content).at_css("body")["style"]).to include("background-color: #ffffff")
+    end
   end
 
   describe "preheader text" do

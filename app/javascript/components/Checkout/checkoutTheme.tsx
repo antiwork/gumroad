@@ -1,7 +1,7 @@
 import { type StripeElementStyleVariant, type StripeElementsOptions } from "@stripe/stripe-js";
 import * as React from "react";
 
-import { getContrastColor, hexToRgb } from "$app/utils/color";
+import { getContrastColor, getStoreControlAlpha, hexToRgb } from "$app/utils/color";
 import { getCssVariable } from "$app/utils/styles";
 
 import { useIsDarkTheme } from "$app/components/useIsDarkTheme";
@@ -9,7 +9,6 @@ import { useRefToLatest } from "$app/components/useRefToLatest";
 
 export type CheckoutTheme = {
   accent_color: string;
-  indicator_color: string;
   background_color: string;
   text_color: string;
   danger_color: string;
@@ -27,9 +26,6 @@ export const getApplicableCheckoutStyle = (checkoutStyle: CheckoutStyle | null |
   checkoutStyle && sellerIds.length > 0 && sellerIds.every((sellerId) => sellerId === checkoutStyle.seller_id)
     ? checkoutStyle
     : null;
-
-export const getCheckoutIndicatorCss = (theme: CheckoutTheme) =>
-  `:root { --indicator: ${hexToRgb(theme.indicator_color)}; }`;
 
 // The receipt must keep the theme the buyer actually checked out under. Re-deriving it live cannot
 // work: the purchase empties the cart and the follow-up save refreshes `checkoutStyle` to null, so
@@ -78,16 +74,18 @@ export const useShouldInvertNativePayPalButton = () => {
 
 const rgb = (hex: string) => hexToRgb(hex).split(" ").join(",");
 
+// Stripe's iframe cannot read CSS variables, so this restates --gray-3.
+const PLACEHOLDER_ALPHA = 0.65;
+
 export const getCheckoutThemeColors = (theme: CheckoutTheme) => {
   const text = rgb(theme.text_color);
 
   return {
     text: `rgb(${text})`,
-    placeholder: `rgb(${text}, 0.5)`,
+    placeholder: `rgb(${text}, ${PLACEHOLDER_ALPHA})`,
     background: `rgb(${rgb(theme.background_color)})`,
-    border: `rgb(${text})`,
+    border: `rgb(${text}, ${getStoreControlAlpha(theme.background_color)})`,
     accent: `rgb(${rgb(theme.accent_color)})`,
-    indicator: `rgb(${rgb(theme.indicator_color)})`,
     danger: `rgb(${rgb(theme.danger_color)})`,
   };
 };
@@ -108,7 +106,6 @@ export const useNeutralCheckoutThemeColors = () => {
       background: `rgb(${background})`,
       border: `rgb(${text}, ${borderAlpha})`,
       accent: `rgb(${accent})`,
-      indicator: `rgb(${accent})`,
       danger: `rgb(${danger})`,
     }),
     [accent, background, borderAlpha, colorScheme, danger, placeholderAlpha, text],

@@ -30,7 +30,7 @@ export const CalendarPlaceholder = ({ month }: { month: Date }) => {
                 ))}
               </tr>
             </thead>
-            <tbody className="rounded border border-current">
+            <tbody className="rounded border">
               {weeks.map((week, index) => (
                 <tr key={index} className="grid grid-cols-[repeat(7,1fr)] not-last:border-b">
                   {week.map((day) => (

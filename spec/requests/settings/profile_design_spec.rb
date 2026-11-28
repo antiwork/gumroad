@@ -30,7 +30,7 @@ describe "Profile settings design", type: :system, js: true do
     open_design_tab
     choice("Color presets", "Dark").click
     choice("Corners", "Large").click
-    uncheck "Button hover effect"
+    check "Button hover effect"
     save_changes
 
     # `seller.seller_profile` would return the unsaved profile built before the browser created the row.
@@ -38,13 +38,13 @@ describe "Profile settings design", type: :system, js: true do
       background_color: "#000000",
       highlight_color: "#ffffff",
       border_radius: "large",
-      button_hover: "none",
+      button_hover: "lift",
     )
 
     open_design_tab
     expect_selected("Color presets", "Dark")
     expect_selected("Corners", "Large")
-    expect(page).to have_unchecked_field("Button hover effect")
+    expect(page).to have_checked_field("Button hover effect")
   end
 
   it "switches from the custom landing page to the theme preview on Design and back" do
@@ -75,11 +75,11 @@ describe "Profile settings design", type: :system, js: true do
 
     expect_selected("Color presets", "Black and white")
 
-    choice("Corners", "Small").native.send_keys(:arrow_right)
-    expect_selected("Corners", "Medium")
-    expect(page).to have_css("[role=radio]:focus", text: "Medium", exact_text: true)
+    choice("Corners", "Medium").native.send_keys(:arrow_right)
+    expect_selected("Corners", "Large")
+    expect(page).to have_css("[role=radio]:focus", text: "Large", exact_text: true)
     save_changes
 
-    expect(seller.seller_profile.reload.border_radius).to eq("medium")
+    expect(seller.seller_profile.reload.border_radius).to eq("large")
   end
 end

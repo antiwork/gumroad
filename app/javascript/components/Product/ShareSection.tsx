@@ -100,7 +100,7 @@ export const ShareSection = ({
             <div
               {...props}
               className={classNames(
-                "flex cursor-pointer items-center rounded border border-border bg-background px-4 py-3",
+                "flex cursor-pointer items-center rounded border border-control bg-background px-4 py-3",
                 dropdownState.state !== "closed" && "rounded-b-none",
               )}
               aria-label="Add to wishlist"

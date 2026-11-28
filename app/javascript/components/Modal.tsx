@@ -30,7 +30,7 @@ export const Modal = ({
       <Dialog.Content
         aria-modal={modal}
         className={classNames(
-          "fixed top-[50%] left-[50%] z-51 flex max-h-[90vh] max-w-175 min-w-80 translate-[-50%] flex-col gap-4 overflow-y-auto rounded border border-border bg-background p-8 shadow-lg dark:shadow-none",
+          "fixed top-[50%] left-[50%] z-51 flex max-h-[90vh] max-w-175 min-w-80 translate-[-50%] flex-col gap-4 overflow-y-auto rounded-(--radius-card) border border-border bg-background p-8 shadow-lg dark:shadow-none",
           className,
         )}
         onOpenAutoFocus={(e) => {
@@ -48,7 +48,7 @@ export const Modal = ({
           <div className="flex items-start justify-between gap-4">
             <Dialog.Title>{title}</Dialog.Title>
             {allowClose ? (
-              <Dialog.Close className="cursor-pointer text-base all-unset" aria-label="Close">
+              <Dialog.Close className="cursor-pointer all-unset text-base" aria-label="Close">
                 <X className="size-5" />
               </Dialog.Close>
             ) : null}

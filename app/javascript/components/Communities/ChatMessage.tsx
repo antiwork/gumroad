@@ -162,14 +162,14 @@ export const ChatMessage = ({
 
         {canShowActions ? (
           <div
-            className="absolute -top-6 right-0 z-10 flex gap-1 rounded-md border bg-white p-1 hover:shadow-[4px_4px_black] dark:border-[rgb(var(--parent-color)/var(--border-alpha))] dark:bg-black dark:hover:shadow-[4px_4px_white]"
+            className="absolute -top-6 right-0 z-10 flex gap-1 rounded-md border bg-white p-1 dark:border-[rgb(var(--parent-color)/var(--border-alpha))] dark:bg-black"
             aria-label="Actions"
           >
             {isOwnMessage ? (
               <>
                 <WithTooltip position="top" tip="Edit">
                   <button
-                    className="flex cursor-pointer items-center rounded-md border-r border-gray-200 px-2 py-1.5 text-xs all-unset hover:bg-gray dark:hover:bg-dark-gray"
+                    className="flex cursor-pointer items-center rounded-md border-r all-unset border-gray-200 px-2 py-1.5 text-xs hover:bg-gray dark:hover:bg-dark-gray"
                     onClick={handleEdit}
                     aria-label="Edit message"
                   >
@@ -294,11 +294,11 @@ const MessageEditor = ({ content: initialContent, isSaving, onCancel, onSave }: 
   };
 
   return (
-    <div className="relative overflow-hidden rounded-md border focus-within:outline-[0.125rem] focus-within:outline-[rgb(var(--accent))] focus-within:outline-solid dark:border-[rgb(var(--parent-color)/var(--border-alpha))]">
+    <div className="relative overflow-hidden rounded-md border border-control focus-within:outline-2 focus-within:outline-indicator">
       <Textarea
         ref={textareaRef}
         placeholder="Edit message"
-        className="max-h-[300px] min-h-[80px] w-full resize-none overflow-y-auto border-none p-2 pb-14 text-sm outline-hidden"
+        className="max-h-[300px] min-h-[80px] w-full resize-none overflow-y-auto border-none p-2 pb-14 text-sm outline-hidden [--focus-halo:transparent]"
         value={editedContent}
         onChange={(e) => {
           setEditedContent(e.target.value);

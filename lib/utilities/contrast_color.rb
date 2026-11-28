@@ -148,6 +148,23 @@ module ContrastColor
     to_hex(shift_brightness(rgb, white_text:, step: low))
   end
 
+  # The lowest opacity, from `floor` up in hundredths, at which the colour painted over the
+  # background reaches the non-text floor against it; 1.0 when even the opaque colour cannot.
+  # Mirrored by getStoreControlAlpha in color.ts.
+  def self.opacity_for_non_text_contrast(hex_color, background_hex, floor:)
+    rgb = parse(hex_color)
+    background = parse(background_hex)
+    return floor if rgb.nil? || background.nil?
+
+    ((floor * 100).round..100).each do |hundredths|
+      alpha = hundredths / 100.0
+      composite = rgb.zip(background).map { |channel, under| ((channel * alpha) + (under * (1 - alpha))).round }
+      return alpha if indicator_contrast_ok?(composite, background)
+    end
+
+    1.0
+  end
+
   # WCAG contrast ratio between two #rrggbb colours, e.g. 15.36 for black on bright green.
   def self.ratio_between(hex_color, other_hex_color)
     a = parse(hex_color)

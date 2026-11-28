@@ -574,7 +574,7 @@ const FileEmbedNodeView = ({
                         // where cropping to fill still looks better than bars.
                         width: "100%",
                         objectFit: videoFrameIsPortrait(file) ? "contain" : "cover",
-                        borderRadius: "var(--border-radius-1) var(--border-radius-1) 0 0",
+                        borderRadius: "var(--radius) var(--radius) 0 0",
                       }}
                     />
                     <LinkButton

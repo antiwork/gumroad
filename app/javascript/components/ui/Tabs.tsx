@@ -20,10 +20,11 @@ const tabsVariants = cva("", {
 const tabVariants = cva("", {
   variants: {
     variant: {
-      pills: "shrink-0 rounded-full border-transparent px-3 py-2 hover:border-border",
-      // A Button inside the tab sets the halo to the store's offset, but this lift wins while hovered.
+      pills:
+        "shrink-0 rounded-full border-transparent px-3 py-2 hover:border-border focus-visible:-outline-offset-2 [--focus-halo:transparent]",
+      // `relative` keeps a containing block for children positioned inside a tile (the cover uploader's input).
       buttons:
-        "flex items-start gap-3 rounded-sm border-border px-4 py-3 text-left transition-all not-active:hover:-translate-1 not-active:hover:shadow lift-halo not-active:hover:[--lift-halo-offset:var(--spacing)]",
+        "relative flex items-start gap-3 rounded-sm border-control px-4 py-3 text-left not-disabled:hover:bg-active-bg",
     },
     active: {
       true: "bg-background",
@@ -34,13 +35,13 @@ const tabVariants = cva("", {
     {
       variant: "pills",
       active: true,
-      className: "border-border text-foreground",
+      className: "border-control text-foreground hover:border-control",
     },
     {
       variant: "buttons",
       active: true,
       // The important modifier is required: Tab wraps Button via asChild, so both class strings are
-      // joined and Button's `border-border` can otherwise win the CSS-order fight.
+      // joined and Button's own border colour can otherwise win the CSS-order fight.
       className: "border-indicator! ring-1 ring-indicator",
     },
   ],

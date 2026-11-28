@@ -1,5 +1,5 @@
 <div>
-  <div class="p-4 mb-4 text-sm text-yellow-800 rounded-lg bg-yellow-50" role="alert"><span class="font-medium">Important:</span> This article is only valid for users with an existing connected Stripe account. We no longer support new user-connected Stripe accounts except for users from Brazil. </div>
+  <div class="p-4 mb-4 text-sm text-yellow-800 rounded-lg bg-yellow-50" role="alert"><span class="font-bold">Important:</span> This article is only valid for users with an existing connected Stripe account. We no longer support new user-connected Stripe accounts except for users from Brazil. </div>
   <p><strong>In this article:</strong></p>
   <ul>
     <li><a href="#connect">Connect with Stripe</a></li>
@@ -35,7 +35,7 @@
   <p>To change your payout method or connect to a different Stripe account, you can disconnect your existing Stripe account from the <a href="https://gumroad.com/settings/payments">payment settings</a> page.</p>
   <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/640178bc188a9d242a7d655c/file-C9OPo20qtm.png" %></figure>
   <p>However, you cannot disconnect your Stripe account if you have a membership product with active recurring credit card payments. You have to cancel all existing memberships first, or wait until those memberships expire, then proceed to disconnect. You can identify Stripe-paid memberships in your <a href="74-the-analytics-dashboard#sales-csv"> CSV sales file</a>, they will have a Stripe transaction ID.</p>
-  <p class="font-medium">Please note that once you disconnect your Stripe account, you will not be able to reconnect it anymore.</p>
+  <p class="font-bold">Please note that once you disconnect your Stripe account, you will not be able to reconnect it anymore.</p>
   <p>Alternatively, you can revoke Gumroad's access to your Stripe account; <a href="https://support.stripe.com/questions/how-to-disconnect-a-linked-financial-account#:~:text=If%20you%20are%20a%20merchant,and%20selecting%20%E2%80%9CRemove%20account%22.">here is a walkthrough from Stripe</a>. Please note this will lead to a failure of recurring payments. </p>
 </div>
 <div>

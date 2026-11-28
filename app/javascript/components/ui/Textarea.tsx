@@ -9,12 +9,7 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, React.TextareaHTML
     <textarea
       ref={ref}
       readOnly={readOnly}
-      className={classNames(
-        baseInputStyles,
-        "resize-y",
-        readOnly && "cursor-default bg-body focus:outline-none",
-        className,
-      )}
+      className={classNames(baseInputStyles, "resize-y", readOnly && "cursor-default bg-body", className)}
       {...props}
     />
   ),

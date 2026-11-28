@@ -39,7 +39,8 @@
   --color-border: rgb(var(--color) / var(--border-alpha));
   --color-backdrop: rgb(0 0 0 / 0.8);
   --color-accent: rgb(var(--accent));
-  --color-indicator: rgb(var(--indicator, var(--accent)));
+  /* Focus and selection rings. The text colour reaches 3:1 on any surface; the pink accent does not. */
+  --color-indicator: rgb(var(--indicator, var(--color)));
   --color-accent-foreground: rgb(var(--contrast-accent));
   /*
    * A slightly brightness-adjusted accent for surfaces that put text or a meaningful icon on the
@@ -58,17 +59,17 @@
   --color-warning-foreground: rgb(var(--contrast-warning));
   --color-info: rgb(var(--info));
 
-  --shadow: 0.25rem 0.25rem 0 currentColor;
-  --shadow-lg: 0.5rem 0.5rem 0 currentColor;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 4px 12px rgb(0 0 0 / 0.08);
+  --shadow-lg: 0 2px 6px rgb(0 0 0 / 0.06), 0 16px 40px rgb(0 0 0 / 0.14);
 
   /*
    * Seller custom styles override --radius and --button-hover-offset per store. Declaring --radius
    * here makes `rounded` compile to var(--radius) instead of a fixed value. --radius-sm resolves on
    * :root, so a subtree that overrides --radius must override --radius-sm too.
    */
-  --radius: 0.25rem;
+  --radius: 0.5rem;
   --radius-sm: var(--radius);
-  --button-hover-offset: 0.25rem;
+  --button-hover-offset: 0rem;
 
   --spacing-product-page: 75.25rem;
   --grid-cols-sidebar: 1fr 3fr;
@@ -78,7 +79,24 @@
   --product-cover-placeholder: url("/images/placeholders/product-cover.png");
 }
 
+/*
+ * Two border tiers above the hairline. Inline, so they resolve on the element. Button outlines are
+ * twice --border-alpha. Fields use --control-alpha, which a store or preview pane must set for its
+ * own background; the formula is the fallback and reaches 3:1 only on the app's own two schemes.
+ */
+@theme inline {
+  --color-button: rgb(var(--color) / min(var(--border-alpha) * 2, 0.35));
+  --color-control: rgb(var(--color) / var(--control-alpha, max(var(--border-alpha) + 0.15, 0.45)));
+}
+
 @layer base {
+  /* A field's border is its only edge, so `border-border` on a native field means the 3:1 tier. */
+  input,
+  textarea,
+  select {
+    --color-border: --theme(--color-control inline);
+  }
+
   .scoped-tailwind-preflight {
     @import "tailwindcss/preflight.css";
 
@@ -101,7 +119,22 @@
   /* Ensure low precedence so it doesn't override other styles */
   :where(&) {
     all: unset;
+    /* Unlayered, so this beats the base layer's default: a bare `border` would be currentColor. */
+    border-color: rgb(var(--parent-color) / var(--border-alpha));
   }
+}
+
+/*
+ * `all-unset` (and Radix's Slot, which copies it onto triggers) strips the browser's focus ring.
+ * This gives every control a ring; it follows the utilities, so it wins the zero-specificity tie
+ * with `all-unset`, and any outline utility on an element still beats it. The halo keeps the ring
+ * visible on a surface of the ring's own colour; an inset or wrapper-drawn ring turns it off with
+ * `--focus-halo: transparent`.
+ */
+:where(:focus-visible) {
+  outline: 2px solid var(--color-foreground);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--focus-halo, var(--color-background));
 }
 
 /*

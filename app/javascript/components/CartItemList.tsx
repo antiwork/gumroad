@@ -13,7 +13,11 @@ type BaseProps = {
 } & React.HTMLAttributes<HTMLElement>;
 
 export const CartItemList = ({ children, className, ...props }: BaseProps) => (
-  <div role="list" className={classNames("rounded-sm border border-border bg-background", className)} {...props}>
+  <div
+    role="list"
+    className={classNames("rounded-(--radius-card) border border-border bg-background", className)}
+    {...props}
+  >
     {children}
   </div>
 );
@@ -105,7 +109,7 @@ export const CartItemTitle = ({
 }: BaseProps & { asChild?: boolean }) => {
   const Comp = asChild ? Slot : "h4";
   return (
-    <Comp className={classNames("line-clamp-2 text-base font-medium no-underline sm:text-lg", className)} {...props}>
+    <Comp className={classNames("line-clamp-2 text-base font-bold no-underline sm:text-lg", className)} {...props}>
       {children}
     </Comp>
   );

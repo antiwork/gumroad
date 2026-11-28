@@ -25,7 +25,7 @@ export const Range = React.forwardRef<
     type="range"
     className={classNames(rangeStyles, className)}
     style={{
-      "--progress": `linear-gradient(to right, currentColor ${progress}%, rgb(var(--color) / 0.2) ${progress}%)`,
+      "--progress": `linear-gradient(to right, currentColor ${progress}%, rgb(var(--color) / var(--control-alpha, max(var(--border-alpha) + 0.15, 0.45))) ${progress}%)`,
       ...style,
     }}
     {...props}

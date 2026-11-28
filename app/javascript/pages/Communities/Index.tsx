@@ -539,7 +539,7 @@ function CommunitiesIndex() {
                     alt={selectedCommunity.seller.name}
                     className="shrink-0 dark:border-[rgb(var(--parent-color)/var(--border-alpha))]"
                   />
-                  <div className="flex items-center font-medium">
+                  <div className="flex items-center font-bold">
                     <span className="flex-1 truncate">
                       {currentSeller?.id === selectedCommunity.seller.id
                         ? "My community"
@@ -807,7 +807,7 @@ const GoBackHeader = () => {
       <div className="flex items-center">
         <button
           onClick={handleGoBack}
-          className="flex cursor-pointer items-center border-none bg-transparent p-0 text-sm no-underline all-unset"
+          className="flex cursor-pointer items-center border-none all-unset bg-transparent p-0 text-sm no-underline"
         >
           <ArrowLeft className="mr-1 size-5" /> Go back
         </button>

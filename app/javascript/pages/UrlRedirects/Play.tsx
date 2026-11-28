@@ -67,7 +67,7 @@ const Play = () => {
             {/* Labelled, not a bare icon: this tab's only exit, and a buyer could read × as "quit the game". */}
             <a
               href={content_page_url}
-              className="flex cursor-pointer items-center gap-2 p-4 whitespace-nowrap all-unset"
+              className="flex cursor-pointer items-center gap-2 all-unset p-4 whitespace-nowrap"
             >
               <ArrowLeft className="size-5" />
               Back to content

@@ -153,7 +153,7 @@ const LaunchComposer = ({ productPermalink }: { productPermalink: string }) => {
                           disabled={busy}
                           className="peer sr-only"
                         />
-                        <span className="flex min-h-11 items-center gap-2 rounded border border-border px-3 peer-checked:bg-foreground peer-checked:text-background peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent peer-disabled:cursor-not-allowed">
+                        <span className="flex min-h-11 items-center gap-2 rounded border border-control px-3 peer-checked:bg-foreground peer-checked:text-background peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-indicator peer-disabled:cursor-not-allowed">
                           <NetworkIcon channel={item.channel} />
                           {item.label}
                         </span>

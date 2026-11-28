@@ -64,6 +64,16 @@ describe PostSendgridApi, :freeze_time do
     end
   end
 
+
+  # custom_styles sits a white store on the web's tan page; an email has no page behind its body.
+  describe "a store on the default white background" do
+    before { send_default_email }
+
+    it "keeps the email's body white" do
+      expect(html_doc(sent_email_content).at_css("body")["style"]).to include("background-color: #ffffff")
+    end
+  end
+
   describe "button colours" do
     let(:inserted_button) { %(<a href="https://example.com/" class="tiptap__button button primary" style="background-color: #ff90e8; color: #000000;">Read more</a>) }
 

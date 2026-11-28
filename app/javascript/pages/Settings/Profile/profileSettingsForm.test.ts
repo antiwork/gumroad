@@ -83,6 +83,31 @@ describe("profile settings synchronization", () => {
     expect(changedProfileSettings(rebased, incoming)).toEqual({ bio: "Local bio edit" });
   });
 
+  // The preview must not inherit the dashboard's border strength: a dark store has light text.
+  it("sets the preview's border strength from the store's own text colour", () => {
+    expect(profileThemeColors("#ffffff", "#ff90e8")).toMatchObject({ "--border-alpha": "0.11" });
+    expect(profileThemeColors("#000000", "#ff90e8")).toMatchObject({ "--border-alpha": "0.35" });
+  });
+
+  // The live store gets this from the server; without it the preview's button would be a bare label.
+  it("edges the preview's accent button when its fill matches the background", () => {
+    expect(profileThemeColors("#ffffff", "#ffffff")).toMatchObject({ "--accent-edge": "148 148 148" });
+    expect(profileThemeColors("#ffffff", "#ff90e8")).toMatchObject({ "--accent-edge": "255 144 232" });
+  });
+
+  it("sets the preview's field border from the store's own background", () => {
+    expect(profileThemeColors("#ffffff", "#ff90e8")).toMatchObject({ "--control-alpha": "0.45" });
+    expect(profileThemeColors("#3b82f6", "#ff90e8")).toMatchObject({ "--control-alpha": "0.55" });
+  });
+
+  it("previews a white store on the stock page colour, with white surfaces", () => {
+    expect(profileThemeColors("#ffffff", "#ff90e8")).toMatchObject({
+      "--body-bg": "#f4f4f0",
+      "--filled": "255 255 255",
+    });
+    expect(profileThemeColors("#000000", "#ff90e8")).toMatchObject({ "--body-bg": "#000000", "--filled": "0 0 0" });
+  });
+
   it("matches the live primary-button foreground for saturated backgrounds", () => {
     expect(profileThemeColors("#ff0000", "#ff90e8")).toMatchObject({
       "--color": "0 0 0",

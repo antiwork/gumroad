@@ -42,8 +42,8 @@ describe "Hover lift under the pointer", type: :system, js: true do
       create(:variant, variant_category: category, name: "Large")
     end
 
-    it "keeps an option hovered and selectable on its bottom edge when the store turns the button lift off" do
-      seller.seller_profile.update!(button_hover: "none")
+    it "keeps an option hovered and selectable on its bottom edge when the store turns the button lift on" do
+      seller.seller_profile.update!(button_hover: "lift")
       visit product.long_url
       option = find("[role=radio][aria-label='Large']")
 

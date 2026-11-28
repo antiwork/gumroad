@@ -29,6 +29,13 @@ describe("InputGroup", () => {
     expect(groupOf(screen.getByLabelText("Grouped")).className).toContain("focus-within:outline-indicator");
   });
 
+  // A read-only field is still a tab stop, so it keeps the ring.
+  it("keeps the focus ring on a read-only input", () => {
+    render(<Input aria-label="Read only" readOnly value="x" />);
+
+    expect(screen.getByLabelText("Read only").className).not.toContain("outline-none");
+  });
+
   it("keeps a disabled group's contents at full opacity", () => {
     render(
       <InputGroup disabled>

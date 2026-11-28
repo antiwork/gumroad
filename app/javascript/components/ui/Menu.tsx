@@ -8,7 +8,10 @@ export const Menu = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDi
     <div
       ref={ref}
       role="menu"
-      className={classNames("rounded border border-border bg-background py-2 text-foreground shadow", className)}
+      className={classNames(
+        "rounded-(--radius-box) border border-border bg-background py-2 text-foreground shadow dark:border-control",
+        className,
+      )}
       {...rest}
     />
   ),

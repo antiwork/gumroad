@@ -47,13 +47,13 @@ export const ChatMessageInput = React.forwardRef<HTMLTextAreaElement, Props>(
 
     return (
       <InputGroup
-        className={classNames("pr-2! dark:border-[rgb(var(--parent-color)/var(--border-alpha))]", {
-          "!border-red": errors && errors["community_chat_message.content"],
+        className={classNames("pr-2!", {
+          "border-danger! ring-1 ring-danger": errors && errors["community_chat_message.content"],
         })}
       >
         <Textarea
           ref={ref}
-          className="resize-none border-none outline-none"
+          className="resize-none border-none outline-none [--focus-halo:transparent]"
           rows={1}
           placeholder="Type a message"
           value={draft?.content ?? ""}
@@ -69,7 +69,7 @@ export const ChatMessageInput = React.forwardRef<HTMLTextAreaElement, Props>(
         />
         <button
           className={classNames(
-            "hover:rgb(var(--primary)) flex cursor-pointer items-center rounded-md border border-solid bg-black px-2 py-1.5 text-white all-unset dark:bg-[rgb(var(--primary))] dark:text-black",
+            "hover:rgb(var(--primary)) flex cursor-pointer items-center rounded-md border border-solid all-unset bg-black px-2 py-1.5 text-white dark:bg-[rgb(var(--primary))] dark:text-black",
             {
               "cursor-default opacity-50": !draft?.content.trim(),
             },

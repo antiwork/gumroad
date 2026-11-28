@@ -240,10 +240,8 @@ describe("Tabs radiogroup", () => {
   });
 });
 
-describe("Tabs hover halo", () => {
-  // The buttons variant lifts the tab up and left, so it has to carry the halo that keeps a pointer
-  // resting on its right or bottom edge inside it.
-  it("pairs the lift with the halo", () => {
+describe("Tabs borders and hover", () => {
+  it("tints a tile on hover instead of lifting it", () => {
     render(
       <Tabs variant="buttons">
         <Tab isSelected={false}>All products</Tab>
@@ -253,10 +251,34 @@ describe("Tabs hover halo", () => {
 
     const tab = screen.getByRole("tab", { name: "All products" });
 
-    expect(tab.className).toContain("not-active:hover:-translate-1");
-    expect(tab.className.split(" ")).toContain("lift-halo");
-    // A Button inside the tab sets the halo to the store's offset, while the tab's `-translate-1` is the
-    // lift that applies, so the halo is pinned back to that lift under the same condition.
-    expect(tab.className).toContain("not-active:hover:[--lift-halo-offset:var(--spacing)]");
+    expect(tab.className).not.toMatch(/translate|lift-halo|shadow/u);
+    expect(tab.className.split(" ")).toContain("not-disabled:hover:bg-active-bg");
+  });
+
+  // A tile is a choice the buyer makes, so it keeps the 3:1 field border; the chosen one is ringed
+  // in the indicator colour, which contrasts with that border by more than hue.
+  it("edges tiles with the field border and rings the selected one", () => {
+    render(
+      <Tabs variant="buttons">
+        <Tab isSelected={false}>All products</Tab>
+        <Tab isSelected>Piracy reports</Tab>
+      </Tabs>,
+    );
+
+    expect(screen.getByRole("tab", { name: "All products" }).className.split(" ")).toContain("border-control");
+    expect(screen.getByRole("tab", { name: "Piracy reports" }).className).toContain("ring-indicator");
+  });
+
+  // The selected pill is a white fill on a near-white page, so its border carries the state.
+  it("marks the selected pill with the field border", () => {
+    render(
+      <Tabs>
+        <Tab isSelected={false}>All products</Tab>
+        <Tab isSelected>Piracy reports</Tab>
+      </Tabs>,
+    );
+
+    expect(screen.getByRole("tab", { name: "Piracy reports" }).className.split(" ")).toContain("border-control");
+    expect(screen.getByRole("tab", { name: "All products" }).className.split(" ")).not.toContain("border-control");
   });
 });

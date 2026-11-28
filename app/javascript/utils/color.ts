@@ -134,6 +134,69 @@ export const getContrastColor = (background: string) => {
   return contrastRatio(luminance, 1) > contrastRatio(luminance, 0) ? "#FFFFFF" : "#000000";
 };
 
+// Must match SellerProfile::BORDER_ALPHAS: the server styles the live store, this styles its previews.
+const STORE_BORDER_ALPHA_UNDER_DARK_TEXT = "0.11";
+const STORE_BORDER_ALPHA_UNDER_LIGHT_TEXT = "0.35";
+
+// Must match SellerProfile#page_background_color: a white store sits on the stock page colour.
+const STOCK_STORE_BACKGROUND = "#ffffff";
+const STOCK_STORE_PAGE_BACKGROUND = "#f4f4f0";
+
+export const getStorePageBackground = (backgroundColor: string) =>
+  hexToRgb(backgroundColor) === hexToRgb(STOCK_STORE_BACKGROUND) ? STOCK_STORE_PAGE_BACKGROUND : backgroundColor;
+
+export const getStoreBorderAlpha = (backgroundColor: string) =>
+  getContrastColor(backgroundColor) === "#FFFFFF"
+    ? STORE_BORDER_ALPHA_UNDER_LIGHT_TEXT
+    : STORE_BORDER_ALPHA_UNDER_DARK_TEXT;
+
+// Must match SellerProfile#control_border_alpha_css. A field's border is its only edge, and on a
+// mid-tone background the stock alpha falls short of 3:1, so each store gets the lowest alpha, in
+// hundredths from the app's own field alpha up, that reaches it.
+const WCAG_AA_NON_TEXT = 3;
+const STORE_CONTROL_ALPHA_FLOOR_UNDER_DARK_TEXT = 45;
+const STORE_CONTROL_ALPHA_FLOOR_UNDER_LIGHT_TEXT = 50;
+
+export const getStoreControlAlpha = (backgroundColor: string) => {
+  const lightText = getContrastColor(backgroundColor) === "#FFFFFF";
+  const floor = lightText ? STORE_CONTROL_ALPHA_FLOOR_UNDER_LIGHT_TEXT : STORE_CONTROL_ALPHA_FLOOR_UNDER_DARK_TEXT;
+  const background = parseHex(backgroundColor);
+  if (background === null) return (floor / 100).toFixed(2);
+
+  const text = lightText ? 255 : 0;
+  for (let hundredths = floor; hundredths <= 100; hundredths += 1) {
+    const alpha = hundredths / 100;
+    const composite = background.map((under) => Math.round(text * alpha + under * (1 - alpha)));
+    if (ratioBetween(composite, background) >= WCAG_AA_NON_TEXT) return alpha.toFixed(2);
+  }
+
+  return "1.00";
+};
+
+// Must match ContrastColor.visible_indicator, which the server uses for --accent-edge: the accent
+// button's border is its own fill unless that has vanished into the store's background, and then
+// the fill shifted in brightness until it reaches 3:1.
+const INDICATOR_VISIBILITY_FLOOR = 1.5;
+const BACKGROUND_LUMINANCE_MIDPOINT = 0.2159;
+
+export const getStoreAccentEdge = (accent: string, backgroundColor: string) => {
+  const rgb = parseHex(accent);
+  const background = parseHex(backgroundColor);
+  if (rgb === null || background === null) return BLACK;
+  if (ratioBetween(rgb, background) >= INDICATOR_VISIBILITY_FLOOR) return toHex(rgb);
+
+  const towardBlack = relativeLuminance(background) > BACKGROUND_LUMINANCE_MIDPOINT;
+  let low = 0;
+  let high = 255;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    if (ratioBetween(shiftBrightness(rgb, towardBlack, middle), background) >= WCAG_AA_NON_TEXT) high = middle;
+    else low = middle + 1;
+  }
+
+  return toHex(shiftBrightness(rgb, towardBlack, low));
+};
+
 /**
  * Mixes a hex colour `step`/255 of the way toward black (for white text) or toward white (for black
  * text). Exported only so a test can show the chosen step is minimal by checking the step below it

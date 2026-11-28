@@ -171,7 +171,7 @@ export default function AccountStatusSection({
             ))}
             {accountStatus.needs_id_upload ? (
               <details className="mt-2">
-                <summary className="cursor-pointer text-sm font-medium">Before you upload your ID</summary>
+                <summary className="cursor-pointer text-sm font-bold">Before you upload your ID</summary>
                 <ul className="mt-1 list-disc pl-5 text-sm">
                   <li>Use a color photo or scan. You can take it with a phone, webcam, or scanner.</li>
                   <li>For a driver's license or identity card, upload images of both the front and back of the ID.</li>

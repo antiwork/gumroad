@@ -25,7 +25,7 @@ export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttribute
         readOnly={readOnly}
         className={classNames(
           baseInputStyles,
-          readOnly && "cursor-default bg-body focus:outline-none",
+          readOnly && "cursor-default bg-body",
           isInsideInputGroup ? inputGroupChildStyles : stateBorderStyles[state],
           // The disabled group owns the background and border, so its input must not add either again.
           inputGroupDisabled && "disabled:bg-transparent forced-colors:disabled:border-none",

@@ -3,7 +3,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { Button } from "$app/components/Button";
+import { Button, buttonVariants } from "$app/components/Button";
 
 afterEach(cleanup);
 
@@ -55,6 +55,71 @@ describe("Button brand colors", () => {
 
     expect(tiktok.className).toBe(x.className);
     expect(tiktok.className).toContain("bg-black");
+  });
+});
+
+describe("Button borders", () => {
+  const classes = (name: string) => screen.getByRole("button", { name }).className.split(" ");
+
+  // A filled button is edged by its own fill; a light outline around a black or pink fill reads as a halo.
+  it("leaves a filled button's border to its fill", () => {
+    render(<Button color="primary">Primary</Button>);
+
+    expect(classes("Primary")).toContain("border-transparent");
+    expect(classes("Primary")).not.toContain("border-button");
+  });
+
+  // Black on a dark surface, or a store's accent on a background of the same colour, would
+  // otherwise leave only the label.
+  it("edges a fill that can match the surface under it", () => {
+    render(
+      <>
+        <Button color="black">Black</Button>
+        <Button color="accent">Accent</Button>
+        <Button outline color="accent">
+          Outline accent
+        </Button>
+      </>,
+    );
+
+    expect(classes("Black")).toContain("border-button");
+    expect(classes("Accent")).toContain("border-[rgb(var(--accent-edge,var(--accent-with-text)))]");
+    expect(classes("Outline accent")).toContain("border-button");
+  });
+
+  // Labels and links styled as buttons take the class string directly, with no Button to merge it.
+  it.each([{}, { color: "accent" as const }, { color: "primary" as const }, { color: "black" as const }])(
+    "gives buttonVariants(%o) one border colour",
+    (props) => {
+      const borderColours = buttonVariants(props)
+        .split(" ")
+        .filter((name) => /^border-(?:transparent|button|\[)/u.test(name));
+
+      expect(borderColours).toHaveLength(1);
+    },
+  );
+
+  it("outlines an unfilled button", () => {
+    render(
+      <>
+        <Button>Default</Button>
+        <Button outline color="primary">
+          Outline
+        </Button>
+      </>,
+    );
+
+    for (const name of ["Default", "Outline"]) {
+      expect(classes(name)).toContain("border-button");
+      expect(classes(name)).not.toContain("border-transparent");
+    }
+  });
+
+  // With no lift, a default button would otherwise not react to the pointer at all.
+  it("tints a default button on hover", () => {
+    render(<Button>Default</Button>);
+
+    expect(classes("Default")).toContain("not-disabled:hover:bg-active-bg");
   });
 });
 

@@ -163,7 +163,7 @@ const SelectableReviewCard = ({
   isSelected: boolean;
   onSelect: () => void;
 }) => (
-  <div className="flex gap-4 rounded-xs p-4 outline-[1px] outline-solid">
+  <div className="flex gap-4 rounded-(--radius-box) border border-border p-4">
     <Checkbox checked={isSelected} onChange={onSelect} aria-label="Select review" />
     <div className="w-full">
       <Review review={review} seller={null} canRespond={false} hideResponse />

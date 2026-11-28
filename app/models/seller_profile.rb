@@ -5,10 +5,18 @@ class SellerProfile < ApplicationRecord
 
   FONT_CHOICES = ["ABC Favorit", "Inter", "Domine", "Merriweather", "Roboto Slab", "Roboto Mono"]
   DANGER_COLOR_CHOICES = ["#dc341e", "#9b1c12", "#ffb4ab"]
-  # "small" matches Gumroad's stock radius. Checkout also passes these values to Stripe's
+  # "medium" matches Gumroad's stock radius. Checkout also passes these values to Stripe's
   # Appearance API, which cannot read CSS variables, so keep them literal lengths.
   BORDER_RADIUS_CHOICES = { "none" => "0rem", "small" => "0.25rem", "medium" => "0.5rem", "large" => "1rem" }.freeze
   BUTTON_HOVER_OFFSETS = { "lift" => "0.25rem", "none" => "0rem" }.freeze
+  # Border strength as an alpha of the store's text colour: the app's light-mode hairline under
+  # dark text, its dark-mode hairline under light text. Mirrored by getStoreBorderAlpha in color.ts.
+  BORDER_ALPHAS = { ContrastColor::BLACK => "0.11", ContrastColor::WHITE => "0.35" }.freeze
+  # The app's own field-border alphas in light and dark mode. A store never goes below them.
+  CONTROL_BORDER_ALPHA_FLOORS = { ContrastColor::BLACK => 0.45, ContrastColor::WHITE => 0.5 }.freeze
+  STOCK_BACKGROUND = "#ffffff"
+  # The app's own page colour, which is also the page behind an email's white card.
+  STOCK_PAGE_BACKGROUND = "#f4f4f0"
   ALLOWED_SHARE_IMAGE_CONTENT_TYPES = ["image/png", "image/jpeg", "image/jpg"].freeze
   MAXIMUM_SHARE_IMAGE_FILE_SIZE = 5.megabytes
 
@@ -47,10 +55,10 @@ class SellerProfile < ApplicationRecord
 
   after_initialize do
     self.font ||= "ABC Favorit"
-    self.background_color ||= DEFAULT_BACKGROUND_COLOR
+    self.background_color ||= STOCK_BACKGROUND
     self.highlight_color ||= "#ff90e8"
-    self.border_radius ||= "small"
-    self.button_hover ||= "lift"
+    self.border_radius ||= "medium"
+    self.button_hover ||= "none"
   end
 
   # Fingerprint only the pages/sections editor's state. Theme saves update this row too, so using
@@ -165,9 +173,10 @@ class SellerProfile < ApplicationRecord
     end || text_color_on_background
   end
 
-  # Keep Stripe's state indicators visible without changing the seller's saved accent.
-  def accent_color_for_indicators
-    ContrastColor.visible_indicator(highlight_color, background_color)
+  # The accent button's border: the accent itself unless the fill has vanished into the store's
+  # background, the rule email_primary_button_style applies.
+  def accent_edge_color
+    ContrastColor.visible_indicator(accent_color_for_text_areas, background_color)
   end
 
   def text_color_on_danger
@@ -194,6 +203,32 @@ class SellerProfile < ApplicationRecord
     BUTTON_HOVER_OFFSETS.fetch(button_hover)
   end
 
+  def border_alpha_css
+    BORDER_ALPHAS.fetch(text_color_on_background)
+  end
+
+  # A field's border is its only edge, and on a mid-tone background the stock alpha falls short
+  # of 3:1, so each store gets the lowest alpha that reaches it.
+  def control_border_alpha_css
+    floor = CONTROL_BORDER_ALPHA_FLOORS.fetch(text_color_on_background)
+    format("%.2f", ContrastColor.opacity_for_non_text_contrast(text_color_on_background, background_color, floor:))
+  end
+
+  # A white store sits on the stock page colour, so its cards and fields read as white surfaces on
+  # a page, as in the app and the emails. Any other background is the page itself.
+  # Mirrored by getStorePageBackground in color.ts.
+  def page_background_color
+    HexColorValidator.normalize(background_color).to_s.casecmp?(STOCK_BACKGROUND) ? STOCK_PAGE_BACKGROUND : background_color
+  end
+
+  # custom_styles sits a white store on the web's tan page. An email has no page behind its body,
+  # so the body stays the store's own colour.
+  def email_page_background_css
+    return "" unless HexColorValidator.safe_for_css?(background_color)
+
+    "body { background-color: #{background_color}; }"
+  end
+
   def font_css_source
     return if font == "ABC Favorit"
 
@@ -203,7 +238,7 @@ class SellerProfile < ApplicationRecord
   def custom_style_cache_name
     # v5 invalidated CSS compiled before persisted style values were checked as a complete string.
     # Without the bump, a previously cached injection could outlive a repaired database row.
-    "users/#{seller.id}/custom_styles_v5"
+    "users/#{seller_id}/custom_styles_v5"
   end
 
   def validate_json_data

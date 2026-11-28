@@ -9,12 +9,13 @@ const FieldsetContext = React.createContext<{ state: FieldsetState }>({ state: "
 
 export const useFieldset = () => React.useContext(FieldsetContext);
 
+// The ring doubles the edge: next to a grey field border, the colour alone is a hue change of about 1.4:1.
 export const stateBorderStyles: Record<FieldsetState, string> = {
   default: "",
-  success: "border-success",
-  danger: "border-danger",
-  warning: "border-warning",
-  info: "border-info",
+  success: "border-success ring-1 ring-success",
+  danger: "border-danger ring-1 ring-danger",
+  warning: "border-warning ring-1 ring-warning",
+  info: "border-info ring-1 ring-info",
 };
 
 const fieldsetStyles = "flex flex-col border-none gap-2";

@@ -16,7 +16,7 @@ type PillProps = React.PropsWithChildren<{
   React.HTMLAttributes<HTMLElement>;
 
 const pillVariants = cva(
-  "inline-flex align-middle px-3 py-2 bg-background text-foreground border border-border truncate",
+  "inline-flex align-middle px-3 py-2 bg-active-bg text-foreground border border-transparent truncate",
   {
     variants: {
       size: {

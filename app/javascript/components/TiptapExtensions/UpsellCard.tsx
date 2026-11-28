@@ -167,8 +167,8 @@ const UpsellCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
         ref={nodeRef}
         className="upsell-card"
         style={{
-          outline: selected && isEditable ? "2px solid rgb(var(--accent))" : "none",
-          borderRadius: "var(--border-radius-1)",
+          outline: selected && isEditable ? "2px solid var(--color-indicator)" : "none",
+          borderRadius: "var(--radius)",
           display: "grid",
           gap: "var(--spacer-4)",
           position: "relative",
@@ -179,7 +179,7 @@ const UpsellCardNodeView = ({ node, selected, editor }: NodeViewProps) => {
           <Skeleton className="h-32" />
         ) : product ? (
           <ProductCard className="lg:h-32 lg:flex-row">
-            <ProductCardFigure className="lg:h-full lg:rounded-l lg:rounded-tr-none lg:border-r lg:border-b-0">
+            <ProductCardFigure className="lg:h-full lg:rounded-l-[calc(var(--radius-box)-1px)] lg:rounded-tr-none lg:border-r lg:border-b-0">
               <Thumbnail url={product.thumbnail_url} nativeType={product.native_type} />
             </ProductCardFigure>
             <section className="flex flex-1 flex-col lg:gap-8 lg:px-6 lg:py-4">

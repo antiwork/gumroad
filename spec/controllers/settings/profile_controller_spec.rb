@@ -88,10 +88,10 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
     end
 
     it "updates the corner radius and button hover" do
-      put :update, params: { seller_profile: { border_radius: "large", button_hover: "none" } }
+      put :update, params: { seller_profile: { border_radius: "large", button_hover: "lift" } }
 
       expect(response).to redirect_to(profile_path)
-      expect(seller.reload.seller_profile).to have_attributes(border_radius: "large", button_hover: "none")
+      expect(seller.reload.seller_profile).to have_attributes(border_radius: "large", button_hover: "lift")
     end
 
     it "rejects a corner radius or button hover outside the allowed choices" do
@@ -99,7 +99,7 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
 
       expect(response).to redirect_to(profile_path)
       expect(flash[:alert]).to eq("Border radius is not included in the list and Button hover is not included in the list")
-      expect(seller.reload.seller_profile).to have_attributes(border_radius: "small", button_hover: "lift")
+      expect(seller.reload.seller_profile).to have_attributes(border_radius: "medium", button_hover: "none")
     end
 
     it "leaves the other design fields alone when only one is sent" do

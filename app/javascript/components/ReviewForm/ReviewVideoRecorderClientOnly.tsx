@@ -102,7 +102,7 @@ const StopRecordingButton = ({ onClick, disabled }: { onClick: () => void; disab
 const DeleteRecordingButton = ({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) => (
   <button
     className={cx(
-      "absolute top-2 right-2 flex h-8 w-8 cursor-pointer items-center justify-center rounded-sm bg-black all-unset",
+      "absolute top-2 right-2 flex h-8 w-8 cursor-pointer items-center justify-center rounded-sm all-unset bg-black",
       {
         [disabledButtonClassNames]: disabled,
       },

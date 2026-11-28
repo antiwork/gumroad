@@ -490,7 +490,7 @@ export const Product = ({
         // Without covers, the desktop banner fills the card's top-right corner and follows its inner radius.
         className={classNames(
           "flex items-center gap-2 border-b border-border bg-accent-with-text px-6 py-3 font-bold text-accent-foreground",
-          product.covers.length === 0 && "lg:rounded-tr-[calc(var(--radius)_-_var(--border-width))]",
+          product.covers.length === 0 && "lg:rounded-tr-[calc(var(--radius-card)_-_var(--border-width))]",
           // A long option name moves to its own line instead of squeezing the label mid-word.
           discountScope && "flex-wrap",
         )}
@@ -702,7 +702,7 @@ export const Product = ({
       className={classNames(
         // The article's DOM order is the stacked order so focus follows what the narrow layout draws;
         // the named areas below put both back in the desktop columns.
-        "relative grid rounded border border-border bg-background lg:grid-cols-[2fr_1fr]",
+        "relative grid rounded-(--radius-card) border border-border bg-background lg:grid-cols-[2fr_1fr]",
         showsExistingPurchase
           ? "[grid-template-areas:'covers'_'title'_'price'_'details'_'controls'_'social']"
           : "[grid-template-areas:'covers'_'title'_'price'_'controls'_'details'_'social']",
@@ -1152,7 +1152,7 @@ export const RatingsHistogramRow = ({ rating, percentage }: { rating: number; pe
       <meter
         aria-label={label}
         value={percentage / 100}
-        className="h-[1lh] w-full appearance-none rounded border border-border bg-none [&::-moz-meter-bar]:rounded [&::-moz-meter-bar]:[background:var(--color-accent)] [&::-webkit-meter-bar]:contents [&::-webkit-meter-inner-element]:contents [&::-webkit-meter-optimum-value]:rounded [&::-webkit-meter-optimum-value]:[background:var(--color-accent)]"
+        className="h-[1lh] w-full appearance-none rounded border border-control bg-active-bg [&::-moz-meter-bar]:rounded [&::-moz-meter-bar]:[background:var(--color-accent)] [&::-webkit-meter-bar]:contents [&::-webkit-meter-inner-element]:contents [&::-webkit-meter-optimum-value]:rounded [&::-webkit-meter-optimum-value]:[background:var(--color-accent)]"
       />
       <div>{formattedPercentage}</div>
     </>

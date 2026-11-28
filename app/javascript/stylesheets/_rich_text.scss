@@ -66,7 +66,7 @@
     img {
       max-width: 100%;
       object-fit: contain;
-      border-radius: border-radius(1);
+      border-radius: var(--radius);
     }
 
     figcaption,
@@ -78,7 +78,7 @@
 
   pre {
     border: $border;
-    border-radius: border-radius(1);
+    border-radius: var(--radius-box);
     margin-bottom: spacer(4);
     padding: spacer(2) spacer(3);
     white-space: pre-wrap;
@@ -155,12 +155,12 @@
 
   .embed {
     border: $border;
-    border-radius: border-radius(1);
+    border-radius: var(--radius-box);
     @include bg-color(filled);
 
     > .preview {
       background-color: var(--body-bg);
-      border-radius: border-radius(1) border-radius(1) 0 0;
+      border-radius: var(--radius-box) var(--radius-box) 0 0;
       grid-template-columns: 1fr;
       border-bottom: $border;
       margin: -1 * spacer(4);
@@ -196,7 +196,7 @@
         width: 100%;
         height: 100%;
         object-fit: cover;
-        border-radius: border-radius(1);
+        border-radius: var(--radius);
       }
 
       .placeholder {

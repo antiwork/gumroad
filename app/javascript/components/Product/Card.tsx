@@ -87,7 +87,7 @@ export const HorizontalCard = ({ product, big, eager }: { product: CardProduct; 
 
   return (
     <ProductCard className="lg:flex-row">
-      <ProductCardFigure className="lg:h-full lg:rounded-l lg:rounded-tr-none lg:border-r lg:border-b-0 [&_img]:lg:h-0 [&_img]:lg:min-h-full lg:[&_img]:w-auto">
+      <ProductCardFigure className="lg:h-full lg:rounded-l-[calc(var(--radius-box)-1px)] lg:rounded-tr-none lg:border-r lg:border-b-0 [&_img]:lg:h-0 [&_img]:lg:min-h-full lg:[&_img]:w-auto">
         <Thumbnail url={product.thumbnail_url} nativeType={product.native_type} eager={eager} />
       </ProductCardFigure>
       {product.quantity_remaining !== null ? <Ribbon>{product.quantity_remaining} left</Ribbon> : null}

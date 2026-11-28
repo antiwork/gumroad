@@ -28,7 +28,7 @@ export function Calendar({ defaultMonth, ...props }: React.ComponentProps<typeof
         month_grid: "grid",
         weekdays: classNames("grid grid-cols-[repeat(7,1fr)]", defaultClassNames.weekdays),
         weekday: classNames("py-2", defaultClassNames.weekday),
-        weeks: classNames("rounded border border-current", defaultClassNames.weeks),
+        weeks: classNames("rounded border", defaultClassNames.weeks),
         week: classNames("grid grid-cols-[repeat(7,1fr)] not-last:border-b", defaultClassNames.week),
         // react-day-picker doesn't render cells at all if they fall outside `endMonth`, so can't use not-last here
         day: classNames("not-[&:nth-child(7)]:border-r", defaultClassNames.day),

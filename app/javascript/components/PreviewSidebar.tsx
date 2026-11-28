@@ -137,7 +137,7 @@ export const PreviewChrome = ({ children, ...props }: PreviewChromeProps) => (
         flex column, and `overflow-hidden` (needed to clip children to the rounded corners)
         zeroes a flex item's automatic minimum size — without shrink-0 the chrome would compress
         to the viewport and silently clip tall previews instead of letting the sidebar scroll. */}
-    <div className="flex shrink-0 flex-col overflow-hidden rounded border border-border bg-background">
+    <div className="flex shrink-0 flex-col overflow-hidden rounded-(--radius-box) border border-border bg-background">
       {props.variant === "email" ? (
         // Email headers read left-to-right like an email client, not centered like a browser
         // tab, and there is no open-in-new-tab arrow — an email has no URL to open.
@@ -149,13 +149,13 @@ export const PreviewChrome = ({ children, ...props }: PreviewChromeProps) => (
           {props.subject ? (
             <div className="flex min-w-0 gap-2">
               <span className="shrink-0 text-muted">Subject</span>
-              <span className="truncate font-medium">{props.subject}</span>
+              <span className="truncate font-bold">{props.subject}</span>
             </div>
           ) : null}
         </div>
       ) : (
         <div className="relative flex flex-col items-center gap-1 border-b border-border bg-body px-10 py-2 select-none">
-          <div className="w-full truncate text-center text-sm font-medium">{props.title}</div>
+          <div className="w-full truncate text-center text-sm font-bold">{props.title}</div>
           {props.url ? (
             // The URL sits in a quiet inset address field (like a browser's address bar at
             // rest) rather than as bare caption text. Middle truncation keeps the page's own

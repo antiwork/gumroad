@@ -217,7 +217,7 @@ const CtaBar = ({
         flexShrink: 0,
         order: isDesktop ? undefined : 1,
         boxShadow: visible
-          ? "0 var(--border-width) rgb(var(--color)), 0 calc(-1 * var(--border-width)) rgb(var(--color))"
+          ? "0 var(--border-width) var(--color-border), 0 calc(-1 * var(--border-width)) var(--color-border)"
           : undefined,
         position: "fixed",
         top: isDesktop ? 0 : undefined,

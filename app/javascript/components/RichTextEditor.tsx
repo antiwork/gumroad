@@ -146,7 +146,7 @@ export const MenuItem = ({
   <MenuItemTooltip tip={name} position={position}>
     <button
       type="button"
-      className="cursor-pointer rounded px-2 py-1 all-unset hover:bg-active-bg aria-pressed:text-accent"
+      className="cursor-pointer rounded all-unset px-2 py-1 hover:bg-active-bg aria-pressed:text-accent"
       aria-pressed={active}
       disabled={disabled}
       aria-label={name}
@@ -399,7 +399,7 @@ export const useRichTextEditor = ({
     editorProps: {
       attributes: {
         class: classNames(
-          "focus-within:outline-none",
+          "focus-within:outline-none [--focus-halo:transparent]",
           editable && "min-h-full whitespace-break-spaces rounded-t-none",
           className,
         ),
@@ -610,7 +610,7 @@ export const RichTextEditorToolbar = ({
         onMouseLeave={() => setShowTooltip(false)}
       >
         <Popover>
-          <PopoverTrigger aria-label="Text formats" className="rounded px-2 py-1 all-unset hover:bg-active-bg">
+          <PopoverTrigger aria-label="Text formats" className="rounded all-unset px-2 py-1 hover:bg-active-bg">
             {activeFormatOption?.name ?? "Text"} <ChevronDown className="size-5" />
           </PopoverTrigger>
           <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
@@ -640,7 +640,7 @@ export const RichTextEditorToolbar = ({
         <div
           role="separator"
           aria-orientation="vertical"
-          className="m-2 hidden border-r border-solid border-muted sm:flex"
+          className="m-2 hidden border-r border-solid border-border sm:flex"
         />
         <MenuItem
           name="Bold"
@@ -675,7 +675,7 @@ export const RichTextEditorToolbar = ({
         <div
           role="separator"
           aria-orientation="vertical"
-          className="m-2 hidden border-r border-solid border-muted sm:flex"
+          className="m-2 hidden border-r border-solid border-border sm:flex"
         />
         {custom ?? (
           <>
@@ -698,10 +698,10 @@ export const RichTextEditorToolbar = ({
                 <div
                   role="separator"
                   aria-orientation="vertical"
-                  className="m-2 hidden border-r border-muted sm:flex"
+                  className="m-2 hidden border-r border-border sm:flex"
                 />
                 <Popover>
-                  <PopoverTrigger className="rounded px-2 py-1 all-unset hover:bg-active-bg">
+                  <PopoverTrigger className="rounded all-unset px-2 py-1 hover:bg-active-bg">
                     Insert <ChevronDown className="size-5" />
                   </PopoverTrigger>
                   <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
@@ -844,7 +844,7 @@ export const RichTextEditor = ({
         <RichTextEditorToolbar
           editor={editor}
           allowUpsells={allowUpsells}
-          className="rounded-t rounded-b-none border border-b-0 border-border"
+          className="rounded-t rounded-b-none border border-b-0 border-control"
         />
       ) : null}
       <EditorContent className="rich-text" editor={editor} />

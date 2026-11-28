@@ -80,7 +80,7 @@ const ToastAlert = ({ initial }: { initial: AlertPayload | null }) => {
       key={alert?.position ?? "top"}
       data-testid="toast-alert"
       className={classNames(
-        "fixed left-1/2 z-100 w-max max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded bg-background shadow md:max-w-md starting:translate-y-(--toast-offset)",
+        "fixed left-1/2 z-100 w-max max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-(--radius-box) bg-background shadow md:max-w-md starting:translate-y-(--toast-offset)",
         isBottom
           ? "bottom-[calc(1rem+env(safe-area-inset-bottom))] [--toast-offset:calc(100%+var(--spacer-4)+env(safe-area-inset-bottom))]"
           : "top-4 [--toast-offset:calc(-100%-var(--spacer-4))]",
@@ -105,7 +105,7 @@ const ToastAlert = ({ initial }: { initial: AlertPayload | null }) => {
           </div>
           <button
             type="button"
-            className="relative flex size-[1lh] shrink-0 cursor-pointer items-center justify-center text-muted all-unset before:absolute before:-inset-2 before:content-[''] hover:text-primary"
+            className="relative flex size-[1lh] shrink-0 cursor-pointer items-center justify-center all-unset text-muted before:absolute before:-inset-2 before:content-[''] hover:text-primary"
             aria-label="Close"
             onClick={dismiss}
           >

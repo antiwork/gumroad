@@ -28,7 +28,7 @@ export const Chart = ({
   tooltipPosition: { left: number; top: number } | null;
   tooltip: React.ReactNode;
 } & React.ComponentPropsWithoutRef<typeof ComposedChart>) => (
-  <section className="rounded border border-border bg-background p-6 text-foreground">
+  <section className="rounded-(--radius-box) border border-border bg-background p-6 text-foreground">
     <WithTooltip
       tip={tooltip}
       className="block"

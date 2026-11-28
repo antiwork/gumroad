@@ -647,8 +647,8 @@ const CallDateAndTimeSelector = ({
               return (
                 <Label
                   key={time.toISOString()}
-                  className={`justify-center rounded-sm border px-4 py-3 has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-accent ${
-                    isSelected ? "border-indicator bg-background ring-1 ring-indicator" : "border-border"
+                  className={`justify-center rounded-sm border px-4 py-3 has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-indicator ${
+                    isSelected ? "border-indicator bg-background ring-1 ring-indicator" : "border-control"
                   }`}
                 >
                   <input

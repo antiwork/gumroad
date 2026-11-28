@@ -192,7 +192,7 @@ const ImageNodeView = ({ node, editor, getPos }: NodeViewProps) => {
       className={classNames(
         "selection:bg-muted",
         editor.isEditable && "cursor-pointer",
-        hasFocus && "outline-2 outline-accent",
+        hasFocus && "outline-2 outline-indicator",
       )}
       onLoad={() => setIsImageLoaded(true)}
       onClick={handleImageClick}

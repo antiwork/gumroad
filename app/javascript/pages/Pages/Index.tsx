@@ -68,7 +68,7 @@ export default function PagesIndex() {
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <Link href={Routes.edit_page_path("profile")} className="truncate font-medium hover:underline">
+                  <Link href={Routes.edit_page_path("profile")} className="truncate font-bold hover:underline">
                     Home
                   </Link>
                 </div>
@@ -101,7 +101,7 @@ export default function PagesIndex() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <Link href={Routes.edit_page_path(page.slug)} className="truncate font-medium hover:underline">
+                    <Link href={Routes.edit_page_path(page.slug)} className="truncate font-bold hover:underline">
                       {page.title}
                     </Link>
                     {page.custom_html ? <Pill size="small">Custom HTML</Pill> : null}
@@ -146,7 +146,7 @@ export default function PagesIndex() {
                   <Box className="size-5" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <Link href={Routes.products_path()} className="truncate font-medium hover:underline">
+                  <Link href={Routes.products_path()} className="truncate font-bold hover:underline">
                     Product pages
                   </Link>
                   <span className="block truncate text-sm text-muted">

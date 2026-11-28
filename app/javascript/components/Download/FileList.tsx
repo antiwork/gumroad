@@ -850,7 +850,7 @@ const VideoEmbedPreview = ({
           // unknown-dimension boxes keep cropping to fill, so a thumbnail that
           // does not match the video's ratio looks exactly as it does today.
           objectFit: videoFrameIsPortrait(file) ? "contain" : "cover",
-          borderRadius: "var(--border-radius-1) var(--border-radius-1) 0 0",
+          borderRadius: "var(--radius) var(--radius) 0 0",
         }}
       />
       {didPlayerFailToLoad ? (

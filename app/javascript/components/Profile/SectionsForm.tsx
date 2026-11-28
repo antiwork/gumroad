@@ -582,10 +582,10 @@ const RichTextSectionFields = ({
           {editor && !disabled ? (
             <RichTextEditorToolbar
               editor={editor}
-              className="rounded-t rounded-b-none border border-b-0 border-border"
+              className="rounded-t rounded-b-none border border-b-0 border-control"
             />
           ) : null}
-          <EditorContent editor={editor} className="rich-text rounded-b border border-border p-4" />
+          <EditorContent editor={editor} className="rich-text rounded-b border border-control p-4" />
         </div>
       </ImageUploadSettingsContext.Provider>
     </Fieldset>

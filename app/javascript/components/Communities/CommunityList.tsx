@@ -44,14 +44,14 @@ export const CommunityList = ({
         >
           <figure className="shrink-0">
             <img
-              className="flex h-8 w-8 items-center justify-center rounded-sm border border-black object-cover"
+              className="flex h-8 w-8 items-center justify-center rounded-sm border border-border object-cover"
               src={community.thumbnail_url}
             />
           </figure>
           <span className="flex-1 truncate">{community.name}</span>
           {community.unread_count > 0 ? (
             <span
-              className="rounded-xl border border-black bg-pink px-2 text-sm text-black"
+              className="rounded-xl border border-border bg-pink px-2 text-sm text-black"
               aria-label="Unread message count"
             >
               {community.unread_count}
