@@ -96,7 +96,7 @@ describe "Profile settings on product pages", type: :system, js: true do
       expect(page).to_not have_product_card(products[9])
     end
 
-    page.scroll_to :bottom
+    click_on "Load more"
     wait_for_ajax
 
     within_section "More Products", section_element: :section do
