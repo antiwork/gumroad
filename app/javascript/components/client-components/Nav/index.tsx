@@ -408,10 +408,12 @@ export const Nav = (props: Props) => {
         footer={<NavbarFooter />}
         headerAction={<OmnibarTrigger variant="icon" onOpen={omnibar.show} />}
         search={
+          // The sidebar is too narrow for "Search", the shortcut and a microphone: the label was cut to "S…".
+          // The open bar has the microphone and says it takes questions.
           <OmnibarTrigger
             variant="field"
             onOpen={omnibar.show}
-            canAsk={agents.length > 0}
+            microphone={false}
             className="mx-6 mb-6 hidden lg:flex"
           />
         }

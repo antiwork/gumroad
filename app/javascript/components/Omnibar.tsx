@@ -89,6 +89,7 @@ export const OmnibarTrigger = ({
   className,
   canAsk = false,
   compact = false,
+  microphone = true,
 }: {
   variant: "field" | "icon";
   onOpen: (options?: { dictate?: boolean }) => void;
@@ -97,6 +98,8 @@ export const OmnibarTrigger = ({
   canAsk?: boolean;
   // In the phone bar: no shortcut hint and no microphone, which the open bar has.
   compact?: boolean;
+  // Off where the field is too narrow for the label beside it, as in the sidebar. The open bar has one.
+  microphone?: boolean;
 }) => {
   // Both are only known in the browser, so the first render matches the server's without them.
   const [shortcut, setShortcut] = React.useState<{ label: string; keys: string } | null>(null);
@@ -151,7 +154,7 @@ export const OmnibarTrigger = ({
           </kbd>
         ) : null}
       </button>
-      {canDictate && !compact ? (
+      {canDictate && microphone && !compact ? (
         <button
           type="button"
           className={classNames("box-border flex cursor-pointer items-center rounded px-3 all-unset", focusRing)}

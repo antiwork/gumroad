@@ -506,4 +506,18 @@ describe("dashboard nav search", () => {
 
     expect(sessionStorage.getItem("communities:referrer")).toBe("/customers?query=ada");
   });
+
+  // With a microphone beside it, the narrow sidebar field cut "Search" to "S…". The open bar keeps one.
+  it("keeps the sidebar field to the label and the shortcut where the browser can dictate", () => {
+    Reflect.set(window, "webkitSpeechRecognition", vi.fn());
+    try {
+      renderNav();
+
+      expect(screen.queryByRole("button", { name: "Dictate" })).toBeNull();
+      openSearch();
+      expect(screen.getByRole("button", { name: "Dictate" })).toBeTruthy();
+    } finally {
+      Reflect.deleteProperty(window, "webkitSpeechRecognition");
+    }
+  });
 });
