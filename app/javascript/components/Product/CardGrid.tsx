@@ -323,7 +323,10 @@ export const CardGrid = ({
       )}
     >
       {hideFilters ? null : (
-        <UICard className="overflow-y-auto lg:sticky lg:inset-y-4 lg:max-h-[calc(100vh-2rem)]" aria-label="Filters">
+        <UICard
+          className="overflow-y-auto lg:sticky lg:inset-y-4 lg:max-h-[calc(100vh-2rem-var(--dashboard-header-height,0px))]"
+          aria-label="Filters"
+        >
           <CardContent asChild>
             <header>
               {title ?? "Filters"}

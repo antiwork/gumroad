@@ -92,6 +92,7 @@ export default function FollowersPage() {
   return (
     <EmailsLayout
       selectedTab="subscribers"
+      empty={!hasSearchableContent}
       actions={
         <div className="flex flex-wrap gap-2">
           {isSearchVisible.current ? (

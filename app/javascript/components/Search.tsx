@@ -1,7 +1,9 @@
-import { Search as SearchIcon } from "@boxicons/react";
+import { Search as SearchIcon, X } from "@boxicons/react";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
+import { HeaderNavContext } from "$app/components/HeaderNavContext";
+import { useHasPageSearchHost, useRegisterPageSearch } from "$app/components/PageSearch";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
@@ -10,6 +12,8 @@ type SearchProps = {
   onSearch: (query: string) => void;
   value: string;
   placeholder?: string;
+  // What the dashboard's search bar calls this search, where the placeholder is a bare "Search".
+  label?: string;
 };
 
 // Copying an email address from a mail client (notably "Copy" on an email link in iOS Mail) puts
@@ -36,12 +40,29 @@ export const normalizeSearchQuery = (raw: string): string => {
   return decoded.trim();
 };
 
-export const Search = ({ onSearch, value, placeholder = "Search" }: SearchProps) => {
+export const Search = ({ onSearch, value, placeholder = "Search", label }: SearchProps) => {
   const [searchQuery, setSearchQuery] = React.useState(value);
 
   React.useEffect(() => {
     setSearchQuery(value);
   }, [value]);
+
+  // Under the header nav the dashboard's search bar does this page's searching too, so the page
+  // shows no second search control: only what it is filtered by, and a way to clear it.
+  const headerNav = React.useContext(HeaderNavContext);
+  const inSearchBar = useHasPageSearchHost() && headerNav;
+  useRegisterPageSearch(
+    { label: label ?? (placeholder === "Search" ? "Search this page" : placeholder), value, onSearch },
+    inSearchBar,
+  );
+  if (inSearchBar) {
+    return value ? (
+      <Button aria-label={`Clear search for ${value}`} onClick={() => onSearch("")} className="max-w-60">
+        <span className="truncate">“{value}”</span>
+        <X className="size-5 shrink-0" aria-hidden />
+      </Button>
+    ) : null;
+  }
 
   return (
     <Popover>

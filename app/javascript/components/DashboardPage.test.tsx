@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { CurrentSellerProvider, type CurrentSeller } from "$app/components/CurrentSeller";
 import { DashboardPage, type DashboardPageProps } from "$app/components/DashboardPage";
 import { DomainSettingsProvider } from "$app/components/DomainSettings";
+import { HeaderNavContext } from "$app/components/HeaderNavContext";
 import { LoggedInUserProvider, type LoggedInUser } from "$app/components/LoggedInUser";
 import { UserAgentProvider } from "$app/components/UserAgent";
 
@@ -32,6 +33,7 @@ vi.hoisted(() => {
       mcp_path: url("/mcp"),
       new_product_path: url("/products/new"),
       posts_path: url("/posts"),
+      products_path: url("/products"),
       profile_path: url("/profile"),
       sales_dashboard_path: url("/sales"),
       settings_payments_path: url("/settings/payments"),
@@ -77,6 +79,7 @@ const loggedInUser: LoggedInUser = {
   },
   promotedNavItems: [],
   lazyLoadOffscreenDiscoverImages: false,
+  headerNav: false,
 };
 
 const minor: CurrentSeller = {
@@ -133,7 +136,9 @@ const renderDashboard = (
           }}
         >
           <UserAgentProvider value={{ isMobile: false, locale: "en-US" }}>
-            <DashboardPage {...props} {...overrides} />
+            <HeaderNavContext.Provider value={user.headerNav}>
+              <DashboardPage {...props} {...overrides} />
+            </HeaderNavContext.Provider>
           </UserAgentProvider>
         </DomainSettingsProvider>
       </CurrentSellerProvider>
@@ -227,5 +232,25 @@ describe("DashboardPage getting started", () => {
     renderChecklist({ used_cli: true });
 
     expect(bringYourAi()?.getAttribute("data-status")).toBe("completed");
+  });
+});
+
+describe("DashboardPage New product button", () => {
+  const creator: LoggedInUser = {
+    ...loggedInUser,
+    policies: { ...loggedInUser.policies, product: { create: true } },
+  };
+  it("shows beside the sidebar", () => {
+    renderDashboard(minor, {}, creator);
+
+    expect(screen.getByRole("link", { name: "New product" })).toBeTruthy();
+  });
+
+  // The header nav has its own on a wide screen. A phone's bar does not, so the page keeps it there.
+  it("shows on phones only under the header nav", () => {
+    renderDashboard(minor, {}, { ...creator, headerNav: true });
+
+    const wrapper = screen.getByRole("link", { name: "New product" }).parentElement;
+    expect(wrapper?.className.split(" ")).toContain("lg:hidden");
   });
 });

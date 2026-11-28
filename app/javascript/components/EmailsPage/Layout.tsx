@@ -5,7 +5,7 @@ import { EmailTab } from "$app/data/installments";
 
 import { Button } from "$app/components/Button";
 import { Search } from "$app/components/Search";
-import { PageHeader } from "$app/components/ui/PageHeader";
+import { InHeaderNav, PageHeader } from "$app/components/ui/PageHeader";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 
 type LayoutProps = {
@@ -16,6 +16,7 @@ type LayoutProps = {
   onQueryChange?: (query: string) => void;
   hideNewButton?: boolean;
   actions?: React.ReactNode;
+  empty?: boolean;
 };
 
 export const EmailsLayout = ({
@@ -26,6 +27,7 @@ export const EmailsLayout = ({
   onQueryChange,
   hideNewButton,
   actions,
+  empty,
 }: LayoutProps) => {
   const title = selectedTab === "subscribers" ? "Subscribers" : "Emails";
 
@@ -34,13 +36,17 @@ export const EmailsLayout = ({
       {hasPosts && onQueryChange ? (
         <Search value={query ?? ""} onSearch={onQueryChange} placeholder="Search emails" />
       ) : null}
-      {!hideNewButton && <NewEmailButton />}
+      {!hideNewButton && (
+        <InHeaderNav>
+          <NewEmailButton />
+        </InHeaderNav>
+      )}
     </>
   );
 
   return (
     <div>
-      <PageHeader title={title} actions={actions ?? defaultActions}>
+      <PageHeader title={title} actions={actions ?? defaultActions} empty={hasPosts === false || empty === true}>
         <Tabs>
           <Tab asChild isSelected={selectedTab === "published"}>
             <Link href={Routes.published_emails_path()}>Published</Link>

@@ -5,6 +5,7 @@ import { cast } from "$app/utils/cast";
 
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { Search } from "$app/components/Search";
+import { InHeaderNav } from "$app/components/ui/PageHeader";
 
 type Props = {
   query: string;
@@ -22,9 +23,11 @@ export const HeaderButtons = ({ query, setQuery }: Props) => {
   return (
     <>
       {hasProducts ? <Search value={query} onSearch={setQuery} placeholder="Search products" /> : null}
-      <NavigationButtonInertia href={Routes.new_product_path()} disabled={!canCreateProduct} color="accent">
-        New product
-      </NavigationButtonInertia>
+      <InHeaderNav>
+        <NavigationButtonInertia href={Routes.new_product_path()} disabled={!canCreateProduct} color="accent">
+          New product
+        </NavigationButtonInertia>
+      </InHeaderNav>
     </>
   );
 };

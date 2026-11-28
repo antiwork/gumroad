@@ -68,8 +68,11 @@ const ProductsContent = ({
 };
 
 const ProductsIndexPage = () => {
-  const { archived_products_count: archivedProductsCount, piracy_reports_tab_visible: piracyReportsTabVisible } =
-    usePage<ProductsIndexPageProps>().props;
+  const {
+    archived_products_count: archivedProductsCount,
+    piracy_reports_tab_visible: piracyReportsTabVisible,
+    has_products: hasProducts,
+  } = usePage<ProductsIndexPageProps>().props;
   const [enableArchiveTab, setEnableArchiveTab] = React.useState(archivedProductsCount > 0);
 
   const { query, setQuery } = useProductsSearch();
@@ -81,6 +84,7 @@ const ProductsIndexPage = () => {
       archivedTabVisible={enableArchiveTab}
       piracyReportsTabVisible={piracyReportsTabVisible}
       ctaButton={<HeaderButtons query={query} setQuery={setQuery} />}
+      empty={!hasProducts}
     >
       <Deferred data={["memberships_data", "products_data"]} fallback={<ProductsContentLoading />}>
         <ProductsContent query={query} setEnableArchiveTab={setEnableArchiveTab} />

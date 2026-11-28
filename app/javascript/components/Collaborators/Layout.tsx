@@ -10,6 +10,7 @@ type LayoutProps = {
   children: React.ReactNode;
   selectedTab?: "collaborators" | "collaborations";
   showTabs?: boolean;
+  empty?: boolean;
 };
 
 export const Layout = ({
@@ -18,9 +19,10 @@ export const Layout = ({
   children,
   selectedTab = "collaborators",
   showTabs = false,
+  empty,
 }: LayoutProps) => (
   <div>
-    <PageHeader title={title} actions={headerActions}>
+    <PageHeader title={title} actions={headerActions} {...(empty && { empty })}>
       {showTabs ? (
         <Tabs>
           <Tab asChild isSelected={selectedTab === "collaborators"}>

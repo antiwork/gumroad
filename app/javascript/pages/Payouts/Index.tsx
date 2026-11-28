@@ -544,6 +544,13 @@ export default function PayoutsIndex() {
     <div>
       <PageHeader
         title="Payouts"
+        // What PeriodEmpty is shown for: nothing paid, nothing on its way, nothing to pay.
+        empty={
+          past_payout_period_data.length === 0 &&
+          processing_payout_periods_data.length === 0 &&
+          next_payout_period_data?.status === "not_payable" &&
+          !next_payout_period_data.balance_cents
+        }
         actions={
           settingsAction || bulkExportAction ? (
             <div className="flex gap-2">

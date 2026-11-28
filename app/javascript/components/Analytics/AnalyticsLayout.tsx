@@ -13,7 +13,9 @@ export const AnalyticsLayout = ({
   actions,
   title = "Analytics",
   showTabs = true,
+  empty,
 }: {
+  empty?: boolean;
   selectedTab: "following" | "sales" | "churn" | "utm_links";
   children: React.ReactNode;
   actions?: React.ReactNode;
@@ -24,7 +26,7 @@ export const AnalyticsLayout = ({
 
   return (
     <div>
-      <PageHeader title={title} actions={actions}>
+      <PageHeader title={title} actions={actions} {...(empty && { empty })}>
         {showTabs ? (
           <Tabs>
             <Tab asChild isSelected={selectedTab === "following"}>

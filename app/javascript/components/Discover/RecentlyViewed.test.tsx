@@ -49,6 +49,7 @@ const asUser = (id: string): LoggedInUser => ({
   },
   promotedNavItems: [],
   lazyLoadOffscreenDiscoverImages: false,
+  headerNav: false,
 });
 
 const renderRow = (data: RecentlyViewedProps | null, user: LoggedInUser | null = null) =>

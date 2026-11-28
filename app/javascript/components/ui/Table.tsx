@@ -65,7 +65,10 @@ export const TableFooter = ({ className, children, ...props }: React.HTMLAttribu
   </RowGroupContext.Provider>
 );
 
-const TableCellContext = React.createContext<{ label?: React.ReactNode } | null>(null);
+// On a phone a row is a card, not a table row: the first cell is its title, and the rest sit two
+// to a line under it as small label-and-value pairs. A cell with no label (a thumbnail, a row's
+// buttons) takes a full line unless its own classes say otherwise.
+const TableCellContext = React.createContext<{ label?: React.ReactNode; primary: boolean } | null>(null);
 
 export const TableRow = ({
   className,
@@ -90,7 +93,7 @@ export const TableRow = ({
   }, [children, rowGroup]);
 
   const cellContexts = React.useMemo(
-    () => React.Children.map(children, (_, index) => ({ label: headers?.[index] })) ?? [],
+    () => React.Children.map(children, (_, index) => ({ label: headers?.[index], primary: index === 0 })) ?? [],
     [children, headers],
   );
 
@@ -98,7 +101,7 @@ export const TableRow = ({
     <tr
       aria-selected={selected}
       className={classNames(
-        "block rounded-sm border border-border lg:table-row",
+        "flex flex-wrap items-start gap-x-4 gap-y-3 rounded-sm border border-border p-4 lg:table-row",
         rowGroup === "body" && "bg-background",
         selected != null && "cursor-pointer hover:bg-active-bg",
         selected && "bg-active-bg",
@@ -136,7 +139,7 @@ export const TableHead = ({
       onClick={onSort}
       className={classNames(
         "px-4 py-3 text-left align-middle lg:table-cell lg:whitespace-nowrap",
-        rowGroup === "body" && "lg:border-t lg:border-border",
+        rowGroup === "body" && "max-lg:basis-full max-lg:p-0 lg:border-t lg:border-border",
         cellRoundingClasses,
         scope === "row" && "font-normal",
         sortDirection && "cursor-pointer",
@@ -167,18 +170,25 @@ export const TableCell = ({
   label?: React.ReactNode;
 }) => {
   const cellContext = React.useContext(TableCellContext);
+  const cellLabel = label ?? cellContext?.label;
+  // The card's title needs no label: it is the first thing in the card, and says what it is.
+  const primary = cellContext?.primary === true && !!cellLabel;
   return (
     <td
       className={classNames(
-        "block p-4 text-left align-middle not-first:border-t not-first:border-border lg:table-cell lg:border-t lg:border-border",
+        "block min-w-0 grow text-left align-middle lg:table-cell lg:border-t lg:border-border lg:p-4",
+        cellLabel && !hideLabel && !primary ? "basis-[calc(50%-0.5rem)]" : "basis-full",
+        primary && "max-lg:font-bold",
+        // The cell after a thumbnail shares its line: the full width less the thumbnail and the gap.
+        "max-lg:[[data-thumbnail]+&]:basis-[calc(100%-4rem)]",
         cellRoundingClasses,
         className,
       )}
       {...props}
     >
-      {label || cellContext?.label ? (
-        <div className={classNames("mb-2 font-bold lg:hidden", hideLabel && "sr-only relative")}>
-          {label ?? cellContext?.label}
+      {cellLabel ? (
+        <div className={classNames("mb-1 text-sm lg:hidden", (hideLabel || primary) && "sr-only relative")}>
+          {cellLabel}
         </div>
       ) : null}
       {children}

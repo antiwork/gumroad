@@ -30,14 +30,18 @@ import * as React from "react";
 
 import { escapeRegExp } from "$app/utils";
 import { classNames } from "$app/utils/classNames";
+import { type OmnibarAgent, type OmnibarShortcut } from "$app/utils/omnibar";
 import { initTeamMemberReadOnlyAccess } from "$app/utils/team_member_read_only";
 
 import NavbarFooter from "$app/components/client-components/Nav/footer";
+import { HeaderNav } from "$app/components/client-components/Nav/header";
 import { CloseOnNavigate } from "$app/components/CloseOnNavigate";
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useAppDomain, useDiscoverUrl } from "$app/components/DomainSettings";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Nav as NavFramework, NavSection } from "$app/components/Nav";
+import { OmnibarDialog, OmnibarTrigger, useOmnibar } from "$app/components/Omnibar";
+import { usePageSearch } from "$app/components/PageSearch";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 type Props = {
@@ -45,7 +49,10 @@ type Props = {
   compact?: boolean;
 };
 
-const matchesCurrentPath = ({
+// Matches the phone bar's transition in Nav.tsx (duration-200), less a beat so the two overlap.
+const SEARCH_EXPAND_MS = 180;
+
+export const matchesCurrentPath = ({
   href,
   additionalPatterns = [],
   exactHrefMatch,
@@ -112,7 +119,7 @@ export const ClientNavLink = ({
 // names, so renaming one here needs the same rename in app/models/dashboard_nav.rb.
 const CORE_ITEMS = ["home", "products", "sales", "payouts", "discover"];
 
-type NavItem = {
+export type NavItem = {
   key: string;
   // The existing per-row authorization gate, independent of promotion: a row the user may not open
   // does not appear even inside "Everything else".
@@ -121,17 +128,22 @@ type NavItem = {
   exactHrefMatch?: boolean;
   additionalPatterns?: string[];
   text: string;
+  // Other words a seller might type for this destination in the search bar.
+  keywords: string;
   icon: React.ReactNode;
-  onClick?: (event: React.MouseEvent) => void;
+  // Runs before the visit, whether it starts from the row or from the search bar.
+  onClick?: () => void;
 };
 
-const renderItem = ({ key, visible: _visible, ...link }: NavItem) => <ClientNavLink key={key} {...link} />;
+const renderItem = ({ key, visible: _visible, keywords: _keywords, ...link }: NavItem) => (
+  <ClientNavLink key={key} {...link} />
+);
 
 // Overflow rows must NOT prefetch. Inertia prefetches on hover and a later click adopts that
 // in-flight or cached response instead of issuing its own request, so the visit that is supposed to
 // earn the row would never reach the server. Once promoted the row moves up here, where hover
 // prefetch is free again because promoting an already-recorded item is a no-op.
-const renderOverflowItem = ({ key, visible: _visible, ...link }: NavItem) => (
+const renderOverflowItem = ({ key, visible: _visible, keywords: _keywords, ...link }: NavItem) => (
   <ClientNavLink key={key} {...link} prefetch={false} />
 );
 
@@ -164,6 +176,7 @@ export const Nav = (props: Props) => {
   const navItems: NavItem[] = [
     {
       key: "home",
+      keywords: "dashboard overview",
       visible: true,
       text: "Home",
       icon: <HomeAlt2 pack="filled" className="size-5" />,
@@ -172,6 +185,7 @@ export const Nav = (props: Props) => {
     },
     {
       key: "profile",
+      keywords: "store storefront",
       visible: !!currentSeller,
       text: "Profile",
       icon: <Store pack="filled" className="size-5" />,
@@ -182,6 +196,7 @@ export const Nav = (props: Props) => {
       // Pages sits alongside Profile: Profile jumps straight to the public storefront, while Pages
       // manages the full page tree (with the profile pinned as its home page).
       key: "pages",
+      keywords: "landing links",
       visible: !!currentSeller && !!loggedInUser?.policies.page.index,
       text: "Pages",
       icon: <FileDetail pack="filled" className="size-5" />,
@@ -190,6 +205,7 @@ export const Nav = (props: Props) => {
     },
     {
       key: "products",
+      keywords: "bundles memberships",
       visible: true,
       text: "Products",
       icon: <ArchiveAlt pack="filled" className="size-5" />,
@@ -198,6 +214,7 @@ export const Nav = (props: Props) => {
     },
     {
       key: "collaborators",
+      keywords: "collabs partners",
       visible: !!loggedInUser?.policies.collaborator.create,
       text: "Collaborators",
       icon: <Handshake pack="filled" className="size-5" />,
@@ -205,6 +222,7 @@ export const Nav = (props: Props) => {
     },
     {
       key: "checkout",
+      keywords: "discounts offer codes upsells form",
       visible: true,
       text: "Checkout",
       icon: <Cart pack="filled" className="size-5" />,
@@ -213,6 +231,7 @@ export const Nav = (props: Props) => {
     },
     {
       key: "emails",
+      keywords: "posts broadcasts newsletter followers subscribers",
       visible: true,
       text: "Emails",
       icon: <Envelope pack="filled" className="size-5" />,
@@ -221,6 +240,7 @@ export const Nav = (props: Props) => {
     },
     {
       key: "workflows",
+      keywords: "automation drip sequence",
       visible: true,
       text: "Workflows",
       icon: <Workflow pack="filled" className="size-5" />,
@@ -228,6 +248,7 @@ export const Nav = (props: Props) => {
     },
     {
       key: "sales",
+      keywords: "customers buyers orders refunds",
       visible: true,
       text: "Sales",
       icon: <DollarCircle pack="filled" className="size-5" />,
@@ -235,6 +256,7 @@ export const Nav = (props: Props) => {
     },
     {
       key: "analytics",
+      keywords: "stats audience utm links churn",
       visible: true,
       text: "Analytics",
       icon: <BarChartBig pack="filled" className="size-5" />,
@@ -247,6 +269,7 @@ export const Nav = (props: Props) => {
     },
     {
       key: "affiliates",
+      keywords: "referrals",
       visible: true,
       text: "Affiliates",
       icon: <Gift pack="filled" className="size-5" />,
@@ -254,6 +277,7 @@ export const Nav = (props: Props) => {
     },
     {
       key: "payouts",
+      keywords: "balance bank money payments",
       visible: !!loggedInUser?.policies.balance.index,
       text: "Payouts",
       icon: <Bank pack="filled" className="size-5" />,
@@ -261,6 +285,7 @@ export const Nav = (props: Props) => {
     },
     {
       key: "community",
+      keywords: "chat",
       visible: !!loggedInUser?.policies.community.index,
       text: "Community",
       icon: <MessageBubble pack="filled" className="size-5" />,
@@ -271,6 +296,7 @@ export const Nav = (props: Props) => {
     },
     {
       key: "library",
+      keywords: "purchases wishlists reviews",
       visible: currentSeller?.id === loggedInUser?.id,
       text: "Library",
       icon: <BookmarkHeart pack="filled" className="size-5" />,
@@ -279,6 +305,7 @@ export const Nav = (props: Props) => {
     },
     {
       key: "discover",
+      keywords: "marketplace browse",
       visible: true,
       text: "Discover",
       icon: <Search className="size-5" />,
@@ -296,14 +323,143 @@ export const Nav = (props: Props) => {
   const visibleItems = navItems.filter((item) => item.visible);
   const overflow = visibleItems.filter((item) => !isPinned(item));
 
+  const omnibar = useOmnibar();
+  // Each opens the assistant's own chat with the question typed in; its Gumroad connector does the rest.
+  const askQuestion = (question: string) => encodeURIComponent(`In my Gumroad store: ${question}`);
+  const agents: OmnibarAgent[] = (loggedInUser?.askAgents ?? []).map((agent) =>
+    agent === "claude"
+      ? { id: agent, name: "Claude", href: (question) => `https://claude.ai/new?q=${askQuestion(question)}` }
+      : { id: agent, name: "ChatGPT", href: (question) => `https://chatgpt.com/?q=${askQuestion(question)}` },
+  );
+  const pageSearch = usePageSearch();
+  // The search bar offers every destination, including the ones still under "Everything else".
+  // Shortcuts carry `id`, not `key`: dashboard_nav_spec.rb reads every `key: "…"` line in this
+  // file as a nav item the server must know.
+  const pages: OmnibarShortcut[] = [
+    ...visibleItems.map(({ key, text, href, keywords, onClick }) => ({
+      id: key,
+      title: text,
+      href,
+      keywords,
+      onSelect: onClick,
+    })),
+    {
+      id: "settings",
+      title: "Settings",
+      href: Routes.settings_main_url(routeParams),
+      keywords: "account preferences",
+    },
+    { id: "help", title: "Help", href: Routes.help_center_root_url(routeParams), keywords: "support docs" },
+  ];
+  const policies = loggedInUser?.policies;
+  const actions: OmnibarShortcut[] = [
+    {
+      id: "new-product",
+      title: "New product",
+      href: Routes.new_product_url(routeParams),
+      allowed: policies?.product.create,
+    },
+    {
+      id: "new-email",
+      title: "New email",
+      href: Routes.new_email_url(routeParams),
+      allowed: policies?.installment.create,
+    },
+    {
+      id: "new-workflow",
+      title: "New workflow",
+      href: Routes.new_workflow_url(routeParams),
+      allowed: policies?.workflow.create,
+    },
+  ].flatMap(({ allowed, ...action }) => (allowed ? [{ ...action, keywords: "create add" }] : []));
+
+  const pinned = visibleItems.filter(isPinned);
+  // On trial: a horizontal header on wide screens. Phones keep the drawer either way.
+  const headerNav = !!loggedInUser?.headerNav;
+  // The header drops links from the end when it runs out of room, so the core ones go first.
+  const isCore = (item: NavItem) => CORE_ITEMS.includes(item.key);
+  const headerLinks = [...pinned.filter(isCore), ...pinned.filter((item) => !isCore(item))];
+  // The header's create button leads with what the section being viewed makes, since the pages
+  // no longer carry a "New email" or "New workflow" button of their own.
+  const sectionAction = { emails: "new-email", workflows: "new-workflow" }[
+    visibleItems.find(matchesCurrentPath)?.key ?? ""
+  ];
+  const headerActions = [...actions].sort((a, b) => Number(b.id === sectionAction) - Number(a.id === sectionAction));
+  // On a phone the search field first takes the whole bar, then the search bar opens over it.
+  const [searchExpanding, setSearchExpanding] = React.useState(false);
+  React.useEffect(() => {
+    if (!searchExpanding) return;
+    const timeout = window.setTimeout(() => {
+      omnibar.show();
+      setSearchExpanding(false);
+    }, SEARCH_EXPAND_MS);
+    return () => window.clearTimeout(timeout);
+  }, [searchExpanding]);
+  const openPhoneSearch = () => {
+    const reduceMotion =
+      typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduceMotion) omnibar.show();
+    else setSearchExpanding(true);
+  };
+
   return (
-    <NavFramework footer={<NavbarFooter />} {...props}>
-      <CloseOnNavigate />
-      <NavSection>
-        {visibleItems.filter(isPinned).map(renderItem)}
-        {overflow.length > 0 ? <EverythingElse>{overflow.map(renderOverflowItem)}</EverythingElse> : null}
-      </NavSection>
-    </NavFramework>
+    <>
+      <NavFramework
+        footer={<NavbarFooter />}
+        headerAction={<OmnibarTrigger variant="icon" onOpen={omnibar.show} />}
+        search={
+          // The sidebar is too narrow for "Search", the shortcut and a microphone: the label was cut to "S…".
+          // The open bar has the microphone and says it takes questions.
+          <OmnibarTrigger
+            variant="field"
+            onOpen={omnibar.show}
+            microphone={false}
+            className="mx-6 mb-6 hidden lg:flex"
+          />
+        }
+        {...(headerNav && {
+          className: "lg:hidden",
+          phoneBar: {
+            search: (
+              <OmnibarTrigger
+                variant="field"
+                compact
+                onOpen={openPhoneSearch}
+                canAsk={agents.length > 0}
+                className="flex h-10 min-w-0 flex-1"
+              />
+            ),
+            searchExpanded: searchExpanding || omnibar.open,
+          },
+        })}
+        {...props}
+      >
+        <CloseOnNavigate />
+        <NavSection>
+          {pinned.map(renderItem)}
+          {overflow.length > 0 ? <EverythingElse>{overflow.map(renderOverflowItem)}</EverythingElse> : null}
+        </NavSection>
+      </NavFramework>
+      {headerNav ? (
+        <HeaderNav
+          links={headerLinks}
+          more={overflow}
+          actions={headerActions}
+          homeHref={Routes.root_url()}
+          onOpenSearch={omnibar.show}
+          canAsk={agents.length > 0}
+        />
+      ) : null}
+      <OmnibarDialog
+        open={omnibar.open}
+        dictate={omnibar.dictate}
+        onClose={omnibar.hide}
+        pages={pages}
+        actions={actions}
+        pageSearch={pageSearch}
+        agents={agents}
+      />
+    </>
   );
 };
 

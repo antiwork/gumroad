@@ -7,6 +7,7 @@ import { assertResponseError, request, ResponseError } from "$app/utils/request"
 
 import { TeamMembership } from "$app/components/LoggedInUser";
 import { Logo } from "$app/components/Logo";
+import { usePageSlotRefs } from "$app/components/PageSlots";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Avatar } from "$app/components/ui/Avatar";
 import { MenuItem, MenuItemRadio } from "$app/components/ui/Menu";
@@ -120,9 +121,24 @@ type Props = {
   children: React.ReactNode;
   title: string;
   footer: React.ReactNode;
+  // Search has two homes: beside the menu button on a phone, under the logo on a wide screen.
+  headerAction?: React.ReactNode;
+  search?: React.ReactNode;
+  className?: string;
+  // The header nav's phone bar: the wordmark, a search field, the menu button.
+  // `searchExpanded` gives the field the whole bar while search is opening or open.
+  phoneBar?: { search: React.ReactNode; searchExpanded: boolean };
 };
 
-export const Nav = ({ title, children, footer }: Props) => {
+// A part of the phone bar that slides shut and fades as the search field takes the bar.
+const collapsible = (collapsed: boolean, collapsedMargin: string) =>
+  classNames(
+    "flex shrink-0 items-center overflow-hidden transition-[max-width,opacity,margin] duration-200 motion-reduce:transition-none",
+    collapsed ? ["max-w-0 opacity-0", collapsedMargin] : "max-w-40",
+  );
+
+export const Nav = ({ title, children, footer, headerAction, search, className, phoneBar }: Props) => {
+  const slotRefs = usePageSlotRefs();
   const [open, setOpen] = React.useState(false);
   const [showScrollFade, setShowScrollFade] = React.useState(false);
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
@@ -164,24 +180,66 @@ export const Nav = ({ title, children, footer }: Props) => {
         className={classNames(
           "flex max-h-full flex-col overflow-x-hidden bg-black text-white lg:static lg:w-52 dark:text-foreground",
           { "fixed z-10 size-full": open },
+          className,
         )}
       >
-        <div className="override grid grid-cols-[auto_1fr_auto] items-center gap-3 p-4 text-lg leading-6 lg:hidden">
-          <a href={Routes.root_url()} className="no-underline">
-            <img src={logo} className="size-6" alt="Home" />
-          </a>
-          <h1 className="w-full truncate text-center text-base">{title}</h1>
-          <button className="all-unset" aria-label="Toggle navigation" onClick={toggle}>
-            {open ? <X className="size-5" /> : <Menu className="size-5" />}
-          </button>
-        </div>
+        {phoneBar ? (
+          <div className="override flex items-center gap-3 p-4 text-lg leading-6 lg:hidden">
+            <a
+              href={Routes.root_url()}
+              aria-label="Home"
+              inert={phoneBar.searchExpanded}
+              // The negative margin takes back the gap the collapsed part would still leave.
+              className={classNames("no-underline", collapsible(phoneBar.searchExpanded, "-mr-3"))}
+            >
+              <Logo className="h-5" />
+            </a>
+            {phoneBar.search}
+            <div
+              inert={phoneBar.searchExpanded}
+              className={classNames("gap-4", collapsible(phoneBar.searchExpanded, "-ml-3"))}
+            >
+              <button className="all-unset" aria-label="Toggle navigation" onClick={toggle}>
+                {open ? <X className="size-5" /> : <Menu className="size-5" />}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="override grid grid-cols-[auto_1fr_auto] items-center gap-3 p-4 text-lg leading-6 lg:hidden">
+            {/* As wide as the two buttons opposite, so the title between them stays centred. */}
+            <a href={Routes.root_url()} className={classNames("no-underline", { "min-w-14": !!headerAction })}>
+              <img src={logo} className="size-6" alt="Home" />
+            </a>
+            <h1 className="w-full truncate text-center text-base">{title}</h1>
+            <div className="flex items-center gap-4">
+              {headerAction}
+              <button className="all-unset" aria-label="Toggle navigation" onClick={toggle}>
+                {open ? <X className="size-5" /> : <Menu className="size-5" />}
+              </button>
+            </div>
+          </div>
+        )}
         <header className="hidden p-6 lg:grid">
           <a href={Routes.root_url()} aria-label="Dashboard" className="no-underline">
             <Logo className="w-full text-[2.5rem] leading-[1.2]" />
           </a>
         </header>
+        {search}
         <div className="relative flex min-h-0 flex-1 flex-col">
           <div ref={scrollContainerRef} className="min-h-0 flex-1 overflow-y-auto" onScroll={updateScrollFade}>
+            {/* The tabs of the page being viewed, which a phone under the header nav keeps here. */}
+            {phoneBar ? (
+              <div
+                ref={slotRefs?.setNavTabs}
+                onClick={close}
+                className={classNames(
+                  "mb-4 border-b border-white/50 empty:hidden lg:hidden dark:border-foreground/50",
+                  {
+                    hidden: !open,
+                  },
+                )}
+              />
+            ) : null}
             {children}
           </div>
           {showScrollFade ? (

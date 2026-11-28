@@ -21,6 +21,7 @@ vi.mock("@inertiajs/react", () => ({
     className,
     onClick,
     "aria-current": ariaCurrent,
+    "data-key": dataKey,
   }: {
     children?: React.ReactNode;
     prefetch?: unknown;
@@ -29,15 +30,23 @@ vi.mock("@inertiajs/react", () => ({
     className?: string;
     onClick?: (event: React.MouseEvent) => void;
     "aria-current"?: "page" | undefined;
+    "data-key"?: string;
   }) => {
     if (title !== undefined) linkPropsByText.set(title, { prefetch });
     return (
-      <a href={href} title={title} className={className} onClick={onClick} aria-current={ariaCurrent}>
+      <a
+        href={href}
+        title={title}
+        className={className}
+        onClick={onClick}
+        aria-current={ariaCurrent}
+        data-key={dataKey}
+      >
         {children}
       </a>
     );
   },
-  router: { on: () => () => undefined },
+  router: { on: () => () => undefined, visit: () => undefined },
 }));
 
 beforeEach(() => linkPropsByText.clear());
@@ -72,6 +81,9 @@ beforeAll(() => {
       wishlists_url: url("/wishlists"),
       reviews_url: url("/reviews"),
       settings_main_url: url("/settings/main"),
+      new_product_url: url("/products/new"),
+      new_email_url: url("/emails/new"),
+      new_workflow_url: url("/workflows/new"),
       settings_team_url: url("/settings/team"),
       help_center_root_url: url("/help"),
       logout_url: url("/logout"),
@@ -119,6 +131,7 @@ const buildUser = (promotedNavItems: string[]): LoggedInUser => ({
   willCopyBankPayout: false,
   promotedNavItems,
   lazyLoadOffscreenDiscoverImages: false,
+  headerNav: false,
   policies: {
     affiliate_requests_onboarding_form: { update: true },
     direct_affiliate: { create: true, update: true },
@@ -385,5 +398,126 @@ describe("dashboard nav progressive disclosure", () => {
     // A promoted row sits at the top level, where prefetching costs nothing: promoting an
     // already-recorded destination is a no-op.
     expect(linkPropsByText.get("Products")?.prefetch).not.toBe(false);
+  });
+});
+
+describe("dashboard header nav", () => {
+  const navs = () => screen.getAllByRole("navigation", { name: "Main" });
+  // The destinations: the links that carry a key, in the order they are laid out.
+  const linkTexts = (nav: HTMLElement) => [...nav.querySelectorAll("a[data-key]")].map((link) => link.textContent);
+
+  it("is not rendered unless the user is on the trial", () => {
+    renderNav();
+
+    expect(navs()).toHaveLength(1);
+    expect(navs()[0]?.className.split(" ")).not.toContain("lg:hidden");
+  });
+
+  it("replaces the sidebar on a wide screen and leaves the drawer to phones", () => {
+    renderNav({
+      withUser: (user) => {
+        user.headerNav = true;
+      },
+    });
+
+    const [drawer, header] = navs();
+    expect(drawer?.className.split(" ")).toContain("lg:hidden");
+    expect(header?.className.split(" ")).toEqual(expect.arrayContaining(["hidden", "lg:flex"]));
+  });
+
+  // The header drops links from the end when it runs out of room.
+  it("puts the core destinations before the promoted ones", () => {
+    renderNav({
+      promoted: ["profile", "workflows"],
+      withUser: (user) => {
+        user.headerNav = true;
+      },
+    });
+
+    const header = navs()[1];
+    if (!header) throw new Error("Expected the header nav");
+    expect(linkTexts(header).slice(0, 7)).toEqual([
+      "Home",
+      "Products",
+      "Sales",
+      "Payouts",
+      "Discover",
+      "Profile",
+      "Workflows",
+    ]);
+    expect(within(header).queryByRole("link", { name: "Emails" })).toBeNull();
+    fireEvent.click(within(header).getByRole("button", { name: "More" }));
+    expect(within(header).getByRole("link", { name: "Emails" })).toBeTruthy();
+  });
+});
+
+describe("dashboard nav search", () => {
+  // The phone header's icon and the sidebar's field both render here; CSS shows one at a time.
+  const openSearch = () => {
+    const [trigger] = screen.getAllByRole("button", { name: "Search" });
+    if (!trigger) throw new Error("Expected a search trigger in the nav");
+    fireEvent.click(trigger);
+  };
+  const optionNames = () => screen.getAllByRole("option").map((option) => option.textContent);
+
+  it("offers every destination, including the ones still under Everything else", () => {
+    renderNav();
+    expect(screen.queryByRole("link", { name: "Workflows" })).toBeNull();
+
+    openSearch();
+
+    expect(optionNames()).toEqual(expect.arrayContaining(["Home", "Workflows", "Sales", "Settings", "Help"]));
+  });
+
+  it("offers the create actions the user's policies allow", () => {
+    renderNav({
+      withUser: (user) => {
+        user.policies.installment.create = false;
+        user.policies.workflow.create = false;
+      },
+    });
+
+    openSearch();
+
+    expect(optionNames()).toContain("New product");
+    expect(optionNames()).not.toContain("New email");
+    expect(optionNames()).not.toContain("New workflow");
+  });
+
+  it("does not offer a destination the user's policies forbid", () => {
+    renderNav({
+      withUser: (user) => {
+        user.policies.community.index = false;
+      },
+    });
+
+    openSearch();
+
+    expect(optionNames()).not.toContain("Community");
+  });
+
+  // Community's "Go back" returns to the page stored here, whichever way the seller got there.
+  it("remembers where Community was opened from, as the nav row does", () => {
+    sessionStorage.removeItem("communities:referrer");
+    renderNav({ path: "/customers?query=ada" });
+
+    openSearch();
+    fireEvent.click(screen.getByRole("option", { name: "Community" }));
+
+    expect(sessionStorage.getItem("communities:referrer")).toBe("/customers?query=ada");
+  });
+
+  // With a microphone beside it, the narrow sidebar field cut "Search" to "S…". The open bar keeps one.
+  it("keeps the sidebar field to the label and the shortcut where the browser can dictate", () => {
+    Reflect.set(window, "webkitSpeechRecognition", vi.fn());
+    try {
+      renderNav();
+
+      expect(screen.queryByRole("button", { name: "Dictate" })).toBeNull();
+      openSearch();
+      expect(screen.getByRole("button", { name: "Dictate" })).toBeTruthy();
+    } finally {
+      Reflect.deleteProperty(window, "webkitSpeechRecognition");
+    }
   });
 });

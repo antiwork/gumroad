@@ -1,4 +1,4 @@
-import { ArrowInDownSquareHalf, Pencil, Search, Trash } from "@boxicons/react";
+import { ArrowInDownSquareHalf, Pencil, Search as SearchIcon, Trash } from "@boxicons/react";
 import { Link, router, useForm, usePage } from "@inertiajs/react";
 import cx from "classnames";
 import { parseISO } from "date-fns";
@@ -15,6 +15,7 @@ import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/components/Popover";
+import { Search } from "$app/components/Search";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Skeleton } from "$app/components/Skeleton";
 import { Card, CardContent } from "$app/components/ui/Card";
@@ -77,13 +78,13 @@ const SearchBoxPopover = ({ initialQuery, onSearch }: { initialQuery: string; on
       <PopoverAnchor>
         <PopoverTrigger aria-label="Toggle Search" asChild>
           <Button size="icon">
-            <Search className="size-5" />
+            <SearchIcon className="size-5" />
           </Button>
         </PopoverTrigger>
       </PopoverAnchor>
       <PopoverContent>
         <InputGroup>
-          <Search className="size-5 text-muted" />
+          <SearchIcon className="size-5 text-muted" />
           <Input value={inputValue} type="text" placeholder="Search" aria-label="Search" onChange={handleChange} />
         </InputGroup>
       </PopoverContent>
@@ -326,7 +327,11 @@ export default function AffiliatesIndex() {
         title="Affiliates"
         actions={
           <>
-            <SearchBoxPopover onSearch={onSearch} initialQuery={searchQuery} />
+            {loggedInUser?.headerNav ? (
+              <Search value={searchQuery} onSearch={onSearch} placeholder="Search affiliates" />
+            ) : (
+              <SearchBoxPopover onSearch={onSearch} initialQuery={searchQuery} />
+            )}
             <WithTooltip position="bottom" tip={affiliates_disabled_reason}>
               <NavigationButtonInertia
                 href={Routes.new_affiliate_path()}

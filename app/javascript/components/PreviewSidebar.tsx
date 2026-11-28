@@ -4,6 +4,7 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 
 import { Button } from "$app/components/Button";
+import { HeaderNavContext } from "$app/components/HeaderNavContext";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { useWindowDimensions } from "$app/components/useWindowDimensions";
 import { WithTooltip } from "$app/components/WithTooltip";
@@ -210,6 +211,8 @@ export const PreviewSidebar = ({
   const dimensions = useWindowDimensions();
   const modeContext = React.useContext(MobilePreviewModeContext);
   const mode = modeContext?.mode ?? "edit";
+  // Under the header nav the page's buttons are in a bar along the bottom, which the pill clears.
+  const pillBottom = React.useContext(HeaderNavContext) ? "5.5rem" : "1rem";
   // Below lg the aside is `display:none` and the pane below renders the same preview, so rendering
   // it here as well mounts the preview twice — and in Edit mode mounts one the seller can never
   // see. Previews are live pages, not thumbnails, so that is a whole page load.
@@ -219,7 +222,7 @@ export const PreviewSidebar = ({
     <>
       <aside
         className={cx(
-          "sticky top-0 hidden h-screen flex-col gap-4 self-start overflow-y-auto bg-background p-6 lg:flex lg:border-l lg:border-border",
+          "sticky top-0 hidden h-[calc(100dvh-var(--dashboard-header-height,0px))] flex-col gap-4 self-start overflow-y-auto bg-background p-6 lg:flex lg:border-l lg:border-border",
           className,
         )}
         // The old visible "Preview" heading is gone (the PreviewChrome bar announces the
@@ -248,7 +251,7 @@ export const PreviewSidebar = ({
           {createPortal(
             <div
               className="fixed inset-x-0 z-[9] flex justify-center lg:hidden"
-              style={{ bottom: "calc(1rem + env(safe-area-inset-bottom))" }}
+              style={{ bottom: `calc(${pillBottom} + env(safe-area-inset-bottom))` }}
             >
               <div
                 role="tablist"

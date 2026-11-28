@@ -250,6 +250,7 @@ const CustomersPage = ({
     <div className="h-full">
       <PageHeader
         title="Sales"
+        empty={customers.length === 0 && searchQuery === null && !hasActiveFilters}
         actions={
           <div className="flex flex-wrap gap-2">
             <Search value={searchQuery ?? ""} onSearch={(query) => updateQuery({ query })} placeholder="Search sales" />

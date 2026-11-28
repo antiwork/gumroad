@@ -66,7 +66,24 @@ module RenderingExtension
         policies: policies_props(pundit_user),
         promoted_nav_items: user.promoted_nav_item_keys,
         lazy_load_offscreen_discover_images: Feature.active?(:lazy_load_offscreen_discover_images, user),
+        # The dashboard's horizontal header, on trial beside the sidebar.
+        header_nav: Feature.active?(:dashboard_header_nav, user),
+        ask_agents: Feature.active?(:dashboard_header_nav, user) ? ask_agents(user) : [],
       }
+    end
+
+    # AI assistants whose chat can be opened with a question already typed, matched on the name
+    # the assistant registered its Gumroad connector under.
+    ASK_AGENT_NAMES = { "claude" => /claude|anthropic/i, "chatgpt" => /chatgpt|openai/i }.freeze
+    private_constant :ASK_AGENT_NAMES
+
+    # The ones this user has connected to Gumroad, for the search bar's "Ask" rows.
+    def ask_agents(user)
+      names = OauthApplication.where(mcp_dynamic_client: true)
+                              .joins(:access_tokens)
+                              .where(oauth_access_tokens: { resource_owner_id: user.id, revoked_at: nil })
+                              .distinct.pluck(:name)
+      ASK_AGENT_NAMES.filter_map { |agent, pattern| agent if names.any? { |name| pattern.match?(name) } }
     end
 
     # Policies accessible via loggedInUser

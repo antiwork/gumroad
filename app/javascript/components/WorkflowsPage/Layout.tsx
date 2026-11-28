@@ -13,14 +13,21 @@ type LayoutProps = {
   // The sender line the workflow's emails actually go out with (from the server's mailer
   // config) — required whenever a preview is shown, since the preview is of emails.
   emailFrom?: string;
+  empty?: boolean;
 };
 
-export const Layout = ({ title, actions, navigation, children, preview, emailFrom }: LayoutProps) => {
+export const Layout = ({ title, actions, navigation, children, preview, emailFrom, empty }: LayoutProps) => {
   const headerRef = usePageHeaderOffset();
 
   return (
     <>
-      <PageHeader ref={headerRef} className="sticky top-0 z-10 bg-body" title={title} actions={actions}>
+      <PageHeader
+        ref={headerRef}
+        className="sticky top-0 z-10 bg-body"
+        title={title}
+        actions={actions}
+        {...(empty && { empty })}
+      >
         {navigation ?? null}
       </PageHeader>
       {preview && emailFrom ? (

@@ -1,9 +1,36 @@
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
 import * as React from "react";
+import { createPortal } from "react-dom";
 
 import { classNames } from "$app/utils/classNames";
 import { selectAdjacentRadio, useRadioGroupTabStop } from "$app/utils/radioGroupKeyboard";
+
+import { TextTabsContext, useIsBelowWide } from "$app/components/HeaderNavContext";
+import { usePageSlots } from "$app/components/PageSlots";
+
+// Wide screens only: a phone keeps the pills, which are easier to tap. The negative margins cancel
+// the page header's padding, so the selected tab's bar sits on the header's bottom border.
+// Important throughout: these override the pill's own classes, which come later in the stylesheet.
+const textTabsClasses = {
+  row: "lg:-my-2! lg:gap-6!",
+  stacked: "lg:-mb-8! lg:gap-6!",
+  // In the phone's menu: a list, like the destinations under it.
+  menu: "flex-col! gap-0! overflow-visible!",
+};
+const wideTextTab =
+  "lg:rounded-none! lg:border-0! lg:bg-transparent! lg:px-0! lg:hover:shadow-[inset_0_-0.125rem_0_var(--color-border)]";
+const textTabClasses = {
+  row: classNames(wideTextTab, "lg:py-5!"),
+  stacked: classNames(wideTextTab, "lg:pt-0! lg:pb-4!"),
+  menu: "rounded-none! border-0! bg-transparent! px-6! py-4! text-inherit! hover:text-accent",
+};
+const selectedTextTabClasses = {
+  row: "lg:font-bold lg:shadow-[inset_0_-0.125rem_0_currentColor]!",
+  stacked: "lg:font-bold lg:shadow-[inset_0_-0.125rem_0_currentColor]!",
+  // Bold and a bar as well as the accent, so the state does not rest on colour alone.
+  menu: "font-bold text-accent! shadow-[inset_0.25rem_0_0_var(--color-accent)]",
+};
 
 const tabsVariants = cva("", {
   variants: {
@@ -77,10 +104,16 @@ export const Tabs = React.forwardRef<HTMLDivElement, TabsProps>(
       if ("fonts" in document) void document.fonts.ready.then(align);
     }, []);
 
+    const textTabsContext = React.useContext(TextTabsContext);
+    const { navTabs } = usePageSlots();
+    const isBelowWide = useIsBelowWide();
+    const inPageHeader = (variant ?? "pills") === "pills" ? textTabsContext : null;
+    // A phone has no room for a row of tabs under the bar, so they join the menu.
+    const textTabs = inPageHeader && isBelowWide && navTabs ? "menu" : inPageHeader;
     const isRadioGroup = role === "radiogroup";
     useRadioGroupTabStop(listRef, isRadioGroup);
 
-    return (
+    const tabs = (
       <TabVariantContext.Provider value={variant ?? "pills"}>
         <div
           role={role ?? "tablist"}
@@ -92,7 +125,7 @@ export const Tabs = React.forwardRef<HTMLDivElement, TabsProps>(
                 }
               : onKeyDown
           }
-          className={classNames(tabsVariants({ variant }), className)}
+          className={classNames(tabsVariants({ variant }), textTabs && textTabsClasses[textTabs], className)}
           {...props}
           ref={listRef}
         >
@@ -100,6 +133,9 @@ export const Tabs = React.forwardRef<HTMLDivElement, TabsProps>(
         </div>
       </TabVariantContext.Provider>
     );
+    return textTabs === "menu" && navTabs
+      ? createPortal(<TextTabsContext.Provider value="menu">{tabs}</TextTabsContext.Provider>, navTabs)
+      : tabs;
   },
 );
 Tabs.displayName = "Tabs";
@@ -116,11 +152,19 @@ interface TabProps extends Omit<React.HTMLProps<HTMLAnchorElement>, "selected"> 
 
 export const Tab = ({ children, isSelected, className, asChild, ...props }: TabProps) => {
   const variant = React.useContext(TabVariantContext);
+  const textTabsContext = React.useContext(TextTabsContext);
+  const textTab = variant === "pills" ? textTabsContext : null;
   const Component = asChild ? Slot : "a";
 
   return (
     <Component
-      className={classNames("border no-underline", tabVariants({ variant, active: isSelected }), className)}
+      className={classNames(
+        "border no-underline",
+        tabVariants({ variant, active: isSelected }),
+        textTab && textTabClasses[textTab],
+        textTab && isSelected && selectedTextTabClasses[textTab],
+        className,
+      )}
       role="tab"
       aria-selected={isSelected}
       {...props}

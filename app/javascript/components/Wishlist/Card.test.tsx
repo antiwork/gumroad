@@ -37,6 +37,7 @@ const loggedInUser = parseLoggedInUser({
   promoted_nav_items: [],
   confirmed: true,
   lazy_load_offscreen_discover_images: false,
+  header_nav: false,
 });
 
 const wishlist = (overrides: Partial<CardWishlist> = {}): CardWishlist => ({
