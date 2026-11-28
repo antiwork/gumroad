@@ -37,6 +37,24 @@ describe OmniAuth::Strategies::Instagram do
     end
   end
 
+  describe "#authorize_params" do
+    before { allow(strategy).to receive(:session).and_return({}) }
+
+    it "asks only for the profile permission by default" do
+      assign_env(create(:user))
+
+      expect(strategy.authorize_params[:scope]).to eq("instagram_business_basic")
+    end
+
+    it "also asks to publish for a seller with Instagram posting enabled" do
+      user = create(:user)
+      Feature.activate_user(:marketing_instagram_posting, user)
+      assign_env(user)
+
+      expect(strategy.authorize_params[:scope]).to eq("instagram_business_basic,instagram_business_content_publish")
+    end
+  end
+
   describe "#request_phase" do
     it "redirects to Social connections when the flag is off for a signed-in user" do
       assign_env(create(:user))

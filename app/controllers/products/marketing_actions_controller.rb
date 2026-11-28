@@ -43,7 +43,7 @@ class Products::MarketingActionsController < Sellers::BaseController
     authorize @action
     return head :not_found unless enabled?
 
-    return render json: { success: false, error: "This channel is coming soon." }, status: :unprocessable_entity unless Marketing::Channel.live?(@action.channel)
+    return render json: { success: false, error: "This channel is coming soon." }, status: :unprocessable_entity unless Marketing::Channel.live?(@action.channel, current_seller)
 
     result = Marketing::Channel.executor_for(@action.channel).new(@action).call
     render json: result.to_h

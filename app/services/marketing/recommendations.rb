@@ -14,8 +14,9 @@ class Marketing::Recommendations
 
   def call
     Marketing::Channel::ALL.map do |channel, config|
-      entry = { channel:, label: config[:label], live: config[:live] }
-      next entry unless config[:live]
+      live = Marketing::Channel.live?(channel, seller)
+      entry = { channel:, label: config[:label], live: }
+      next entry unless live
 
       entry.merge(send(:"#{channel}_entry"))
     end
@@ -64,6 +65,22 @@ class Marketing::Recommendations
         handle: seller.twitter_handle,
         connect_path: marketing_connect_path,
         intent_url: intent_url(action),
+        action:,
+      }
+    end
+
+    def instagram_entry
+      identity = seller.reload.instagram_identity
+      action = action_for("instagram")
+      action.user = seller
+      # A missing cover is cleared here once the seller adds one, so the card stops asking for it.
+      has_image = Marketing::InstagramImage.new(product).available?
+      action.update!(error_code: nil) if has_image && action.error_code == Marketing::Action::INSTAGRAM_IMAGE_MISSING
+      {
+        connected: identity.present? && identity.can_publish?,
+        handle: identity&.handle,
+        connect_path: marketing_connect_path,
+        has_image:,
         action:,
       }
     end

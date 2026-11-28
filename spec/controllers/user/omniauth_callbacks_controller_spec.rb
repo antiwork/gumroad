@@ -817,6 +817,67 @@ describe User::OmniauthCallbacksController do
       )
     end
 
+    describe "the publishing token" do
+      let(:exchange_url) { "#{Marketing::InstagramApi::GRAPH_URL}/access_token" }
+
+      before do
+        Feature.activate_user(:instagram_connect, user)
+        allow(controller).to receive(:logged_in_user).and_return(user)
+        allow(InstagramProfileFetcher).to receive(:new).and_return(instance_double(InstagramProfileFetcher, fetch: profile))
+      end
+
+      def grant(permissions)
+        request.env["omniauth.auth"] = OmniAuth::AuthHash.new(
+          provider: "instagram", uid: profile["user_id"], credentials: { token: "instagram-token" },
+          extra: { raw_info: { permissions: } },
+        )
+      end
+
+      it "keeps a long-lived token when the seller granted publishing" do
+        Feature.activate_user(:marketing_instagram_posting, user)
+        grant("instagram_business_basic,instagram_business_content_publish")
+        WebMock.stub_request(:get, exchange_url)
+               .with(query: hash_including(grant_type: "ig_exchange_token", access_token: "instagram-token"))
+               .to_return(status: 200, body: { access_token: "long-lived", expires_in: 60.days.to_i }.to_json,
+                          headers: { "Content-Type" => "application/json" })
+
+        post :instagram
+
+        identity = user.reload.instagram_identity
+        expect(identity.access_token).to eq("long-lived")
+        expect(identity.can_publish?).to eq(true)
+      end
+
+      it "keeps no token when the seller declined publishing" do
+        Feature.activate_user(:marketing_instagram_posting, user)
+        grant("instagram_business_basic")
+
+        post :instagram
+
+        expect(user.reload.instagram_identity.can_publish?).to eq(false)
+        expect(WebMock).not_to have_requested(:get, exchange_url)
+      end
+
+      it "keeps no token while posting is not enabled for the seller" do
+        grant("instagram_business_basic,instagram_business_content_publish")
+
+        post :instagram
+
+        expect(user.reload.instagram_identity.encrypted_access_token).to be_nil
+        expect(WebMock).not_to have_requested(:get, exchange_url)
+      end
+
+      it "drops an earlier token when a reconnect comes back without publishing" do
+        create(:user_instagram_identity, user:, access_token: "old", access_token_expires_at: 30.days.from_now)
+        Feature.activate_user(:marketing_instagram_posting, user)
+        grant("instagram_business_basic")
+
+        post :instagram
+
+        expect(user.reload.instagram_identity.encrypted_access_token).to be_nil
+      end
+    end
+
     it "redirects to login when no user is signed in" do
       allow(controller).to receive(:logged_in_user).and_return(nil)
 

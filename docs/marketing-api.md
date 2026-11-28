@@ -26,6 +26,14 @@ Validation failures return HTTP 422 with `{success: false, message: "..."}`. Mis
 
 The companion CLI exposes `marketing recommend`, `approve`, `schedule`, `cancel`, and `status`. `schedule` invokes the immediate execute endpoint; it does not accept a future date. Merge and deploy this Rails API before merging/releasing the CLI.
 
+## Instagram
+
+`instagram` is live only for sellers with the `marketing_instagram_posting` flag; for everyone else it stays "coming soon" and its endpoints return the same 422. Use `channel=instagram` wherever `channel=x` is accepted. `handle` is then the Instagram account.
+
+An Instagram post is the product's first cover image, converted to JPEG, with `post_text` as the caption. The recommendation carries `has_image`; without a cover, execute leaves the action approved with `error_code: "instagram_image_missing"` and posts nothing. `connected` is true only when the seller's connection holds a publishing token that has not expired; otherwise execute leaves the action approved with `instagram_publish_permission_missing`, and `connect_path` is where the seller reconnects and allows posting. `intent_url` is always `null`: Instagram has no prefilled share link.
+
+Nothing is public until the final publish call, so `instagram_rejected`, `instagram_image_not_ready` and `instagram_unavailable` all mean nothing was posted. `instagram_post_result_unknown` means the publish call itself went unanswered; as on X, it is never resent.
+
 ## Launch email drafts
 
 The live `email` channel prepares a draft for the seller's saved audience. Email execute returns `edit_url` (or `null` when no draft can be prepared), with `intent_url` and `connect_path` set to `null`. It never sends or schedules email; the seller reviews and publishes or schedules in Emails. Cancelled actions and unpublished products return 422 without preparing a draft. Deleting the launch draft continues to decline its recreation.

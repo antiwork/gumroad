@@ -12,6 +12,8 @@ class Marketing::Action < ApplicationRecord
 
   TERMINAL_STATUSES = %w[posted failed cancelled].freeze
   X_WRITE_PERMISSION_MISSING = "x_write_permission_missing"
+  INSTAGRAM_PUBLISH_PERMISSION_MISSING = "instagram_publish_permission_missing"
+  INSTAGRAM_IMAGE_MISSING = "instagram_image_missing"
 
   belongs_to :user
   belongs_to :link
@@ -89,7 +91,12 @@ class Marketing::Action < ApplicationRecord
   def api_idempotency_key = Digest::SHA256.hexdigest(idempotency_key)
 
   def confirmation_token
-    Digest::SHA256.hexdigest([idempotency_key, post_text, user.twitter_handle].to_json)
+    Digest::SHA256.hexdigest([idempotency_key, post_text, account_handle].to_json)
+  end
+
+  # The account the post goes out from, which the confirmation binds the review to.
+  def account_handle
+    instagram? ? user.instagram_identity&.handle : user.twitter_handle
   end
 
   def verify_confirmation!(token)

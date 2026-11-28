@@ -17,7 +17,7 @@ class Api::V2::MarketingActionsController < Api::V2::BaseController
   def create
     return marketing_error("Unknown marketing channel.") unless Marketing::Channel::ALL.key?(params[:channel])
 
-    return marketing_error("This channel is coming soon.") unless Marketing::Channel.live?(params[:channel])
+    return marketing_error("This channel is coming soon.") unless Marketing::Channel.live?(params[:channel], current_resource_owner)
 
     entry = Marketing::Recommendations.new(product: @product, seller: current_resource_owner).call.find { _1[:channel] == params[:channel] }
     @marketing_action = entry.fetch(:action)
@@ -43,7 +43,7 @@ class Api::V2::MarketingActionsController < Api::V2::BaseController
   end
 
   def execute
-    return marketing_error("This channel is coming soon.") unless Marketing::Channel.live?(@marketing_action.channel)
+    return marketing_error("This channel is coming soon.") unless Marketing::Channel.live?(@marketing_action.channel, current_resource_owner)
 
     result = Marketing::Channel.executor_for(@marketing_action.channel).new(@marketing_action, confirmation_token: params[:confirmation_token]).call
     render_action(**result.to_h.except(:action))
@@ -85,7 +85,7 @@ class Api::V2::MarketingActionsController < Api::V2::BaseController
     end
 
     def render_action(**extra)
-      render_response(true, { marketing_action: @marketing_action, handle: @marketing_action.user.twitter_handle }.merge(extra))
+      render_response(true, { marketing_action: @marketing_action, handle: @marketing_action.account_handle }.merge(extra))
     end
 
     def marketing_error(message)
