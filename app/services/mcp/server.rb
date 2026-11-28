@@ -4,6 +4,8 @@ module Mcp
   # JSON-RPC MCP surface shared by every connector path (/muse, /claude, /chatgpt).
   # Tools are a slim, agent-oriented view of the public v2 API — same auth, same records.
   class Server
+    include InstallmentRuleHelper
+
     LEGACY_PROTOCOL_VERSION = "2025-03-26"
     # Characters simple_query_string treats as operators: a query made only of these matches
     # everything, which is not something an assistant should be able to ask for.
@@ -29,7 +31,22 @@ module Mcp
     DISCOVER_CACHE = { ttlMs: 0, cacheScope: "public" }.freeze
     # Mcp::Events follows ChatGPT's draft of the extension, which another client would misread.
     EVENTS_CONNECTOR = "chatgpt"
-    INSTRUCTIONS = "Use these tools for a connected creator's own store: products, sales, and payouts. search_products also searches the rest of Gumroad's catalogue. Confirm with the person before publishing or unpublishing. Buyers still check out on the product URL. This server does not take payment."
+    EMAIL_STATES = [Installment::DRAFT, Installment::SCHEDULED, Installment::PUBLISHED].freeze
+    EMAIL_AUDIENCES = {
+      "everyone" => Installment::AUDIENCE_TYPE,
+      "customers" => Installment::SELLER_TYPE,
+      "followers" => Installment::FOLLOWER_TYPE,
+      "product" => Installment::PRODUCT_TYPE
+    }.freeze
+    WORKFLOW_AUDIENCES = {
+      "customers" => Workflow::SELLER_TYPE,
+      "product" => Workflow::PRODUCT_TYPE,
+      "followers" => Workflow::FOLLOWER_TYPE,
+      "everyone" => Workflow::AUDIENCE_TYPE
+    }.freeze
+    WORKFLOW_DELAY_UNITS = [InstallmentRule::HOUR, InstallmentRule::DAY, InstallmentRule::WEEK, InstallmentRule::MONTH].freeze
+    MAX_WORKFLOW_EMAILS = 20
+    INSTRUCTIONS = "Use these tools for a connected creator's own store: products, sales, payouts, and drafts of emails and workflows. search_products also searches the rest of Gumroad's catalogue. Confirm with the person before publishing or unpublishing. Emails and workflows are only drafted here; the person sends or publishes them in Gumroad. Buyers still check out on the product URL. This server does not take payment."
     DEFAULT_BUNDLE_MEMBER_QUANTITY = 1
     SERVER_INFO = { name: "gumroad", title: "Gumroad", version: "1.0.0" }.freeze
     PRODUCT_TYPES = %w[digital membership].freeze
@@ -567,7 +584,37 @@ module Mcp
           tool("expire_discount_code", "End a discount code now so buyers can no longer use it. The code is kept and shows as expired; update_discount_code with a later expires_at reopens it. Expiring a code that has already expired changes nothing and succeeds. Confirm with the creator first.", {
                  "code" => { type: "string", description: "The existing code." },
                  "product_id" => { type: "string", description: "Product id or permalink, for a code made for specific products. Omit for a code that covers all products." }
-               }, required: %w[code], destructive: true)
+               }, required: %w[code], destructive: true),
+          tool("list_emails", "The creator's emails to their audience (posts), newest first: subject, audience, state (draft, scheduled or published), and the link to edit each one in Gumroad. Workflow emails are listed by list_workflows.", {
+                 "state" => { type: "string", enum: EMAIL_STATES, description: "Only emails in this state." },
+                 "limit" => { type: "integer", description: "1-50, default 20." }
+               }, read_only: true),
+          tool("create_draft_email", "Write a draft email to the creator's audience. It is saved as a draft and never sent or scheduled by this tool: the creator reviews it and sends it from the edit link in Gumroad.", {
+                 "subject" => { type: "string", description: "Email subject." },
+                 "body" => { type: "string", description: "Email body as simple HTML: <p>, <h2>, <h3>, <ul>, <ol>, <li>, <a>, <strong>, <em>, <blockquote>." },
+                 "audience" => { type: "string", enum: EMAIL_AUDIENCES.keys, description: "Who it would go to: everyone (customers and followers, the default), customers, followers, or the buyers of one product." },
+                 "product_id" => { type: "string", description: "Product id or permalink. Required when audience is product." }
+               }, required: %w[subject body]),
+          tool("update_draft_email", "Change the subject or body of a draft email. Pass only the fields to change; the new body replaces the old one. Scheduled and sent emails can only be changed in Gumroad.", {
+                 "id" => { type: "string", description: "Email id from list_emails or create_draft_email." },
+                 "subject" => { type: "string", description: "New subject." },
+                 "body" => { type: "string", description: "New body as simple HTML." }
+               }, required: %w[id], destructive: true),
+          tool("list_workflows", "The creator's workflows (automated email sequences), newest first: name, audience, trigger, whether it is published, its emails with their delays, and the link to edit it in Gumroad.", {}, read_only: true),
+          tool("create_draft_workflow", "Write a draft workflow: a sequence of emails that Gumroad sends after someone buys or follows. It is saved unpublished and sends nothing until the creator publishes it in Gumroad from the edit link.", {
+                 "name" => { type: "string", description: "Workflow name, shown only to the creator." },
+                 "audience" => { type: "string", enum: WORKFLOW_AUDIENCES.keys, description: "Whose actions start it: a purchase of any product (customers, the default), a purchase of one product (product), a new follower (followers), or either (everyone)." },
+                 "product_id" => { type: "string", description: "Product id or permalink. Required when audience is product." },
+                 "emails" => { type: "array", minItems: 1, maxItems: MAX_WORKFLOW_EMAILS, description: "The emails, in order.", items: {
+                   type: "object", additionalProperties: false, required: %w[subject body delay_amount delay_unit],
+                   properties: {
+                     "subject" => { type: "string", description: "Email subject." },
+                     "body" => { type: "string", description: "Email body as simple HTML." },
+                     "delay_amount" => { type: "integer", description: "How long after the trigger to send it. 0 sends it at once." },
+                     "delay_unit" => { type: "string", enum: WORKFLOW_DELAY_UNITS, description: "Unit of delay_amount." }
+                   }
+                 } }
+               }, required: %w[name emails])
         ]
       end
 
@@ -1769,6 +1816,174 @@ module Mcp
         # already fail, must not leave the creator unable to end it from here.
         offer_code.save!(context: :expiring)
         { discount_code: discount_code_payload(offer_code), message: "Expired. Buyers can no longer use this code." }
+      end
+
+      def tool_list_emails(args)
+        require_scopes!(:edit_emails, :account)
+        emails = Installment.ordered_updates(user, nil).reorder(nil).includes(:installment_rule, :link)
+        emails = emails.public_send(args["state"]) if args.key?("state")
+        { emails: emails.order(created_at: :desc, id: :desc).limit(limit_for(args, default: 20)).map { email_payload(_1) } }
+      end
+
+      def tool_create_draft_email(args)
+        require_scopes!(:edit_emails, :account)
+        installment_type = EMAIL_AUDIENCES.fetch(args.fetch("audience", "everyone"))
+        permalink = email_product_permalink(args, installment_type)
+        subject, body = draft_text!(args, required: true)
+
+        # No publish or to_be_published_at, so the service saves a draft and sends nothing.
+        service = SaveInstallmentService.new(
+          seller: user,
+          params: ActionController::Parameters.new(
+            installment: {
+              name: subject, message: body, installment_type:, link_id: permalink,
+              bought_products: Array(permalink), send_emails: true, shown_on_profile: false, shown_in_profile_sections: []
+            }
+          ),
+          installment: nil,
+          preview_email_recipient: user
+        )
+        raise ToolError, service.error unless service.process
+
+        { email: email_payload(service.installment) }
+      end
+
+      def tool_update_draft_email(args)
+        require_scopes!(:edit_emails, :account)
+        raise Error.new("Pass at least one of subject or body", code: -32602) if args.slice("subject", "body").empty?
+
+        email = Installment.ordered_updates(user, nil).reorder(nil).find_by_external_id(args["id"])
+        raise ToolError, "The email was not found." if email.nil?
+
+        subject, body = draft_text!(args, required: false)
+        email.with_lock do
+          raise ToolError, "This email is #{email_state(email)}. Change it in Gumroad." unless email_state(email) == Installment::DRAFT
+
+          email.name = subject if subject
+          email.message = SaveContentUpsellsService.new(seller: user, content: body, old_content: email.message).from_html if body
+          email.save!
+        end
+        { email: email_payload(email) }
+      end
+
+      def tool_list_workflows(_args)
+        require_scopes!(:edit_emails, :account)
+        workflows = user.workflows.alive.includes(:link, alive_installments_in_delivery_order: :installment_rule).order(created_at: :desc, id: :desc)
+        { workflows: workflows.map { workflow_payload(_1) } }
+      end
+
+      def tool_create_draft_workflow(args)
+        require_scopes!(:edit_emails, :account)
+        name = args["name"].strip
+        raise Error.new("name must not be blank", code: -32602) if name.blank?
+
+        workflow_type = WORKFLOW_AUDIENCES.fetch(args.fetch("audience", "customers"))
+        product = workflow_type == Workflow::PRODUCT_TYPE ? find_email_product!(args) : nil
+        raise Error.new("product_id is only for audience product", code: -32602) if product.nil? && args.key?("product_id")
+        installments = workflow_email_params!(args["emails"])
+
+        workflow = nil
+        ActiveRecord::Base.transaction do
+          # Never save_and_publish: the workflow stays unpublished and sends nothing.
+          manage = Workflow::ManageService.new(
+            seller: user,
+            params: ActionController::Parameters.new(
+              name:, workflow_type:, permalink: product&.unique_permalink, bought_products: Array(product&.unique_permalink),
+              send_to_past_customers: false, save_action_name: Workflow::SAVE_ACTION
+            ),
+            product:,
+            workflow: nil
+          )
+          saved, error = manage.process
+          raise ToolError, error unless saved
+
+          workflow = manage.workflow
+          emails = Workflow::SaveInstallmentsService.new(
+            seller: user,
+            params: ActionController::Parameters.new(save_action_name: Workflow::SAVE_ACTION, send_to_past_customers: false, installments:),
+            workflow:,
+            preview_email_recipient: user
+          )
+          saved, errors = emails.process
+          raise ToolError, errors.full_messages.first unless saved
+        end
+        { workflow: workflow_payload(workflow.reload) }
+      end
+
+      def email_product_permalink(args, installment_type)
+        if installment_type == Installment::PRODUCT_TYPE
+          find_email_product!(args).unique_permalink
+        elsif args.key?("product_id")
+          raise Error.new("product_id is only for audience product", code: -32602)
+        end
+      end
+
+      def find_email_product!(args)
+        raise Error.new("product_id is required for audience product", code: -32602) if args["product_id"].blank?
+
+        find_product!(args["product_id"])
+      end
+
+      def draft_text!(args, required:)
+        subject = args["subject"]&.strip
+        raise Error.new("subject must not be blank", code: -32602) if (required || args.key?("subject")) && subject.blank?
+        raise Error.new("body must not be blank", code: -32602) if (required || args.key?("body")) && args["body"].blank?
+
+        [subject, args["body"]]
+      end
+
+      def workflow_email_params!(emails)
+        raise Error.new("emails must have 1 to #{MAX_WORKFLOW_EMAILS} items", code: -32602) unless emails.size.between?(1, MAX_WORKFLOW_EMAILS)
+
+        emails.each_with_index.map do |email, index|
+          at = "emails[#{index}]"
+          raise Error.new("#{at} must be an object", code: -32602) unless email.is_a?(Hash)
+          unknown = email.keys - %w[subject body delay_amount delay_unit]
+          raise Error.new("#{at} has an unknown field: #{unknown.first}", code: -32602) if unknown.any?
+          subject, body = draft_text!(email, required: true)
+          amount = email["delay_amount"]
+          raise Error.new("#{at}.delay_amount must be a non-negative integer", code: -32602) unless amount.is_a?(Integer) && amount >= 0
+          raise Error.new("#{at}.delay_unit must be one of: #{WORKFLOW_DELAY_UNITS.join(', ')}", code: -32602) unless WORKFLOW_DELAY_UNITS.include?(email["delay_unit"])
+          raise Error.new("#{at}: #{InstallmentRule::OVERFLOW_DELAY_MESSAGE}", code: -32602) if convert_to_seconds(amount, email["delay_unit"]).to_i > InstallmentRule::MAX_DELAY_SECONDS
+
+          { name: subject, message: body, time_duration: amount, time_period: email["delay_unit"] }
+        end
+      end
+
+      def email_state(email)
+        if email.published? then Installment::PUBLISHED
+        elsif email.ready_to_publish? then Installment::SCHEDULED
+        else Installment::DRAFT
+        end
+      end
+
+      def email_payload(email)
+        {
+          id: email.external_id,
+          subject: email.name,
+          audience: EMAIL_AUDIENCES.key(email.installment_type) || email.installment_type,
+          product_id: email.link&.external_id,
+          state: email_state(email),
+          published_at: email.published_at&.iso8601,
+          scheduled_for: email_state(email) == Installment::SCHEDULED ? email.installment_rule&.to_be_published_at&.iso8601 : nil,
+          edit_url: Rails.application.routes.url_helpers.edit_email_url(email.external_id, host: UrlService.domain_with_protocol)
+        }
+      end
+
+      def workflow_payload(workflow)
+        {
+          id: workflow.external_id,
+          name: workflow.name,
+          audience: WORKFLOW_AUDIENCES.key(workflow.workflow_type) || workflow.workflow_type,
+          trigger: workflow.workflow_trigger,
+          product_id: workflow.link&.external_id,
+          published: workflow.published_at.present?,
+          emails: workflow.alive_installments_in_delivery_order.map do |email|
+            rule = email.installment_rule
+            { id: email.external_id, subject: email.name, delay_amount: rule&.displayable_time_duration, delay_unit: rule&.time_period }
+          end,
+          edit_url: Rails.application.routes.url_helpers.workflow_emails_url(workflow.external_id, host: UrlService.domain_with_protocol)
+        }
       end
 
       def find_discount_code!(args)

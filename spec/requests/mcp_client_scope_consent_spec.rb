@@ -100,12 +100,12 @@ describe "OAuth consent for an MCP client asking for a scope it did not register
 
   it "refuses a scope registration never grants, on the consent page and on submit" do
     expect do
-      get "/claude/v1/oauth2/authorize", params: authorize_params(scope: "view_public edit_emails")
+      get "/claude/v1/oauth2/authorize", params: authorize_params(scope: "view_public edit_profile")
       expect(response).to have_http_status(:bad_request)
       expect(response.body).to include("The requested scope is invalid, unknown, or malformed.")
 
       fields = consent_form_fields(authorize_params(scope: "view_public view_library"))
-      post "/oauth/authorize", params: fields.merge("scope" => "view_public edit_emails")
+      post "/oauth/authorize", params: fields.merge("scope" => "view_public edit_profile")
       expect(response.location).to include("error=invalid_scope")
     end.not_to change(Doorkeeper::AccessGrant, :count)
   end
