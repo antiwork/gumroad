@@ -22,10 +22,11 @@ module Mcp
     # exactly what the counter is for. spec/services/mcp/protocol_telemetry_spec.rb fails if this
     # list and the tool definitions drift apart.
     TOOLS = %w[
-      add_content_link add_cover add_file create_bundle create_discount_code create_draft_product
-      expire_discount_code get_account get_analytics get_balance get_customers get_product get_sales_totals
-      get_subscriptions list_categories list_files list_payouts list_products list_purchases list_sales
-      publish_product search_products unpublish_product update_bundle update_discount_code update_product
+      add_content_link add_cover add_file create_bundle create_discount_code create_draft_email create_draft_product
+      create_draft_workflow expire_discount_code get_account get_analytics get_balance get_customers get_product
+      get_sales_totals get_subscriptions list_categories list_emails list_files list_payouts list_products
+      list_purchases list_sales list_workflows publish_product search_products unpublish_product update_bundle
+      update_discount_code update_draft_email update_product
     ].freeze
     OUTCOMES = %w[ok error scope invalid].freeze
     UNDECLARED = "undeclared"
